@@ -184,6 +184,8 @@ helper 进程本身（`SMAppService.daemon` + 签名）仍属 M2.5：**没有开
 | 失败通知 | 只有 `requiresUserAction` 的失败才发系统通知，同一原因只提醒一次；超时/退避静默（PLAN §3.2） |
 | 账号格式 | 邮箱前缀自动归一化；学生/教师两种规则实时判定并提示（`AccountFormat`，6 条单测） |
 | 三台上限 | JLU.WIFI 被挤下线 → 立刻重进（绕过 5 分钟冷却）+ 说明「会踢掉队列第二台」（+1 条引擎测试） |
+| 被动观测 | 未配账号但网络本来就通 → 直接显示"已连接"，不逼输密码；只有需要认证时才弹一次向导（`PassiveMonitor` 4 条单测） |
+| 网卡类型 | 改用 SystemConfiguration 判定 Wi-Fi/USB，去掉 `networksetup` 子进程（修掉 dispatch_once 重入导致的崩溃） |
 | 启动策略 | 账号密码记住且成功连过 → 静默自动连；只有缺凭据/缺静态地址才弹向导（`LaunchPolicy`，6 条单测） |
 | 向导顺序 | 账号密码 → 接入方式 →（按需）网络参数；有线/JLU.PC 填过后不再追问（`WizardPolicy`，6 条单测） |
 | 网络跃迁 | `PathMonitor` 事件去抖 1.5s → 自动 `retry()`；拔插网线不再等 30s 心跳超时（PLAN §8.6 的 ≤5s） |

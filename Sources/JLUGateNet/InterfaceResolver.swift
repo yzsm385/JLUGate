@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import SystemConfiguration
 import JLUGateCore
 
 /// 从 `getifaddrs` 读物理口（无需权限），并调用 `route(8)` / `ipconfig(8)` 做只读诊断。
@@ -103,6 +104,7 @@ public struct SystemInterfaceProvider: InterfaceProvider {
             var index: UInt32 = 0
             var isWireless = false
         }
+        let hardwareTable = Self.hardwareInfo()
         var table: [String: Acc] = [:]
         var order: [String] = []
 
@@ -117,7 +119,7 @@ public struct SystemInterfaceProvider: InterfaceProvider {
             var acc = table[name]!
             acc.isUp = (pointer.ifa_flags & UInt32(IFF_UP)) != 0
             acc.index = if_nametoindex(pointer.ifa_name)
-            acc.isWireless = name.hasPrefix("en") && wirelessNames.contains(name)
+            acc.isWireless = hardwareTable[name]?.isWireless ?? false
 
             if let address = pointer.ifa_addr {
                 let family = address.pointee.sa_family
@@ -159,44 +161,39 @@ public struct SystemInterfaceProvider: InterfaceProvider {
                 mac: acc.mac,
                 isWireless: acc.isWireless,
                 isUp: acc.isUp,
-                isUSB: Self.usbDevices.contains(name),
+                isUSB: hardwareTable[name]?.isUSB ?? false,
                 linkLocalIPv4: acc.linkLocal,
                 netmask: acc.netmask)
         }
     }
 
-    /// USB 网卡（"USB 10/100/1000 LAN" 这类硬件端口）。
-    /// 用途：拔插后接口名会变，诊断里要能一眼看出"这是块 USB 卡"（PLAN §9.2）。
-    static let usbDevices: Set<String> = {
-        let output = PortOccupancy.shell("/usr/sbin/networksetup", ["-listallhardwareports"])
-        var currentIsUSB = false
-        var names: Set<String> = []
-        for line in output.split(separator: "\n").map(String.init) {
-            if line.hasPrefix("Hardware Port:") {
-                currentIsUSB = line.lowercased().contains("usb")
-            } else if currentIsUSB, line.hasPrefix("Device:") {
-                names.insert(line.replacingOccurrences(of: "Device:", with: "")
-                    .trimmingCharacters(in: .whitespaces))
-            }
-        }
-        return names
-    }()
+    /// 网卡类型判定：用 **SystemConfiguration**（纯 API，不起子进程）。
+    ///
+    /// 之前用 `networksetup` 子进程 + `static let` 缓存，会在 `dispatch_once` 初始化期间
+    /// 阻塞等待进程，被另一线程重入后触发
+    /// `BUG IN CLIENT OF LIBDISPATCH: trying to lock recursively` —— 直接崩 app。
+    struct HardwareInfo: Sendable {
+        var isWireless = false
+        var isUSB = false
+    }
 
-    /// 无线口名（`en0`/`en1` 这种由 `networksetup -listallhardwareports` 决定，
-    /// 这里只做"是否 Wi-Fi"的启发式判断，选口仍然按 MAC 命中）。
-    private static let wirelessNames: Set<String> = {
-        let output = PortOccupancy.shell("/usr/sbin/networksetup", ["-listallhardwareports"])
-        var currentIsWiFi = false
-        var names: Set<String> = []
-        for line in output.split(separator: "\n").map(String.init) {
-            if line.hasPrefix("Hardware Port:") {
-                currentIsWiFi = line.lowercased().contains("wi-fi") || line.lowercased().contains("airport")
-            } else if currentIsWiFi, line.hasPrefix("Device:") {
-                names.insert(line.replacingOccurrences(of: "Device:", with: "").trimmingCharacters(in: .whitespaces))
-            }
+    static func hardwareInfo() -> [String: HardwareInfo] {
+        var table: [String: HardwareInfo] = [:]
+        guard let interfaces = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface] else {
+            return table
         }
-        return names
-    }()
+        for interface in interfaces {
+            guard let name = SCNetworkInterfaceGetBSDName(interface) as String? else { continue }
+            let type = SCNetworkInterfaceGetInterfaceType(interface) as String?
+            let displayName = (SCNetworkInterfaceGetLocalizedDisplayName(interface) as String?) ?? ""
+            var info = HardwareInfo()
+            info.isWireless = (type == (kSCNetworkInterfaceTypeIEEE80211 as String))
+            info.isUSB = type == (kSCNetworkInterfaceTypeEthernet as String)
+                && displayName.lowercased().contains("usb")
+            table[name] = info
+        }
+        return table
+    }
 
     /// `String(cString:)` 在当前 SDK 已废弃，这里统一走 NUL 截断 + UTF8 解码。
     private static func decode(_ pointer: UnsafePointer<CChar>) -> String {

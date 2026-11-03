@@ -27,6 +27,12 @@ final class AppModel {
     var showWizard = false
 
     @ObservationIgnored private var shouldAutoConnectOnLaunch = false
+    @ObservationIgnored private var watchTask: Task<Void, Never>?
+    @ObservationIgnored private var watchPrompted = false
+    @ObservationIgnored private var lastWatchDescription: String?
+    @ObservationIgnored private let connectivityProbe = ConnectivityProbe()
+    /// 只观测不认证的在线状态（用户已有会话、但我们还没配账号）
+    var observingExistingSession = false
 
     @ObservationIgnored private var coordinator: AuthCoordinator?
     @ObservationIgnored private var coordinatorTask: Task<Void, Never>?
@@ -58,6 +64,12 @@ final class AppModel {
         showWizard = LaunchPolicy.shouldShowWizard(
             hasAccount: hasAccount, hasPassword: hasPassword,
             linkRequiresStaticAddresses: needsStatic, profileIsComplete: profileComplete)
+        // 还没配账号：先被动看一眼是不是本来就在线（浏览器里已登录的情况），
+        // 不急着逼用户填密码；等真的需要认证时再请他填一次。
+        if !hasAccount || !hasPassword {
+            showWizard = false
+            startPassiveWatch()
+        }
         shouldAutoConnectOnLaunch = !DevOverrides.autostart && LaunchPolicy.shouldAutoConnect(
             hasAccount: hasAccount, hasPassword: hasPassword,
             linkRequiresStaticAddresses: needsStatic, profileIsComplete: profileComplete,
@@ -155,6 +167,7 @@ final class AppModel {
     var detailLine: String {
         if case .failed(let error) = state { return error.userMessage }
         if let clientIP { return "本机 \(clientIP)" }
+        if observingExistingSession { return "当前已在线上（未配置账号）" }
         return "\(config.server):\(config.serverPort)"
     }
 
@@ -166,9 +179,79 @@ final class AppModel {
         link == .jluWiFi || config.link == "jluWiFi"
     }
 
+    // MARK: 被动观测（已有会话、未配置账号）
+
+    /// 只做 204 探针：在线就如实显示"已连接"；需要认证时才弹一次向导。
+    private func startPassiveWatch() {
+        watchTask?.cancel()
+        watchTask = Task { @MainActor [weak self] in
+            var wasOnline = false
+            while !Task.isCancelled {
+                guard let self else { return }
+                // 每轮都重新枚举一次网卡：启动时可能还没拿到，插拔后也会变
+                self.refreshDiagnostics()
+                guard let interface = self.interfaces.first(where: \.isUsableForAuthentication)
+                        ?? self.interfaces.first else {
+                    try? await Task.sleep(for: .seconds(5))
+                    continue
+                }
+                let outcome = await self.connectivityProbe.run(interface: interface, dnsServers: [])
+                if Task.isCancelled { return }
+                if self.lastWatchDescription != "\(outcome)" {
+                    self.lastWatchDescription = "\(outcome)"
+                    FileLogger.shared.log("passive watch: \(interface.name) -> \(outcome)")
+                }
+
+                let observation: PassiveMonitor.Observation = switch outcome {
+                case .healthy: .online
+                case .captivePortal(let code, let location):
+                    .needsAuthentication(statusCode: code, location: location)
+                case .unreachable(let reason): .unreachable(reason: reason)
+                }
+
+                switch PassiveMonitor.decide(observation) {
+                case .reportOnline:
+                    self.observingExistingSession = true
+                    if !wasOnline {
+                        self.recentLog.insert("当前已在线上（无需登录），状态已更新为已连接", at: 0)
+                        FileLogger.shared.log("passive watch: 已在线上，状态置为已连接")
+                    }
+                    wasOnline = true
+                    self.state = .online
+                    self.refreshDiagnostics()
+                case .requestCredentials:
+                    self.observingExistingSession = false
+                    self.state = .idle
+                    self.refreshDiagnostics()
+                    if PassiveMonitor.shouldPromptOnNeedsAuth(wasOnline: wasOnline,
+                                                              alreadyPrompted: self.watchPrompted) {
+                        self.watchPrompted = true
+                        self.recentLog.insert("检测到需要登录：请填写一次账号密码（之后会记住）", at: 0)
+                        self.presentWizard()
+                    }
+                    wasOnline = false
+                case .reportOffline(let reason):
+                    self.observingExistingSession = false
+                    self.state = .failed(.notCampusNetwork(detail: reason))
+                    wasOnline = false
+                }
+
+                try? await Task.sleep(for: .seconds(30))
+            }
+        }
+    }
+
+    private func stopPassiveWatch() {
+        watchTask?.cancel()
+        watchTask = nil
+        observingExistingSession = false
+    }
+
     // MARK: 动作
 
     func connect() {
+        stopPassiveWatch()
+        watchPrompted = true
         if DevOverrides.isEnabled {
             if config.account.isEmpty { config.account = "20230001" }
             if password.isEmpty { password = "test-pass-2024" }
@@ -281,6 +364,7 @@ final class AppModel {
     }
 
     func disconnect() {
+        stopPassiveWatch()
         activityKeeper.end()
         coordinatorTask?.cancel()
         coordinatorTask = nil

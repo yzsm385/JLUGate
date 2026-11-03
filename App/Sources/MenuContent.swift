@@ -98,7 +98,17 @@ struct MenuContent: View {
     private var actionButtons: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                if model.state.isOnline || model.state.isBusy {
+                if model.observingExistingSession {
+                    // 用户本来就在线（浏览器里登录过），我们只是如实显示；
+                    // 给他一个"顺手把账号记下来"的入口，断线后能自动重连。
+                    Button {
+                        model.presentWizard()
+                    } label: {
+                        Label("填写账号密码（断线后自动重连）", systemImage: "person.badge.key")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                } else if model.state.isOnline || model.state.isBusy {
                     Button {
                         model.disconnect()
                     } label: {
