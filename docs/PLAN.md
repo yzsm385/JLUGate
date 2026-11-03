@@ -1180,6 +1180,76 @@ swift test --filter PortalTests                                                #
 
 ---
 
+## 15. 共享互联网（把已认证的 Mac 当路由器）
+
+> 目标：第二台设备（手机 / 另一台电脑）通过这台**已认证**的 Mac 上网，校园网侧只看到 Mac 的 MAC 与 IP。
+> 与 §8.7 的"双 MAC 伪装"本质不同：这里**不伪造任何身份**，只是标准 NAT 共享，不会让交换机 MAC 表抖动。
+
+### 15.1 可行性结论
+
+**可行**，而且有三条路径，代价与可控性递增：
+
+| 路径 | 做法 | 需要 root | 可控性 |
+|---|---|---|---|
+| A. 系统「互联网共享」 | 设置 → 通用 → 共享 → 互联网共享；来源=有线 `en7`，目标=另一块网卡 | 系统代劳 | 低（一个开关，不能细调） |
+| B. 手工搭 | `sysctl forwarding` + `bridge100` + `bootpd` + `pf nat` | 是 | 中 |
+| C. 做进 App（helper） | 由 §6.6 的最小特权 helper 代劳，独立 pf anchor | 是（helper） | 高 |
+
+**建议顺序**：先用 A 验证"TUN 下能不能通"，能通就不要自己写；不通再按 §15.3 排查，最后才考虑 C。
+
+### 15.2 系统共享在做什么（排查时要知道）
+
+开启后 macOS 会：
+
+1. `sysctl -w net.inet.ip.forwarding=1`（**默认是 0**，本机实测如此）；
+2. 建 `bridge100`，把目标网卡加进去，并给它一个 `192.168.2.1/24` 之类地址；
+3. 跑 `bootpd` 给客户端发 DHCP；
+4. 在 `pf` 里加 NAT 规则。
+
+> 同一时刻只支持一组"来源→目标"，且会改系统全局状态；关掉时要确认 `forwarding` 有没有恢复。
+
+### 15.3 TUN 环境下的四个坑（"好的路由"就在这里）
+
+| # | 坑 | 现象 | 处理 |
+|---|---|---|---|
+| 1 | **客户端 DNS 指向 Mac**，而 Mac 的 DNS 被代理劫持成 `198.18.0.2`（fake-ip） | 客户端能 ping 通 IP，但域名全解析成 `198.18.x.x`，然后连不上 | DHCP 直接下发**公共 DNS**（`223.5.5.5`/`1.1.1.1`），不要下发 Mac 自己 |
+| 2 | **转发流量被 TUN 抓走**：`0/0 → utun` 对转发包同样生效 | 客户端流量进代理后源地址是 `192.168.2.x`，代理侧回包可能回不来 | 在 TUN 的路由里把客户端网段排除（走 `en7`），或让代理显式 `DIRECT` 该网段 |
+| 3 | **pf 冲突**：Internet Sharing 与 Clash 各自的 anchor 可能互相覆盖 | 开了共享后代理断流，或关了代理共享失效 | 自建时用自己的 anchor（`com.jlugate.share`），只加 `nat`，不动别人的规则 |
+| 4 | **MTU / MSS**：`utun4` MTU 4064、bridge 1500，NAT 后不夹 MSS | "能 ping 通、网页打不开" | `pf` 里 `scrub in all max-mss 1400`，或在代理侧处理 |
+
+### 15.4 验收清单（5 分钟能验完）
+
+在客户端上依次做：
+
+```bash
+ipconfig getifaddr en0                 # 应拿到 192.168.x.x
+ping -c2 223.5.5.5                     # 通 → 转发与 NAT OK
+curl -s https://ifconfig.me            # 出口应是校园网那个公网 IP（不是 Mac 的内网地址）
+curl -s -o /dev/null -w '%{http_code}' http://connectivitycheck.gstatic.com/generate_204
+                                       # 204 → 客户端也能出网
+```
+
+再在 Mac 上确认：
+
+```bash
+sysctl net.inet.ip.forwarding          # 1
+netstat -rn | grep 192.168              # 有 bridge100 的直连路由
+```
+
+若客户端"能 ping 不能上网"，先查 §15.3 的 1 和 4（DNS 与 MSS 占九成）。
+
+### 15.5 要不要做进产品
+
+| 版本 | 范围 |
+|---|---|
+| v1 | **不做**。文档里给"用系统共享"的操作步骤即可 |
+| v1.1 | 菜单栏加一项「共享给其他设备」：调起系统共享面板（`open "x-apple.systempreferences:com.apple.Sharing-Settings.extension"`），并在托盘显示"当前有 N 台设备共享" |
+| v2 | 由 helper 自建 bridge + pf anchor，支持"共享时自动绕开 TUN" |
+
+> 校规提醒：多数学校禁止共享。技术上它不伤害他人（不像双 MAC 会波及同交换机同学），但被判定异常流量的风险由使用者承担；产品文案不宣传这个能力。
+
+---
+
 ## 附录 A · 抓包补充命令
 
 ```bash
