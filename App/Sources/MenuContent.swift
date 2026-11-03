@@ -8,31 +8,40 @@ struct MenuContent: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            GlassEffectContainer(spacing: 12) {
+            // 原生 Liquid Glass：状态卡与操作按钮放在同一个容器里，
+            // 邻近元素会被系统合并成一块连续的玻璃（不是叠两层自绘材质）。
+            GlassEffectContainer(spacing: 10) {
                 VStack(alignment: .leading, spacing: 10) {
-                    header
-                    Divider().opacity(0.35)
-                    detailGrid
-                    if !model.recentLog.isEmpty {
-                        Text(model.recentLog.prefix(3).joined(separator: "\n"))
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(3)
-                    }
-                }
-                .padding(16)
-                .frame(width: 320, alignment: .leading)
-                .glassEffect(.regular.tint(model.statusColor.opacity(0.55)).interactive(),
-                             in: .rect(cornerRadius: 16))
-                .glassEffectID("status", in: glassNamespace)
-            }
+                    statusCard
+                        .glassEffectID("status", in: glassNamespace)
 
-            actionButtons
+                    actionButtons
+                        .glassEffectID("actions", in: glassNamespace)
+                }
+            }
 
             footer
         }
         .padding(14)
         .frame(width: 348)
+    }
+
+    private var statusCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            header
+            Divider().opacity(0.35)
+            detailGrid
+            if !model.recentLog.isEmpty {
+                Text(model.recentLog.prefix(3).joined(separator: "\n"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+            }
+        }
+        .padding(16)
+        .frame(width: 320, alignment: .leading)
+        .glassEffect(.regular.tint(model.statusColor.opacity(0.5)).interactive(),
+                     in: .rect(cornerRadius: 18))
     }
 
     // MARK: 状态卡
@@ -145,8 +154,8 @@ struct MenuContent: View {
                     .buttonStyle(.link)
                     .font(.caption2)
                 }
-                .padding(8)
-                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+                .padding(10)
+                .glassEffect(.clear, in: .rect(cornerRadius: 12))
             }
 
             if model.canOpenPortalLogin {
@@ -163,7 +172,7 @@ struct MenuContent: View {
                 Button {
                     model.presentWizard()
                 } label: {
-                    Label("重新填写网络参数", systemImage: "wand.and.stars")
+                    Label("重新设置…", systemImage: "wand.and.stars")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glass)

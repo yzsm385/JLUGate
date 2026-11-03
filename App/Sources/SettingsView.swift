@@ -25,6 +25,7 @@ struct SettingsView: View {
         var registeredMAC = ""
         var launchAtLogin = true
         var autoDetect = true
+        var autoConnect = true
         var portalEntry = ""
         var helperAuthorized = false
     }
@@ -75,6 +76,7 @@ struct SettingsView: View {
             }
 
             Section("链路探测") {
+                Toggle("启动时自动连接（记住账号密码后不再打扰）", isOn: $draft.autoConnect)
                 Toggle("自动探测（发 1 个 challenge 判断是不是校园网）", isOn: $draft.autoDetect)
                 Text("关掉后只做 204 探针，不会主动向校园网关发任何认证包。")
                     .font(.caption2)
@@ -161,6 +163,7 @@ struct SettingsView: View {
         draft.registeredMAC = profile?.registeredMAC ?? ""
         draft.launchAtLogin = config.launchAtLogin
         draft.autoDetect = config.autoDetect
+        draft.autoConnect = config.autoConnect
         draft.portalEntry = config.portal.entryURL ?? ""
         draft.helperAuthorized = config.routeGuard.helperAuthorized == true
     }
@@ -186,6 +189,7 @@ struct SettingsView: View {
         config.localPort = Int(draft.localPort) ?? 61440
         config.launchAtLogin = draft.launchAtLogin
         config.autoDetect = draft.autoDetect
+        config.autoConnect = draft.autoConnect
         config.portal.entryURL = draft.portalEntry.isEmpty ? nil : draft.portalEntry
         config.routeGuard.helperAuthorized = draft.helperAuthorized
 

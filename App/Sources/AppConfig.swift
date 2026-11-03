@@ -63,6 +63,10 @@ struct AppConfig: Codable, Sendable {
     var probe = Probe()
     var backoff = BackoffSettings()
     var launchAtLogin = true
+    /// 启动时自动连接（默认开；有"成功连过"的记录才生效）。
+    var autoConnect = true
+    /// 上次成功认证成功的时间；非空 = 这台机器上"记住且连过"。
+    var lastSuccessfulLogin: String?
     var logLevel = "info"
 
     var currentProfile: NetworkProfile? {

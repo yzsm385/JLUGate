@@ -31,9 +31,27 @@ final class FileLogger: @unchecked Sendable {
         return formatter
     }()
 
-    private var directory: URL {
-        FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+    /// 标准位置建议 `~/Library/Logs/JLUGate`；不可写时（沙箱 / 测试 HOME）退到 `NSTemporaryDirectory()`。
+    private lazy var directory: URL = {
+        let standard = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs/JLUGate", isDirectory: true)
+        if Self.prepare(standard) { return standard }
+        let fallback = FileManager.default.temporaryDirectory
+            .appendingPathComponent("JLUGate", isDirectory: true)
+        _ = Self.prepare(fallback)
+        return fallback
+    }()
+
+    private static func prepare(_ directory: URL) -> Bool {
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let probe = directory.appendingPathComponent(".write-test")
+            try Data("ok".utf8).write(to: probe)
+            try? FileManager.default.removeItem(at: probe)
+            return true
+        } catch {
+            return false
+        }
     }
 
     private var fileURL: URL { directory.appendingPathComponent("agent.log") }

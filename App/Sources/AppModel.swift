@@ -26,6 +26,8 @@ final class AppModel {
     var routeGuarantee: RouteGuarantee?
     var showWizard = false
 
+    @ObservationIgnored private var shouldAutoConnectOnLaunch = false
+
     @ObservationIgnored private var coordinator: AuthCoordinator?
     @ObservationIgnored private var coordinatorTask: Task<Void, Never>?
     @ObservationIgnored private let portalBrowser = WKPortalBrowser()
@@ -43,7 +45,24 @@ final class AppModel {
         password = DevOverrides.isEnabled
             ? "test-pass-2024"
             : (CredentialStore.password(for: loaded.account) ?? "")
-        showWizard = loaded.currentProfile?.configuredAt == nil
+
+        let profile = loaded.currentProfile
+        let needsStatic = WizardPolicy.requiresStaticAddresses(link: loaded.link)
+        let profileComplete = WizardPolicy.profileIsComplete(
+            ip: profile?.ip, mask: profile?.mask,
+            gateway: profile?.gateway, mac: profile?.registeredMAC)
+        let hasAccount = !loaded.account.trimmingCharacters(in: .whitespaces).isEmpty
+        let hasPassword = !password.isEmpty
+
+        // 记住过账号密码、并且成功连过 → 启动直接连，不打扰
+        showWizard = LaunchPolicy.shouldShowWizard(
+            hasAccount: hasAccount, hasPassword: hasPassword,
+            linkRequiresStaticAddresses: needsStatic, profileIsComplete: profileComplete)
+        shouldAutoConnectOnLaunch = !DevOverrides.autostart && LaunchPolicy.shouldAutoConnect(
+            hasAccount: hasAccount, hasPassword: hasPassword,
+            linkRequiresStaticAddresses: needsStatic, profileIsComplete: profileComplete,
+            everConnected: loaded.lastSuccessfulLogin != nil,
+            autoConnectEnabled: loaded.autoConnect)
         refreshDiagnostics()
         observeSleepWake()
         observeNetworkPaths()
@@ -51,6 +70,12 @@ final class AppModel {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(600))
                 self.presentWizard()
+            }
+        }
+        if shouldAutoConnectOnLaunch {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(800))
+                self.connect()
             }
         }
         if DevOverrides.autostart {
@@ -80,7 +105,7 @@ final class AppModel {
         let controller = NSHostingController(rootView: WizardView().environment(self))
         let window = NSWindow(contentViewController: controller)
         window.title = "JLU Gate · 初始设置"
-        window.setContentSize(NSSize(width: 520, height: 460))
+        window.setContentSize(NSSize(width: 540, height: 480))
         window.center()
         window.isReleasedWhenClosed = false
         window.styleMask = [.titled, .closable]
@@ -153,8 +178,9 @@ final class AppModel {
                 config.link = "wired"
             }
         }
-        guard !config.account.isEmpty, !password.isEmpty else {
-            state = .failed(.malformed("还没填账号或密码"))
+        guard !config.account.trimmingCharacters(in: .whitespaces).isEmpty, !password.isEmpty else {
+            recentLog.insert("还没有账号或密码：请先在设置里填一次（之后会自动记住）", at: 0)
+            presentWizard()
             return
         }
         guard IPv4Address(config.server) != nil else {
@@ -359,6 +385,18 @@ final class AppModel {
         FileLogger.shared.log("导出网络参数卡：账号 \(config.account)")
     }
 
+    /// 记录"这台机器上成功连过"，下次启动就静默恢复，不再让用户填账号密码。
+    private func markSuccessfulLogin() {
+        config.lastSuccessfulLogin = ISO8601DateFormatter().string(from: .now)
+        if !DevOverrides.isEnabled {
+            ConfigStore.save(config)
+            // 密码可能只存在于内存（例如刚在设置里改了但没保存），顺手补存一次
+            if !password.isEmpty {
+                try? CredentialStore.save(password: password, account: config.account)
+            }
+        }
+    }
+
     /// 把本机配置恢复成出厂状态（清空 config.json、账号档案与保存的密码），然后重新走向导。
     /// 用在"配置被写坏 / 换了账号想重来"的场景。
     func resetLocalConfiguration() {
@@ -446,6 +484,7 @@ final class AppModel {
                 // 在线期间别被 App Nap 挂起（不然 10s 心跳会被延迟成几十秒）
                 activityKeeper.begin()
                 Notifier.resetDeduplication()
+                markSuccessfulLogin()
             case .idle, .failed:
                 activityKeeper.end()
             default:
