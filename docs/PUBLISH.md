@@ -122,6 +122,24 @@ hdiutil create -encryption AES-256 -srcformat UDZO -srcfolder local ~/Documents/
 
 ---
 
+## 6.5 常见报错
+
+| 报错 | 原因 | 处理 |
+|---|---|---|
+| `ERROR: Repository not found` | 用户名或仓库名写错；或 SSH key 属于另一个账号 | `ssh -T git@github.com` 看实际登录的是谁，再 `git remote set-url origin git@github.com:<真实用户名>/<真实仓库>.git` |
+| `GH007: Your push would publish a private email address` | 提交用的是真实邮箱，GitHub 的邮箱隐私保护拒绝推送 | 改成 noreply 邮箱（见下） |
+| `! [rejected] main -> main (non-fast-forward)` | 远端已有提交（常见于建库时勾了 README） | 确认真空提交可丢弃后：`git push --force-with-lease -u origin main` |
+
+改用 GitHub 的 noreply 邮箱（只影响本仓库）：
+
+```bash
+# 数字 ID 与用户名可从 https://api.github.com/users/<用户名> 取
+git config user.email "<ID>+<用户名>@users.noreply.github.com"
+git commit --amend --reset-author --no-edit
+```
+
+---
+
 ## 7. 之后每次提交
 
 ```bash
