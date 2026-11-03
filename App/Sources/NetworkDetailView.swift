@@ -12,6 +12,7 @@ struct NetworkDetailView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    proxyModeSection
                     vpnSection
                     interfaceSection
                     routeSection
@@ -53,6 +54,66 @@ struct NetworkDetailView: View {
         let vpn = snapshot.vpnIsActive ? "VPN/TUN 已接管" : "VPN/TUN 未接管"
         let dns = snapshot.dnsLooksHijacked ? " · DNS 被代理劫持" : ""
         return "\(vpn)\(dns)"
+    }
+
+    // MARK: 代理模式
+
+    private var proxyModeSection: some View {
+        card("代理模式（对照小火箭）") {
+            if let analysis = model.proxyAnalysis {
+                HStack(spacing: 8) {
+                    Image(systemName: icon(for: analysis.mode))
+                        .foregroundStyle(color(for: analysis.mode))
+                    Text(analysis.mode.title).font(.subheadline.bold())
+                    Spacer()
+                    if let matches = analysis.matchesDeclared {
+                        Label(matches ? "与你的选择一致" : "与你的选择不一致",
+                              systemImage: matches ? "checkmark.circle" : "exclamationmark.triangle")
+                            .font(.caption2)
+                            .foregroundStyle(matches ? .green : .orange)
+                    }
+                }
+                Text(analysis.summary).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Label(analysis.advice, systemImage: "lightbulb")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("正在判断…").font(.caption).foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Text("你在小火箭里选的是：").font(.caption2).foregroundStyle(.secondary)
+                Picker("", selection: Binding(
+                    get: { model.config.declaredProxyMode },
+                    set: { model.setDeclaredProxyMode($0) })) {
+                    ForEach(DeclaredProxyMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.title).tag(mode.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 150)
+            }
+        }
+    }
+
+    private func icon(for mode: ProxyMode) -> String {
+        switch mode {
+        case .direct: "arrow.right.circle"
+        case .ruleSplit: "arrow.triangle.branch"
+        case .global: "arrow.triangle.2.circlepath.circle"
+        case .tunnelIdle: "pause.circle"
+        case .unknown: "questionmark.circle"
+        }
+    }
+
+    private func color(for mode: ProxyMode) -> Color {
+        switch mode {
+        case .ruleSplit, .direct: .green
+        case .global: .orange
+        case .tunnelIdle: .yellow
+        case .unknown: .secondary
+        }
     }
 
     // MARK: VPN

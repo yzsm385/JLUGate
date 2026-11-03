@@ -37,6 +37,7 @@ final class AppModel {
     var pingResults: [PingSummary] = []
     var speedResults: [SpeedResult] = []
     var diagnosticsBusy = false
+    var proxyAnalysis: ProxyModeAnalysis?
 
     @ObservationIgnored private var coordinator: AuthCoordinator?
     @ObservationIgnored private var coordinatorTask: Task<Void, Never>?
@@ -556,8 +557,42 @@ final class AppModel {
     }
 
     func refreshNetworkDetail() {
-        networkSnapshot = NetworkInspector().snapshot()
+        let snapshot = NetworkInspector().snapshot()
+        networkSnapshot = snapshot
+        proxyAnalysis = ProxyModeAnalyzer.analyze(
+            snapshot.proxyFacts(runningApps: Self.detectedProxyApps()),
+            declared: DeclaredProxyMode(rawValue: config.declaredProxyMode) ?? .unknown)
         refreshDiagnostics()
+    }
+
+    /// 当前正在运行的代理 App（小火箭 / Clash / Surge …），只用于展示与归因。
+    static func detectedProxyApps() -> [String] {
+        let keywords = ["shadowrocket", "小火箭", "clash", "surge", "stash", "quantumult",
+                        "sing-box", "v2ray", "shadowsocks", "wireguard", "tunnelblick", "openvpn"]
+        // 归一化成"人看得懂的名字"：Shadowrocket Widget / Shadowrocket Helper 都算 Shadowrocket
+        let canonical: [(needle: String, name: String)] = [
+            ("shadowrocket", "Shadowrocket"), ("小火箭", "Shadowrocket"),
+            ("clash", "Clash"), ("surge", "Surge"), ("stash", "Stash"),
+            ("quantumult", "Quantumult"), ("sing-box", "sing-box"),
+            ("v2ray", "V2Ray"), ("shadowsocks", "Shadowsocks"),
+            ("wireguard", "WireGuard"), ("tunnelblick", "Tunnelblick"), ("openvpn", "OpenVPN"),
+        ]
+        var found: Set<String> = []
+        for app in NSWorkspace.shared.runningApplications {
+            let name = (app.localizedName ?? "") + " " + (app.bundleIdentifier ?? "")
+            let lowered = name.lowercased()
+            guard keywords.contains(where: { lowered.contains($0) }) else { continue }
+            if let match = canonical.first(where: { lowered.contains($0.needle) }) {
+                found.insert(match.name)
+            }
+        }
+        return found.sorted()
+    }
+
+    func setDeclaredProxyMode(_ raw: String) {
+        config.declaredProxyMode = raw
+        persist()
+        refreshNetworkDetail()
     }
 
     func runPing() {

@@ -37,6 +37,15 @@ public struct NetworkSnapshot: Sendable, Equatable {
     /// 系统 DNS 里出现 198.18.x.x（代理 fake-ip）→ 说明 DNS 已被劫持
     public let dnsLooksHijacked: Bool
 
+    /// 把快照翻译成"代理模式判定"所需的事实。
+    public func proxyFacts(runningApps: [String] = []) -> ProxyFacts {
+        ProxyFacts(hasTunnel: !tunnels.isEmpty,
+                   defaultRouteIsTunnel: defaultRoute?.isTunnel ?? false,
+                   campusRouteIsTunnel: campusRoute?.isTunnel ?? false,
+                   campusRouteInterface: campusRoute?.interface,
+                   proxyAppNames: runningApps)
+    }
+
     public var vpnIsActive: Bool {
         if defaultRoute?.isTunnel == true { return true }
         if campusRoute?.isTunnel == true { return true }

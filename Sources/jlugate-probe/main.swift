@@ -287,6 +287,12 @@ func runNetDetail(_ options: Options) -> Int32 {
     print("10.100.61.3 出口：\(snapshot.campusRoute?.interface ?? "-")")
     print("VPN/TUN 是否在生效：\(snapshot.vpnIsActive ? "是" : "否")")
 
+    let analysis = ProxyModeAnalyzer.analyze(snapshot.proxyFacts())
+    print("\n== 代理模式 ==")
+    print("\(analysis.mode.title)")
+    print(analysis.summary)
+    print("建议：\(analysis.advice)")
+
     print("\n== DNS ==")
     print(snapshot.dnsServers.isEmpty ? "（读不到）" : snapshot.dnsServers.joined(separator: ", "))
     if snapshot.dnsLooksHijacked {
