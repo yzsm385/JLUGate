@@ -146,13 +146,29 @@ struct WizardView: View {
 
     private var linkStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Picker("接入方式", selection: $link) {
-                Text("自动识别（推荐）").tag("auto")
-                Text("有线").tag("wired")
-                Text("JLU.PC（无线 · Dr.Com）").tag("jluPC")
-                Text("JLU.WIFI（网页认证）").tag("jluWiFi")
+            // 不用 Picker(.radioGroup)：它在玻璃容器里点选时会触发渲染问题，
+            // 换成普通按钮行，行为一致但更稳。
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(Self.linkOptions, id: \.value) { option in
+                    Button {
+                        link = option.value
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: link == option.value ? "largecircle.fill.circle" : "circle")
+                                .foregroundStyle(link == option.value ? Color.accentColor : Color.secondary)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(option.title)
+                                Text(option.detail)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .pickerStyle(.radioGroup)
 
             Text(hintForLink)
                 .font(.caption)
@@ -166,6 +182,20 @@ struct WizardView: View {
             }
         }
     }
+
+    private struct LinkOption: Identifiable {
+        let value: String
+        let title: String
+        let detail: String
+        var id: String { value }
+    }
+
+    private static let linkOptions: [LinkOption] = [
+        LinkOption(value: "auto", title: "自动识别（推荐）", detail: "先探一次网络，判断走 Dr.Com 还是网页认证"),
+        LinkOption(value: "wired", title: "有线", detail: "需要学校分配的固定 IP / 掩码 / 网关 / 登记 MAC"),
+        LinkOption(value: "jluPC", title: "JLU.PC（无线 · Dr.Com）", detail: "用本机 Wi-Fi 网卡 MAC 认证"),
+        LinkOption(value: "jluWiFi", title: "JLU.WIFI（网页认证）", detail: "不需要静态地址，浏览器里登录一次"),
+    ]
 
     private var hintForLink: String {
         switch link {
