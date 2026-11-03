@@ -45,6 +45,7 @@ final class AppModel {
     @ObservationIgnored private let interfacesProvider = SystemInterfaceProvider()
     @ObservationIgnored private var wizardWindow: NSWindow?
     @ObservationIgnored private var networkDetailWindow: NSWindow?
+    @ObservationIgnored private var settingsWindow: NSWindow?
     @ObservationIgnored private let activityKeeper = ActivityKeeper()
     @ObservationIgnored private let pathMonitor = PathMonitor()
     @ObservationIgnored private var pathTask: Task<Void, Never>?
@@ -94,6 +95,12 @@ final class AppModel {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(800))
                 self.connect()
+            }
+        }
+        if DevOverrides.openSettingsOnLaunch {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(700))
+                self.presentSettings()
             }
         }
         if DevOverrides.openNetworkDetailOnLaunch {
@@ -527,6 +534,35 @@ final class AppModel {
     func finishWizard() {
         showWizard = false
         refreshDiagnostics()
+    }
+
+    // MARK: 设置窗口
+
+    /// 自己开一个窗口放设置页。
+    /// 不用 `SettingsLink`：LSUIElement（菜单栏常驻）的应用在部分系统版本上点了没反应，
+    /// 自己建 NSWindow 更可靠，也便于把窗口置前。
+    func presentSettings() {
+        if let settingsWindow {
+            settingsWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let controller = NSHostingController(rootView: SettingsView().environment(self))
+        let window = NSWindow(contentViewController: controller)
+        window.title = "JLU Gate 设置"
+        window.setContentSize(NSSize(width: 580, height: 680))
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.styleMask = [.titled, .closable]
+        settingsWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        FileLogger.shared.log("打开设置窗口")
+    }
+
+    func closeSettings() {
+        settingsWindow?.orderOut(nil)
+        settingsWindow = nil
     }
 
     // MARK: 网络详情

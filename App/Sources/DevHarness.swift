@@ -28,6 +28,7 @@ enum DevOverrides {
         var browser: String?
         /// 自检时自动打开「网络详情」窗口
         var openNetDetail: Bool?
+        var openSettings: Bool?
     }
 
     private static let fileConfig: FileConfig? = {
@@ -69,6 +70,12 @@ enum DevOverrides {
             return nil
         }
         return URL(string: raw)
+    }
+
+    /// 自检时自动打开设置窗口。
+    static var openSettingsOnLaunch: Bool {
+        guard isEnabled else { return false }
+        return fileConfig?.openSettings ?? false
     }
 
     /// 自检时自动打开「网络详情」窗口。

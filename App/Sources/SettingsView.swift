@@ -102,27 +102,37 @@ struct SettingsView: View {
             }
 
             Section {
-                HStack {
-                    Button("保存") { save() }
-                        .buttonStyle(.glass)
-                    Button("重新检测") { model.refreshDiagnostics() }
-                    Button("重置本机配置…") { model.resetLocalConfiguration() }
-                    Button("从剪贴板导入参数卡") {
-                        if model.importConfigCardFromClipboard() {
-                            load()
-                            saved = true
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Button("保存") { save() }
+                            .buttonStyle(.glassProminent)
+                        if saved {
+                            Label("已保存", systemImage: "checkmark.circle")
+                                .font(.caption)
+                                .foregroundStyle(.green)
                         }
+                        Spacer()
+                        Button("关闭") { model.closeSettings() }
+                            .buttonStyle(.glass)
                     }
-                    if saved {
-                        Label("已保存", systemImage: "checkmark.circle")
-                            .font(.caption)
-                            .foregroundStyle(.green)
+                    HStack(spacing: 8) {
+                        Button("重新检测") { model.refreshDiagnostics() }
+                        Button("从剪贴板导入参数卡") {
+                            if model.importConfigCardFromClipboard() {
+                                load()
+                                saved = true
+                            }
+                        }
+                        Spacer()
+                        Button("重置本机配置…") { model.resetLocalConfiguration() }
+                            .foregroundStyle(.red)
                     }
+                    .buttonStyle(.glass)
                 }
             }
         }
         .formStyle(.grouped)
-        .frame(width: 520, height: 620)
+        .frame(width: 560, height: 640)
         .onAppear { load() }
         .onChange(of: draft.account) { _, newValue in
             // 切账号就载入该账号自己的档案（PLAN M4 验收："切换账号时能按账号载入各自档案"）

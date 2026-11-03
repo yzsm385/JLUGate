@@ -211,7 +211,9 @@ struct MenuContent: View {
 
     private var footer: some View {
         HStack {
-            SettingsLink {
+            Button {
+                model.presentSettings()
+            } label: {
                 Label("设置", systemImage: "gearshape")
             }
             .buttonStyle(.plain)
