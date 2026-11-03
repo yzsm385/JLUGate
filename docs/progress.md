@@ -244,16 +244,36 @@ sudo tcpdump -i en7 -n -s 0 -X "udp port 61440" -w ~/Desktop/jlugate.pcap
 
 ---
 
-## 7. 本轮没做（按 CHECKLIST/PLAN 顺序留到下一轮）
+## 7. 完成度总览：哪些做完了、哪些还缺、缺在谁身上
 
-| 项 | 位置 | 原因 / 前置 |
+| 里程碑 | 状态 | 说明 |
 |---|---|---|
-| ~~`ConnectivityProbe`（自带 DNS 的 204 探针）~~ | PLAN §8.2 | ✅ 已实现并在离线单测覆盖（判定矩阵 7 条） |
-| ~~`AuthCoordinator` 多链路切换~~ | PLAN §4 | ✅ 已实现（选链路/teardown/状态透传，10 条单测）；App 仍直连引擎，见下 |
-| `JLUGateRouteHelper`（root LaunchDaemon） | PLAN §6.6 / M2.5 | 需要签名与 `SMAppService.daemon`，属 M2.5 |
-| `PortalEngine` / `PortalDetector` / `WKWebView` 登录窗 | PLAN §5.4 / M4.5 | `JLU.WIFI` 链路，需 U10（HAR）；当前协调器选中 `.jluWiFi` 后会得到一个明确的 `unsupportedLink` 失败 |
-| 链路选择的 "challenge 探测 +4 分" | PLAN §6.3 | 需要真网关；当前按 MAC + 有线 + IPv4 打分，探测留到 M3 |
-| 界面本地化（String Catalog） | — | 当前为中文硬编码 |
+| M0 工具先行 | ✅ | `jlugate-probe`（self-test / portal-self-test / interfaces / route-check / detect / dump-login / login）、mock-gateway、mock-portal、脱敏夹具 |
+| M1 协议核心 | ✅ | 342 字节逐字节复现、摘要 A 黄金向量、保活 A/B 复现、fuzz |
+| M2 通道与引擎 | ✅ | BSD/NW 双通道、接口解析、路由/TUN 判定、actor + epoch 状态机、退避 |
+| M2.5 路由 helper | ⚠️ 一半 | 参数白名单 + argv 拼装 + 三层判定已实现并测完；**daemon 本体未写**：`SMAppService.daemon` 必须先签名，没账号（OPEN-ITEMS A1）写出来也是死码，且无法验证 |
+| M3 真机联调 | ⏳ 待环境 B | 编码器对真实网关、DHCP/Manual、TUN、休眠唤醒、Portal 真实字段 |
+| M4 菜单栏 App + 向导 | ✅（源码） | 状态/链路/路由提示、向导、设置、诊断导出、参数卡、单实例、App Nap、失败通知；`.app` 需 `xcodegen generate` |
+| M4.5 Portal | ✅ | 决策 D-001 落地：不做表单自动化，只做检测 + Cookie 复用 + 失败弹窗 |
+| M5 打包分发 | ⏳ 待 A1 | 签名 / 公证 / 分发渠道 |
+| M6 长稳 | ⏳ 待环境 B | 8h / 24h 观察 |
+
+### 7.1 仍需外部条件的项（不是"没做"，是"做不了"）
+
+| 项 | 卡在哪 | 我能做的已做 |
+|---|---|---|
+| Route helper daemon | Apple Developer 账号（签名） | 校验/白名单/argv/三层判定全测完；daemon 一旦有账号 1 天可补 |
+| 真机认证与抓包 | 环境 B（另一台有线 Mac） | `docs/runbook.md` 已写成可照做的手册 |
+| Portal 真实字段/入口 | U10 的 HAR | 现走 WKWebView，不依赖字段名；HAR 只用于优化入口猜测 |
+| 有线口"挑战探测 +4 分" | 真网关 | 协调器已实现"1 个 challenge 判定链路"；引擎内部选口仍按 MAC+有线+IPv4 打分 |
+
+### 7.2 刻意没做（有理由）
+
+| 项 | 理由 |
+|---|---|
+| 表单自动填充 / 重放 | 决策 D-001：门户结构未公开，改版即失效；收益远小于脆弱面 |
+| 界面本地化 | 目标用户是中文用户，v1 不做多语言 |
+| 自绘毛玻璃 | 与系统 Liquid Glass 打架（PLAN §9） |
 
 ---
 
