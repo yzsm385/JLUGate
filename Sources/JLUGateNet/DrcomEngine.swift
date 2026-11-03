@@ -315,6 +315,7 @@ public actor DrcomEngine {
         setState(.challenging)
         let challenge = try codec.makeChallenge(serial: context.serial,
                                                 subtype: configuration.challengeSubtype)
+        emit(.log("challenge serial=0x\(String(format: "%04x", context.serial)) 长度=\(challenge.count)"))
         try await channel.send(challenge)
 
         let salt: [UInt8]
@@ -330,6 +331,7 @@ public actor DrcomEngine {
             }
             salt = reply.salt
             serverSessionID = reply.sessionID
+            emit(.log("收到 challenge 应答：salt=\(Hex.string(salt)) 会话=\(String(format: "0x%04x", reply.sessionID))"))
         } catch let error as DrcomError where error == .cancelled {
             throw error
         } catch {
@@ -347,6 +349,9 @@ public actor DrcomEngine {
             hostname: configuration.hostname,
             mac: context.interface.macAddress ?? MACAddress(bytes: [0, 0, 0, 0, 0, 0])!)
         let login = try codec.makeLogin(loginContext)
+        let digest = DrcomCodec.digestA(password: configuration.password, salt: salt)
+        emit(.log("发送登录包：\(login.count) 字节，摘要A=\(Hex.string(digest, limit: 8))…，"
+                  + "账号=\(configuration.account)，接口 MAC=\(loginContext.mac)"))
         try await channel.send(login)
 
         let incoming = try await receive(matching: { frame in
@@ -372,6 +377,7 @@ public actor DrcomEngine {
                           session: ticket.session))
             return ticket
         case .loginFailure(let reason):
+            emit(.log("登录被服务器拒绝：\"\(reason)\"（原始帧前 32 字节=\(Hex.string(incoming.payload, limit: 32))）"))
             throw DrcomError.classifyRejection(reason)
         default:
             throw DrcomError.timeout(stage: "login")

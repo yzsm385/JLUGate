@@ -109,6 +109,13 @@ struct DrcomErrorTests {
         #expect(DrcomError.classifyRejection("账号在别处登录") == .accountInUse(reason: "账号在别处登录"))
         #expect(DrcomError.classifyRejection("另一台设备已经占用该MAC") == .macInUse(reason: "另一台设备已经占用该MAC"))
         #expect(DrcomError.classifyRejection("ldap auth error") == .rejected(reason: "ldap auth error"))
+        // MAC 相关要拆成"被占用"与"登记不符"两种，别混成一句
+        #expect(DrcomError.classifyRejection("该MAC已被另一台设备占用")
+                == .macInUse(reason: "该MAC已被另一台设备占用"))
+        #expect(DrcomError.classifyRejection("MAC地址与登记不符")
+                == .macRejected(reason: "MAC地址与登记不符"))
+        #expect(DrcomError.classifyRejection("mac not match")
+                == .macRejected(reason: "mac not match"))
 
         for error in [DrcomError.accountInUse(reason: "x"), .macInUse(reason: "y"), .rejected(reason: "z")] {
             #expect(error.isRetryable == false)

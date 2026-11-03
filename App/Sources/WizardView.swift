@@ -158,7 +158,7 @@ struct WizardView: View {
     private var hintForLink: String {
         switch link {
         case "wired": "有线需要学校分配的固定 IP / 掩码 / 网关 / 登记 MAC；下一步会让你填。"
-        case "jluPC": "JLU.PC 与有线共用同一组静态地址；没填过的话下一步会让你填。"
+        case "jluPC": JLUAccessPolicy.jluPCHint
         case "jluWiFi": "网页认证不需要静态地址，登录时用浏览器输入同一套账号密码即可。"
         default: "自动模式会先探一次网络，判断该走 Dr.Com 还是网页认证；不是校园网就不发任何认证。"
         }

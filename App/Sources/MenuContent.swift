@@ -143,6 +143,14 @@ struct MenuContent: View {
                     .font(.caption2)
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
+                if let hint = accountConflictHint(for: error) {
+                    Text(hint)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if case .macRejected = error { openSelfServiceButton }
+                if case .macMismatch = error { openSelfServiceButton }
             }
 
             if case .manual(let command, _) = model.routeGuarantee, !model.state.isOnline {
@@ -206,6 +214,32 @@ struct MenuContent: View {
                 }
                 .buttonStyle(.glass)
             }
+        }
+    }
+
+    private var openSelfServiceButton: some View {
+        Button {
+            NSWorkspace.shared.open(JLUAccessPolicy.selfServiceURL)
+        } label: {
+            Label("打开自助平台（改登记 MAC）", systemImage: "safari")
+                .font(.caption2)
+        }
+        .buttonStyle(.link)
+    }
+
+    /// 顶号时补一句"怎么办"（服务器原文已经在上面一行里了，不替代它）。
+    private func accountConflictHint(for error: DrcomError) -> String? {
+        switch error {
+        case .accountInUse:
+            return "同一账号同一时刻只能一台设备在线。想让本机上线：到那台设备上退出（或等约 30 秒自动释放）再点重试。"
+        case .macInUse:
+            return "这个 MAC 已被别的设备占用。若你换了网卡/共用廉价网卡，请到学校平台核对登记。"
+        case .macRejected:
+            return JLUAccessPolicy.rejectedByMacHint
+        case .macMismatch(let expected, let actual):
+            return JLUAccessPolicy.macMismatchHint(expected: expected, actual: actual)
+        default:
+            return nil
         }
     }
 

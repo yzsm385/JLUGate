@@ -40,6 +40,8 @@ public enum DrcomError: Error, Sendable, Equatable {
     case accountInUse(reason: String)
     /// 同一 MAC 被另一台设备占用。
     case macInUse(reason: String)
+    /// 服务器认为这个 MAC 不属于该账号（登记的是另一块网卡）。
+    case macRejected(reason: String)
 
     // MARK: 链路选择
 
@@ -90,7 +92,7 @@ public enum DrcomError: Error, Sendable, Equatable {
             return "本地 UDP \(port) 已被其它进程占用\(who)。"
         case .accountInUse(let reason):
             return reason
-        case .macInUse(let reason):
+        case .macInUse(let reason), .macRejected(let reason):
             return reason
         case .notCampusNetwork(let detail):
             return "当前网络不是校园网（\(detail)）"
@@ -108,7 +110,7 @@ public enum DrcomError: Error, Sendable, Equatable {
     /// 是否值得自动重试。账号冲突 / DHCP / MAC 不匹配这类必须等用户动作。
     public var isRetryable: Bool {
         switch self {
-        case .unexpectedPacket, .accountInUse, .macInUse, .dhcpAssigned,
+        case .unexpectedPacket, .accountInUse, .macInUse, .macRejected, .dhcpAssigned,
              .staticConfigMismatch, .capturedByTunnel, .officialClientRunning,
              .localPortInUse, .macMismatch, .cancelled, .rejected:
             return false
@@ -134,7 +136,7 @@ public enum DrcomError: Error, Sendable, Equatable {
     /// 重连时是否需要"等用户"（进 `failed` 而不是 `reconnecting`）。
     public var requiresUserAction: Bool {
         switch self {
-        case .accountInUse, .macInUse, .macMismatch, .dhcpAssigned,
+        case .accountInUse, .macInUse, .macRejected, .macMismatch, .dhcpAssigned,
              .staticConfigMismatch, .capturedByTunnel, .localPortInUse, .unsupportedLink:
             return true
         default:
@@ -145,8 +147,21 @@ public enum DrcomError: Error, Sendable, Equatable {
     /// 服务器拒绝原因的分类。原因串**原样保留**，只用来决定要不要自动重试。
     public static func classifyRejection(_ reason: String) -> DrcomError {
         let lowered = reason.lowercased()
-        if lowered.contains("mac") || reason.contains("该MAC") || reason.contains("mac") {
-            return .macInUse(reason: reason)
+        let mentionsMAC = lowered.contains("mac")
+
+        // 先分"占用"还是"不符"：这两件事对用户的含义完全不同
+        let inUseWords = ["占用", "已被", "in use", "occupied", "another device"]
+        let mismatchWords = ["不符", "不一致", "不匹配", "错误", "mismatch", "not match",
+                             "invalid", "未登记", "未绑定", "非法"]
+
+        if mentionsMAC {
+            if mismatchWords.contains(where: lowered.contains) {
+                return .macRejected(reason: reason)
+            }
+            if inUseWords.contains(where: lowered.contains) || reason.contains("该MAC") {
+                return .macInUse(reason: reason)
+            }
+            return .macRejected(reason: reason)   // 没写清楚就按"MAC 有问题"处理，别退化成笼统拒绝
         }
         if reason.contains("别处") || reason.contains("已在") || lowered.contains("online")
             || lowered.contains("in use") {

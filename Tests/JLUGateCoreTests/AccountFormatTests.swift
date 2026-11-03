@@ -50,3 +50,35 @@ struct AccountFormatTests {
         #expect(AccountFormat.guidance.contains("邮箱密码"))
     }
 }
+
+@Suite("JLU 接入规则：按 MAC 认设备")
+struct JLUAccessPolicyTests {
+    @Test("MAC 不符的提示要说清三件事：登记值、当前值、怎么改")
+    func mismatchHint() {
+        let hint = JLUAccessPolicy.macMismatchHint(expected: "02:00:00:00:00:01",
+                                                   actual: "02:00:00:00:00:02",
+                                                   interfaceName: "en0")
+        #expect(hint.contains("02:00:00:00:00:01"))
+        #expect(hint.contains("02:00:00:00:00:02"))
+        #expect(hint.contains("en0"))
+        #expect(hint.contains("自助平台"))
+        #expect(hint.contains("不能互改") || hint.contains("不能"))
+    }
+
+    @Test("JLU.PC 的说明要点明用的是 Wi-Fi 网卡 MAC")
+    func jluPCHint() {
+        #expect(JLUAccessPolicy.jluPCHint.contains("Wi-Fi"))
+        #expect(JLUAccessPolicy.jluPCHint.contains("登记"))
+    }
+
+    @Test("门户页（login.jlu.edu.cn）是系统弹的，不是我们")
+    func captiveNote() {
+        #expect(JLUAccessPolicy.captivePageNote.contains("login.jlu.edu.cn"))
+        #expect(JLUAccessPolicy.captivePageNote.contains("正常现象"))
+    }
+
+    @Test("自助平台地址")
+    func url() {
+        #expect(JLUAccessPolicy.selfServiceURL.absoluteString == "https://ip.jlu.edu.cn/pay")
+    }
+}
