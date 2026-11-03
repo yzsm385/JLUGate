@@ -162,6 +162,20 @@ tail -f ~/Library/Logs/JLUGate/agent.log # 应看到 …→online + traffic
 `--dev` 构建**不碰钥匙串**、不走物理网卡（用 lo0 + BSD 通道），只用于自检；
 正式包不会读取 `dev-config.json`。
 
+网页认证同样可以无人值守跑通（脚本化浏览器 + 本地模拟门户）：
+
+```bash
+make portal-e2e           # 期望：OK portal -> online
+make portal-e2e-window    # 会弹真实 WKWebView 登录窗，需要人工点一次
+```
+
+实测日志（`~/Library/Logs/JLUGate/agent.log`）：
+
+```
+event state(discovering) → authenticating → online
+portal window loaded: http://127.0.0.1:18080/portal   # 真实 WKWebView 分支
+```
+
 ### 6.5 为什么重新构建后会弹"允许访问钥匙串"
 
 ad-hoc 签名每次构建的签名都不一样，而 Keychain 条目的 ACL 是绑定签名的，

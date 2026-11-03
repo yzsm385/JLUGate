@@ -45,6 +45,14 @@ app-bundle:
 run-app: app-bundle
 	open "dist/JLU Gate.app"
 
+# 端到端：真实 App + 本地模拟门户（脚本化浏览器，无人值守）
+portal-e2e:
+	./scripts/portal-app-e2e.sh
+
+# 同上，但弹真实 WKWebView 登录窗（需要手点）
+portal-e2e-window:
+	./scripts/portal-app-e2e.sh --window
+
 # 本地跑一遍 CI 里的三件事
 ci: test self-test portal-self-test
 	./scripts/privacy-scan.sh

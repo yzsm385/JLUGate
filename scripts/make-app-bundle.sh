@@ -12,6 +12,7 @@ for arg in "$@"; do
     case "$arg" in
         --debug) CONFIG="debug" ;;
         --dev)   DEV=1 ;;
+        --dev-portal) DEV=2 ;;
     esac
 done
 
@@ -55,11 +56,22 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 if [ "$DEV" = "1" ]; then
-    echo "==> dev harness config (mock gateway on 127.0.0.1:61441)"
+    echo "==> dev harness config (mock gateway 127.0.0.1:61441)"
     cat > "$APP/Contents/Resources/dev-config.json" <<'DEVJSON'
 {
   "server": "127.0.0.1",
   "port": 61441,
+  "autostart": true
+}
+DEVJSON
+fi
+
+if [ "$DEV" = "2" ]; then
+    echo "==> dev harness config (mock portal http://127.0.0.1:18080)"
+    cat > "$APP/Contents/Resources/dev-config.json" <<'DEVJSON'
+{
+  "portal": "http://127.0.0.1:18080",
+  "browser": "scripted",
   "autostart": true
 }
 DEVJSON

@@ -154,6 +154,7 @@ c2s  38 ff<digest>000000Drco…
 | `PortalEngine` | `detect → 静默重试 → 弹窗 → 204 确认 → online`；在线时探针连败 2 次回到 `authenticating`；弹窗 1 次/5 分钟 | 8 条 |
 | `WKPortalBrowser`（App） | 真正的 `WKWebView` 窗口，Cookie 落盘可复用；**无任何 DOM 操作/表单填充**（决策 D-001） | 编译校验 |
 | `Tools/mock-portal` | 302 → 登录页 → POST → 204 的完整门户 | `make portal-self-test` |
+| `scripts/portal-app-e2e.sh` | **真实 App 二进制**跑通「探测 → 登录窗 → 204 → online」 | `make portal-e2e`（脚本化浏览器）/ `--window`（真实 WKWebView） |
 
 刻意不做的事（决策 D-001，2026-11-03）：**不重放表单、不预填**。
 `PortalBrowser.presentLogin(url:)` 只接收 URL，账号密码根本不进入浏览器接口；

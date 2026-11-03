@@ -146,7 +146,7 @@ final class AppModel {
         if DevOverrides.isEnabled {
             if config.account.isEmpty { config.account = "20230001" }
             if password.isEmpty { password = "test-pass-2024" }
-            config.link = "wired"
+            config.link = DevOverrides.portalBase != nil ? "jluWiFi" : "wired"
         }
         guard !config.account.isEmpty, !password.isEmpty else {
             state = .failed(.malformed("还没填账号或密码"))
@@ -163,6 +163,7 @@ final class AppModel {
         }
 
         let profile = config.currentProfile
+        let devPortal = DevOverrides.portalBase
         let devServer = DevOverrides.server
         let server = devServer ?? IPv4Address(config.server)!
         let serverPort = devServer != nil ? (DevOverrides.port ?? 61441) : UInt16(config.serverPort)
@@ -190,14 +191,20 @@ final class AppModel {
         let backoff = Backoff(base: config.backoff.base, cap: config.backoff.cap,
                               jitter: config.backoff.jitter, maxAttempts: config.backoff.maxAttempts)
         let portalConfiguration = PortalConfiguration(
-            silentRetryOnce: config.portal.silentRetryOnce,
+            silentRetryOnce: devPortal == nil ? config.portal.silentRetryOnce : false,
             promptCooldown: .seconds(Double(config.portal.promptCooldownSeconds)),
             probeInterval: .seconds(config.probe.interval),
             failTolerance: config.probe.failTolerance,
             dnsServers: (profile?.dns ?? []).compactMap(IPv4Address.init),
             backoff: backoff)
-        let portalEntry = config.portal.entryURL.flatMap(URL.init(string:))
-        let browser = portalBrowser
+        let portalEntry = devPortal.map { $0.appendingPathComponent("portal?autologin=1") }
+            ?? config.portal.entryURL.flatMap(URL.init(string:))
+        let browser: any PortalBrowser = DevOverrides.portalUsesScriptedBrowser
+            ? DevScriptedBrowser(account: config.account, password: password)
+            : portalBrowser
+        // 自检时把 204 探针指向本地模拟门户；生产仍用真实 ConnectivityProbe
+        let portalProbe: any ConnectivityProbing = devPortal.map { DevPortalProbe(base: $0) }
+            ?? ConnectivityProbe()
 
         let factory: @Sendable (AccessLink, InterfaceSnapshot) -> any AuthProvider = { link, _ in
             if link.usesDrcomUDP {
@@ -209,15 +216,16 @@ final class AppModel {
                                          backoff: backoff)
                 return DrcomAuthProvider(engine: engine, link: link)
             }
-            return PortalEngine(probe: ConnectivityProbe(),
+            return PortalEngine(probe: portalProbe,
                                 browser: browser,
                                 detector: PortalDetector(configuredURL: portalEntry),
                                 configuration: portalConfiguration)
         }
 
+        let devPreference: LinkPreference? = devPortal != nil ? .jluWiFi : (devServer != nil ? .wired : nil)
         let coordinatorConfiguration = AuthCoordinator.Configuration(
-            preference: devServer != nil ? .wired : (LinkPreference(rawValue: config.link) ?? .auto),
-            autoDetect: devServer != nil ? false : config.autoDetect,
+            preference: devPreference ?? (LinkPreference(rawValue: config.link) ?? .auto),
+            autoDetect: devPreference != nil ? false : config.autoDetect,
             server: IPv4Endpoint(host: server, port: serverPort),
             localPort: UInt16(config.localPort),
             registeredMAC: profile?.registeredMAC.flatMap(MACAddress.init),

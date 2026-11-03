@@ -63,7 +63,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
     # ---------- 路由 ----------
 
     def do_GET(self) -> None:  # noqa: N802
-        path = urllib.parse.urlparse(self.path).path
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path
+        query = urllib.parse.parse_qs(parsed.query)
+
+        # 仅测试夹具：`?autologin=1` 直接置为已登录，方便自动化验证
+        # （App 侧不做任何 DOM 操作——决策 D-001）
+        if path == "/portal" and query.get("autologin", ["0"])[0] == "1":
+            STATE["logged_in"] = True
+            self._send(302, "", {"Location": "/ok"})
+            return
         if path == "/generate_204":
             if STATE["logged_in"]:
                 self.send_response(204)

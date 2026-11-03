@@ -22,6 +22,10 @@ enum DevOverrides {
         var server: String?
         var port: UInt16?
         var autostart: Bool?
+        /// 网页认证自检：指向 `Tools/mock-portal` 的基地址（如 http://127.0.0.1:18080）
+        var portal: String?
+        /// `"scripted"` 时用脚本化浏览器代替 WKWebView（仅用于无人值守自检）
+        var browser: String?
     }
 
     private static let fileConfig: FileConfig? = {
@@ -56,6 +60,21 @@ enum DevOverrides {
         return IPv4Address(raw)
     }
 
+    /// 网页认证自检的目标基地址。
+    static var portalBase: URL? {
+        guard isEnabled else { return nil }
+        guard let raw = fileConfig?.portal ?? value("JLUGATE_DEV_PORTAL", argument: "--dev-portal") else {
+            return nil
+        }
+        return URL(string: raw)
+    }
+
+    /// 自检是否用脚本化浏览器代替真实的 WKWebView 窗口。
+    static var portalUsesScriptedBrowser: Bool {
+        guard isEnabled else { return false }
+        return fileConfig?.browser == "scripted"
+    }
+
     /// 自检时自动发起登录（省掉手点菜单）。
     static var autostart: Bool {
         guard isEnabled else { return false }
@@ -69,6 +88,88 @@ enum DevOverrides {
         guard let raw = value("JLUGATE_DEV_PORT", argument: "--dev-port"),
               let value = UInt16(raw) else { return nil }
         return value
+    }
+}
+
+/// 自检用的"探针"：把 204 判定指向本地模拟门户（语义与 `ConnectivityProbe` 一致）。
+struct DevPortalProbe: ConnectivityProbing {
+    let base: URL
+
+    func run(interface: InterfaceSnapshot, dnsServers: [IPv4Address]) async -> ProbeOutcome {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 3
+        let session = URLSession(configuration: configuration,
+                                 delegate: NoRedirectDelegate(), delegateQueue: nil)
+        defer { session.invalidateAndCancel() }
+
+        var request = URLRequest(url: base.appendingPathComponent("generate_204"))
+        request.timeoutInterval = 3
+        do {
+            let (_, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                return .unreachable(reason: "没有 HTTP 响应")
+            }
+            if http.statusCode == 204 { return .healthy }
+            return .captivePortal(statusCode: http.statusCode,
+                                  location: http.value(forHTTPHeaderField: "Location"))
+        } catch {
+            return .unreachable(reason: error.localizedDescription)
+        }
+    }
+}
+
+/// 自检用的脚本化浏览器：只在 dev 配置里显式指定 `"browser": "scripted"` 时启用。
+///
+/// 真实产品路径是 `WKPortalBrowser`（普通 WKWebView，不做任何 DOM 操作，D-001）；
+/// 这个替身只是为了让"无人值守自检"能跑完整条链路。
+final class DevScriptedBrowser: PortalBrowser, @unchecked Sendable {
+    let account: String
+    let password: String
+
+    init(account: String, password: String) {
+        self.account = account
+        self.password = password
+    }
+
+    func presentLogin(url: URL) async -> PortalLoginResult {
+        FileLogger.shared.log("dev scripted browser: \(url.absoluteString)")
+        var target = url
+        let dummy = InterfaceSnapshot(name: "lo0", index: 1, ipv4: "127.0.0.1", mac: nil,
+                                      isWireless: true, isUp: true)
+        if let page = try? await URLSessionPortalFetcher().fetch(url, interface: dummy),
+           let action = PortalDetector.formAction(in: page.body, base: url) {
+            target = action
+        }
+        var request = URLRequest(url: target)
+        request.httpMethod = "POST"
+        request.httpBody = Data("username=\(account)&password=\(password)".utf8)
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        do {
+            let (data, response) = try await session.data(for: request)
+            let text = String(decoding: data, as: UTF8.self)
+            if text.contains("错误") { return .failed(reason: text) }
+            guard let http = response as? HTTPURLResponse, (200..<400).contains(http.statusCode) else {
+                return .failed(reason: "HTTP 异常")
+            }
+            return .succeeded
+        } catch {
+            return .failed(reason: error.localizedDescription)
+        }
+    }
+
+    func clearCookies() async {}
+}
+
+/// 不跟随跳转，才能看到真实的 302 与 Location。
+final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
     }
 }
 

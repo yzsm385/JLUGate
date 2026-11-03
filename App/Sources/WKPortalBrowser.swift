@@ -123,7 +123,12 @@ final class PortalWindow: NSObject, NSWindowDelegate, WKNavigationDelegate {
 
     // MARK: WKNavigationDelegate
 
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        FileLogger.shared.log("portal window load: \(webView.url?.absoluteString ?? "-")")
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        FileLogger.shared.log("portal window loaded: \(webView.url?.absoluteString ?? "-")")
         // URL 离开门户域 → 基本可以认为登录完成；最终仍由引擎的 204 探针确认
         if let host = webView.url?.host, let entryHost, host != entryHost {
             finish(.succeeded)
