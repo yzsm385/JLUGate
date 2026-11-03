@@ -42,6 +42,15 @@ enum Notifier {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
+    /// 新版本接管旧版本时提示一次（否则用户会以为"双击没反应"）。
+    static func postVersionTakeover(oldBuild: String, newBuild: String) {
+        let content = UNMutableNotificationContent()
+        content.title = "已切换到新版本"
+        content.body = "旧版本（build \(oldBuild)）已退出，现在运行 build \(newBuild)。"
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
+    }
+
     static func notifyFailure(_ error: DrcomError) {
         guard error.requiresUserAction else { return }
         let key = error.userMessage

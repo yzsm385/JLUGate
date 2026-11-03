@@ -26,9 +26,10 @@ public final class PathMonitor: @unchecked Sendable {
         AsyncStream { continuation in
             monitor.pathUpdateHandler = { [weak self] path in
                 guard let self else { return }
-                let names = path.availableInterfaces
+                // 去重：同一块网卡可能被 NWPath 报两次，重复会导致无谓的"重新发现 + 重连"
+                let names = Array(Set(path.availableInterfaces
                     .filter { !VirtualInterfaceNames.isVirtual($0.name) }
-                    .map(\.name)
+                    .map(\.name)))
                     .sorted()
                 self.lock.lock()
                 let previousNames = self.lastNames

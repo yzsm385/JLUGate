@@ -37,6 +37,8 @@ final class AppModel {
     var pingResults: [PingSummary] = []
     var speedResults: [SpeedResult] = []
     var diagnosticsBusy = false
+    /// 最近一次进入在线的时间（判断"重复登录被拒"用）
+    var lastOnlineAt: Date?
     var proxyAnalysis: ProxyModeAnalysis?
     var authLiveness: AuthLivenessProbe.Sample?
 
@@ -964,6 +966,7 @@ final class AppModel {
             state = next
             switch next {
             case .online:
+                lastOnlineAt = Date()
                 // 在线期间别被 App Nap 挂起（不然 10s 心跳会被延迟成几十秒）
                 activityKeeper.begin()
                 Notifier.resetDeduplication()
@@ -976,6 +979,18 @@ final class AppModel {
             if case .failed(let error) = next {
                 lastError = error
                 Notifier.notifyFailure(error)
+                // "账号已在别处登录"这类失败，如果本机网络其实通着（会话还在），
+                // 不要把徽标打回"未连接"——服务器常常只是重复登录时报这个。
+                let isAccountConflict: Bool = {
+                    if case .accountInUse = error { return true }
+                    if case .macInUse = error { return true }
+                    return false
+                }()
+                if isAccountConflict, wasEverOnlineRecently, await probeReachable() {
+                    state = .online
+                    recentLog.insert("服务器回报账号已在别处登录，但网络实际可用：保持已连接", at: 0)
+                    FileLogger.shared.log("accountInUse but probe healthy: keep online")
+                }
             }
         case .link(let next):
             link = next
@@ -1028,14 +1043,39 @@ final class AppModel {
             break
         }
         guard state.isOnline || isWaitingForPath else { return }
-        // 插拔 USB 网卡会连着来好几个事件，去抖一次就够
         pathDebounce?.cancel()
         pathDebounce = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(1500))
+            try? await Task.sleep(for: .milliseconds(2000))
             guard let self, !Task.isCancelled else { return }
-            self.recentLog.insert("检测到网络变化，重新建立连接", at: 0)
+            // 已经在线：网卡集合抖一下不代表会话失效，先探测再决定
+            if self.state.isOnline {
+                if await self.probeReachable() {
+                    self.recentLog.insert("网络有变化，但探测仍正常：保持在线", at: 0)
+                    FileLogger.shared.log("path changed but probe healthy: keep online")
+                    return
+                }
+                self.recentLog.insert("网络变化且探测失败：重新建立连接", at: 0)
+            }
             self.retry()
         }
+    }
+
+    /// 最近 10 分钟内成功在线过（用于判断"重复登录被拒"是不是误报）
+    private var wasEverOnlineRecently: Bool {
+        guard let at = lastOnlineAt else { return false }
+        return Date().timeIntervalSince(at) < 600
+    }
+
+    /// 用真实探测判断"现在到底通不通"（不依赖引擎内部状态）。
+    func probeReachable() async -> Bool {
+        let interface = interfaces.first { $0.name == config.interfaceLock }
+            ?? interfaces.first(where: \.isUsableForAuthentication)
+            ?? interfaces.first
+        guard let interface else { return false }
+        let outcome = await ConnectivityProbe().run(interface: interface,
+                                                    dnsServers: ConnectivityProbe.fallbackDNSServers)
+        if case .healthy = outcome { return true }
+        return false
     }
 
     /// 是否正卡在"等网络变化"的失败态（拔网线 / 网卡没地址）。
