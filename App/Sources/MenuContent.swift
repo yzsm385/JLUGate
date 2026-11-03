@@ -7,6 +7,45 @@ struct MenuContent: View {
     @Namespace private var glassNamespace
 
     var body: some View {
+        Group {
+            switch model.panel {
+            case .main:
+                mainPanel
+            case .wizard:
+                embedded { WizardView() }
+            case .settings:
+                embedded { SettingsView() }
+            case .detail:
+                embedded { NetworkDetailView() }
+            case .status:
+                embedded { ConnectionStatusView() }
+            case .portal:
+                embedded { PortalViewerView(url: model.portalViewerURL) }
+            }
+        }
+    }
+
+    /// 子页面统一套一层"返回"头：所有界面都在菜单栏面板里，不再开独立窗口。
+    private func embedded<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Button {
+                    model.panel = .main
+                } label: {
+                    Label("返回", systemImage: "chevron.left")
+                        .labelStyle(.titleAndIcon)
+                        .font(.caption)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+            content()
+        }
+        .frame(width: 360)
+        .padding(12)
+    }
+
+    private var mainPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             // 原生 Liquid Glass：状态卡与操作按钮放在同一个容器里，
             // 邻近元素会被系统合并成一块连续的玻璃（不是叠两层自绘材质）。

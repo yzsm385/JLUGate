@@ -26,9 +26,5 @@ struct JLUGateApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Settings {
-            SettingsView()
-                .environment(model)
-        }
     }
 }

@@ -304,6 +304,17 @@ macOS 可能给网卡套一层"私有/随机地址"：**第一位是 02/06/0a/0e
 - 想改：菜单「重新设置…」；想彻底重来：设置页「重置本机配置…」；
 - 不想要自动连：设置 → 关掉「启动时自动连接」。
 
+### 6.5.0 界面全部放进菜单栏面板（不再自建窗口）
+
+真机崩溃栈（2026-11-03，`crash.txt`）：
+`objc_exception_rethrow → __NSWindowGetDisplayCycleObserverForLayout → NSDisplayCycleFlush → SIGABRT`，
+即"自建 NSWindow 在显示周期抛异常"。因此向导、设置、网络详情、连接状态、校园网门户
+**全部改为在菜单栏面板内切换**（`AppModel.Panel`），不再创建任何 NSWindow：
+
+- 菜单里点「设置 / 网络详情 / 连接状态 / 校园网门户」→ 面板内切换，左上角「返回」；
+- 向导在面板内呈现，完成后回主面板；
+- 唯一保留窗口的地方是 JLU.WIFI 的网页登录浏览器（需要真实 WKWebView 会话）。
+
 ### 6.5.1 设置窗口打不开（已修）
 
 早期版本用 SwiftUI 的 `SettingsLink` 打开设置；`LSUIElement`（菜单栏常驻、无 Dock 图标）的应用

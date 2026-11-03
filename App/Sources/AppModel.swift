@@ -26,6 +26,20 @@ final class AppModel {
     var routeGuarantee: RouteGuarantee?
     var showWizard = false
 
+    /// 面板内容：**所有界面都放在菜单栏面板里**，不再自建 NSWindow。
+    /// 真机崩溃栈（AppKit display cycle + objc_exception_rethrow）指向自建窗口的布局，
+    /// 面板路径是被长期验证可用的，所以统一改成"面板内切换"。
+    enum Panel: Equatable {
+        case main
+        case wizard
+        case settings
+        case detail
+        case status
+        case portal
+    }
+
+    var panel: Panel = .main
+
     @ObservationIgnored private var shouldAutoConnectOnLaunch = false
     @ObservationIgnored private var watchTask: Task<Void, Never>?
     @ObservationIgnored private var watchPrompted = false
@@ -62,11 +76,6 @@ final class AppModel {
     @ObservationIgnored private var coordinatorTask: Task<Void, Never>?
     @ObservationIgnored private let portalBrowser = WKPortalBrowser()
     @ObservationIgnored private let interfacesProvider = SystemInterfaceProvider()
-    @ObservationIgnored private var wizardWindow: NSWindow?
-    @ObservationIgnored private var networkDetailWindow: NSWindow?
-    @ObservationIgnored private var settingsWindow: NSWindow?
-    @ObservationIgnored private var connectionStatusWindow: NSWindow?
-    @ObservationIgnored private var portalViewerWindow: NSWindow?
     @ObservationIgnored private let activityKeeper = ActivityKeeper()
     @ObservationIgnored private let pathMonitor = PathMonitor()
     @ObservationIgnored private var pathTask: Task<Void, Never>?
@@ -171,24 +180,10 @@ final class AppModel {
 
     /// 首次启动 / 换账号时的向导窗口（PLAN §9.1）。
     func presentWizard() {
-        if let wizardWindow {
-            wizardWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        FileLogger.shared.log("窗口：向导 创建开始")
-        let controller = NSHostingController(rootView: WizardView().environment(self).plainWindowChrome())
-        let window = NSWindow(contentViewController: controller)
-        window.title = "JLU Gate · 初始设置"
-        window.setContentSize(NSSize(width: 540, height: 480))
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.styleMask = [.titled, .closable]
-        wizardWindow = window
+        panel = .wizard
         showWizard = true
-        FileLogger.shared.log("窗口：向导 创建完成")
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        FileLogger.shared.log("面板：向导")
+        // 面板可能在用户点开时才出现，这里不主动激活窗口
     }
 
     // MARK: 派生显示
@@ -639,27 +634,12 @@ final class AppModel {
 
     /// 点「完成」或「登录」之后立刻弹出来，显示进度与结果——不把错误藏在菜单栏里。
     func presentConnectionStatus() {
-        if let connectionStatusWindow {
-            connectionStatusWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        FileLogger.shared.log("窗口：连接状态 创建开始")
-        let controller = NSHostingController(rootView: ConnectionStatusView().environment(self).plainWindowChrome())
-        let window = NSWindow(contentViewController: controller)
-        window.title = "JLU Gate · 连接状态"
-        window.setContentSize(NSSize(width: 440, height: 260))
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.styleMask = [.titled, .closable]
-        connectionStatusWindow = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        panel = .status
+        FileLogger.shared.log("面板：连接状态")
     }
 
     func closeConnectionStatus() {
-        connectionStatusWindow?.orderOut(nil)
-        connectionStatusWindow = nil
+        panel = .main
     }
 
     // MARK: 校园网门户（App 内查看，不自动弹）
@@ -670,22 +650,12 @@ final class AppModel {
     }
 
     func presentPortalViewer() {
-        if let portalViewerWindow {
-            portalViewerWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        let controller = NSHostingController(
-            rootView: PortalViewerView(url: portalViewerURL).environment(self).plainWindowChrome())
-        let window = NSWindow(contentViewController: controller)
-        window.title = "JLU Gate · 校园网门户"
-        window.setContentSize(NSSize(width: 760, height: 620))
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.styleMask = [.titled, .closable, .resizable]
-        portalViewerWindow = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
+        panel = .portal
+        FileLogger.shared.log("面板：校园网门户")
+    }
+
+    func closePortalViewer() {
+        panel = .main
     }
 
     /// 被门户拦下时记下入口地址，并把页面 HTML 缓存一份，供 App 内离线查看。
@@ -707,35 +677,15 @@ final class AppModel {
         FileLogger.shared.log("已缓存门户页面：\(page.body.count) 字符")
     }
 
-    // MARK: 设置窗口
+    // MARK: 设置面板
 
-    /// 自己开一个窗口放设置页。
-    /// 不用 `SettingsLink`：LSUIElement（菜单栏常驻）的应用在部分系统版本上点了没反应，
-    /// 自己建 NSWindow 更可靠，也便于把窗口置前。
     func presentSettings() {
-        if let settingsWindow {
-            settingsWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            return
-        }
-        FileLogger.shared.log("窗口：设置 创建开始")
-        let controller = NSHostingController(rootView: SettingsView().environment(self).plainWindowChrome())
-        let window = NSWindow(contentViewController: controller)
-        window.title = "JLU Gate 设置"
-        window.setContentSize(NSSize(width: 580, height: 680))
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.styleMask = [.titled, .closable]
-        settingsWindow = window
-        FileLogger.shared.log("窗口：设置 创建完成")
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        FileLogger.shared.log("打开设置窗口")
+        panel = .settings
+        FileLogger.shared.log("面板：设置")
     }
 
     func closeSettings() {
-        settingsWindow?.orderOut(nil)
-        settingsWindow = nil
+        panel = .main
     }
 
     // MARK: 选网卡（按 MAC 自动认，认不出就让用户选）
@@ -838,29 +788,13 @@ final class AppModel {
     // MARK: 网络详情
 
     func presentNetworkDetail() {
-        if let networkDetailWindow {
-            networkDetailWindow.makeKeyAndOrderFront(nil)
-            NSApp.activate(ignoringOtherApps: true)
-            refreshNetworkDetail()
-            return
-        }
-        FileLogger.shared.log("窗口：网络详情 创建开始")
-        let controller = NSHostingController(rootView: NetworkDetailView().environment(self).plainWindowChrome())
-        let window = NSWindow(contentViewController: controller)
-        window.title = "JLU Gate · 网络详情"
-        window.setContentSize(NSSize(width: 640, height: 620))
-        window.center()
-        window.isReleasedWhenClosed = false
-        window.styleMask = [.titled, .closable]
-        networkDetailWindow = window
-        window.makeKeyAndOrderFront(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        refreshNetworkDetail()
+        panel = .detail
+        FileLogger.shared.log("面板：网络详情")
+        Task { @MainActor in refreshNetworkDetail() }
     }
 
     func closeNetworkDetail() {
-        networkDetailWindow?.orderOut(nil)
-        networkDetailWindow = nil
+        panel = .main
     }
 
     func refreshNetworkDetail() {

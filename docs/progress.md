@@ -184,6 +184,7 @@ helper 进程本身（`SMAppService.daemon` + 签名）仍属 M2.5：**没有开
 | 失败通知 | 只有 `requiresUserAction` 的失败才发系统通知，同一原因只提醒一次；超时/退避静默（PLAN §3.2） |
 | 账号格式 | 邮箱前缀自动归一化；学生/教师两种规则实时判定并提示（`AccountFormat`，6 条单测） |
 | 三台上限 | JLU.WIFI 被挤下线 → 立刻重进（绕过 5 分钟冷却）+ 说明「会踢掉队列第二台」（+1 条引擎测试） |
+| 面板化 UI | 向导/设置/详情/状态/门户改为菜单栏面板内切换（`AppModel.Panel`），移除全部自建 NSWindow，规避 AppKit display cycle 崩溃 |
 | 设置窗口 | 不再用 `SettingsLink`（LSUIElement 下点击无效），改为自建 NSWindow + 置前；底部按钮改两行避免截断 |
 | 出厂 MAC | 读 `SCNetworkInterfaceGetHardwareAddressString`（回退 networksetup），认卡与登录报文都用出厂 MAC；另加手动指定网卡（`InterfaceMatching` 4 条单测） |
 | 参数自动填入 | 仅当该网卡是 **Manual** 时，才用系统读数（IP/掩码/网关/DNS/MAC）自动填入；DHCP 一律不填并说明原因（`ParameterSuggester` 4 条单测） |
