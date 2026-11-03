@@ -185,6 +185,8 @@ helper 进程本身（`SMAppService.daemon` + 签名）仍属 M2.5：**没有开
 | 账号格式 | 邮箱前缀自动归一化；学生/教师两种规则实时判定并提示（`AccountFormat`，6 条单测） |
 | 三台上限 | JLU.WIFI 被挤下线 → 立刻重进（绕过 5 分钟冷却）+ 说明「会踢掉队列第二台」（+1 条引擎测试） |
 | 设置窗口 | 不再用 `SettingsLink`（LSUIElement 下点击无效），改为自建 NSWindow + 置前；底部按钮改两行避免截断 |
+| 参数自动填入 | 仅当该网卡是 **Manual** 时，才用系统读数（IP/掩码/网关/DNS/MAC）自动填入；DHCP 一律不填并说明原因（`ParameterSuggester` 4 条单测） |
+| 便携分发包 | `make package` → app + 卸载脚本 + 说明；卸载会清掉 App / 配置 / 日志 / 钥匙串条目 |
 | 网口说明 | 每个网口都有"用途 + 持有者 + 能不能认证"的白话解释（`InterfaceNarrator` 6 条单测） |
 | 代理模式 | 用 `route get` 实测判定 直连 / 规则(校园网已直连) / 全局 / TUN 未生效，并可与用户自述的小火箭模式对照（`ProxyModeAnalyzer` 6 条单测） |
 | 网络详情窗 | 网口/路由/DNS/VPN 可视化 + 每个字段白话解释 + Ping（直连 vs VPN）+ 测速对比（`FieldGuide`/`Throughput`/`PingSummary` 4 条单测） |

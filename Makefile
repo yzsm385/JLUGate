@@ -45,6 +45,10 @@ app-bundle:
 run-app: app-bundle
 	open "dist/JLU Gate.app"
 
+# 便携分发包（App + 卸载脚本 + 说明，DMG）
+package:
+	./scripts/make-portable-package.sh
+
 # 端到端：真实 App + 本地模拟门户（脚本化浏览器，无人值守）
 portal-e2e:
 	./scripts/portal-app-e2e.sh

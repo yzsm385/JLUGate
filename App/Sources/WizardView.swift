@@ -29,6 +29,8 @@ struct WizardView: View {
     @State private var mac = ""
     @State private var errorText: String?
     @State private var hasSavedProfile = false
+    @State private var suggestionNote: String?
+    @State private var isSuggestionTrustworthy = false
 
     var body: some View {
         @Namespace var glassNamespace
@@ -204,12 +206,18 @@ struct WizardView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 10) {
+                Button("用系统当前读数填入") { fillFromSystem() }
+                    .buttonStyle(.glassProminent)
                 if hasSavedProfile {
                     Button("载入上次保存的参数") { loadSavedProfile() }
                         .buttonStyle(.glass)
                 }
                 Button("清空这几格") { clearFields() }
                     .buttonStyle(.glass)
+            }
+            if let note = suggestionNote {
+                Text(note).font(.caption2).foregroundStyle(isSuggestionTrustworthy ? Color.secondary : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             ForEach(model.interfaces.filter { $0.ipv4 != nil }, id: \.name) { item in
@@ -263,6 +271,19 @@ struct WizardView: View {
         mac = profile.registeredMAC ?? ""
     }
 
+    /// 只有当系统这块网卡是"手动配置"时，读数才可信（DHCP 的绝不能抄）。
+    private func fillFromSystem() {
+        let suggestion = model.parameterSuggestionForCurrentInterface()
+        suggestionNote = suggestion.reason
+        isSuggestionTrustworthy = suggestion.isTrustworthy
+        guard suggestion.hasUsableValues else { return }
+        ip = suggestion.ip ?? ""
+        mask = suggestion.mask ?? ""
+        gateway = suggestion.gateway ?? ""
+        dns = suggestion.dns.joined(separator: ", ")
+        mac = suggestion.mac ?? ""
+    }
+
     private func clearFields() {
         ip = ""; mask = ""; gateway = ""; dns = ""; mac = ""
     }
@@ -291,6 +312,7 @@ struct WizardView: View {
         case .link:
             if needsNetworkStep {
                 step = .network
+                fillFromSystem()   // 手动配置时自动填好；DHCP 时只提示原因
             } else {
                 finish()
             }

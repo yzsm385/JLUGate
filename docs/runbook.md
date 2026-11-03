@@ -6,7 +6,17 @@
 
 ---
 
-## 0. 准备
+## 0. 打包（便携版）
+
+```bash
+make package     # → dist/JLU Gate 0.1.0.zip（或 .dmg）
+```
+
+包内三样东西：`JLU Gate.app`、`Uninstall JLU Gate.command`、`README.txt`。
+卸载脚本会把 App、`~/Library/Application Support/JLUGate`、`~/Library/Logs/JLUGate`
+和钥匙串里 `dev.jlugate.app` 的条目**一起删掉**，不留残留。
+
+## 0.1 准备
 
 ```bash
 # 在环境 A 上打包 universal 二进制，拷到环境 B

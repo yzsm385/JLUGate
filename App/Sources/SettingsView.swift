@@ -120,6 +120,11 @@ struct SettingsView: View {
                             .buttonStyle(.glass)
                     }
                     HStack(spacing: 8) {
+                        Button("用系统当前读数填入") {
+                            let suggestion = model.applySystemParameters()
+                            if suggestion.hasUsableValues { load(); saved = true }
+                            else { model.recentLog.insert(suggestion.reason, at: 0) }
+                        }
                         Button("重新检测") { model.refreshDiagnostics() }
                         Button("从剪贴板导入参数卡") {
                             if model.importConfigCardFromClipboard() {

@@ -658,6 +658,46 @@ final class AppModel {
         settingsWindow = nil
     }
 
+    // MARK: 自动填入静态参数（仅在系统是手动配置时可信）
+
+    func parameterSuggestionForCurrentInterface() -> NetworkParameterSuggestion {
+        let interface = interfaces.first(where: \.isUsableForAuthentication) ?? interfaces.first
+        let provider = SystemInterfaceProvider()
+        let method = interface.flatMap { provider.configMethod(of: $0.name) }
+        let gateway = provider.defaultGateway()
+        let dns = NetworkInspector.systemDNS().filter { !$0.hasPrefix("198.18.") }
+        return ParameterSuggester.suggest(
+            ip: interface?.ipv4,
+            mask: interface?.netmask,
+            mac: interface?.mac,
+            configMethod: method,
+            defaultGateway: gateway,
+            dns: dns)
+    }
+
+    /// 一键把"系统当前（手动）配置"写进档案与向导草稿。
+    @discardableResult
+    func applySystemParameters() -> NetworkParameterSuggestion {
+        let suggestion = parameterSuggestionForCurrentInterface()
+        guard suggestion.hasUsableValues else {
+            recentLog.insert(suggestion.reason, at: 0)
+            return suggestion
+        }
+        var profile = config.currentProfile ?? AppConfig.NetworkProfile()
+        profile.ip = suggestion.ip
+        profile.mask = suggestion.mask
+        profile.gateway = suggestion.gateway
+        if !suggestion.dns.isEmpty { profile.dns = suggestion.dns }
+        profile.registeredMAC = suggestion.mac
+        profile.configuredAt = profile.configuredAt ?? ISO8601DateFormatter().string(from: .now)
+        config.currentProfile = profile
+        persist()
+        refreshDiagnostics()
+        recentLog.insert("已按系统手动配置填入静态参数", at: 0)
+        FileLogger.shared.log("自动填入参数：\(suggestion.ip ?? "-")/\(suggestion.mask ?? "-") gw=\(suggestion.gateway ?? "-")")
+        return suggestion
+    }
+
     // MARK: 网络详情
 
     func presentNetworkDetail() {
