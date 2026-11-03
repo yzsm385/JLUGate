@@ -103,6 +103,9 @@ func printHelp() {
       jlugate-probe --route-check [--server 10.100.61.3]        # 路由出口 / ConfigMethod（只读）
       jlugate-probe --detect                                    # 判定当前网络走哪条链路（会发 1 个 challenge）
       jlugate-probe --portal-check                              # 只看网页认证链路的在线判定（不发任何认证）
+      jlugate-probe --net-detail                                # 网口/路由/DNS/VPN 全量快照（比终端清楚）
+      jlugate-probe --ping                                      # TCP 握手延迟（网关/认证服务器/公网）
+      jlugate-probe --speed                                     # 下载测速：网口直连 vs 当前出口（含 VPN）
       jlugate-probe --dump-login --account X --password Y       # 离线打印 342 字节登录包
       jlugate-probe --login --account X --password Y [--mac ..] # 真机认证（只能在环境 B 执行）
 
@@ -253,6 +256,93 @@ func runDetect(_ options: Options) -> Int32 {
 final class ResultBox2: @unchecked Sendable {
     var link: AccessLink?
     var alreadyOnline = false
+}
+
+// MARK: - 网络详情（只读）
+
+func runNetDetail(_ options: Options) -> Int32 {
+    let snapshot = NetworkInspector().snapshot()
+
+    print("== 网口 ==")
+    for row in snapshot.interfaces {
+        var marks: [String] = []
+        if row.isDefaultRoute { marks.append("默认出口") }
+        if row.carriesCampusRoute { marks.append("承载认证流量") }
+        if row.isWireless { marks.append("无线") }
+        if row.isUSB { marks.append("USB") }
+        if !row.isUp { marks.append("down") }
+        let markText = marks.isEmpty ? "" : "  [\(marks.joined(separator: "、"))]"
+        print("\(row.name) ifindex=\(row.index)  ipv4=\(row.ipv4 ?? "-")/\(row.mask ?? "-")  mac=\(row.mac ?? "-")\(markText)")
+    }
+
+    print("\n== 隧道 / VPN ==")
+    if snapshot.tunnels.isEmpty {
+        print("没有 utun 接口，VPN/TUN 未开启")
+    } else {
+        for tunnel in snapshot.tunnels {
+            print("\(tunnel.name)  ipv4=\(tunnel.ipv4 ?? "-")  \(tunnel.isUp ? "up" : "down")")
+        }
+    }
+    print("默认出口：\(snapshot.defaultRoute?.interface ?? "-")（网关 \(snapshot.defaultRoute?.gateway ?? "-")）")
+    print("10.100.61.3 出口：\(snapshot.campusRoute?.interface ?? "-")")
+    print("VPN/TUN 是否在生效：\(snapshot.vpnIsActive ? "是" : "否")")
+
+    print("\n== DNS ==")
+    print(snapshot.dnsServers.isEmpty ? "（读不到）" : snapshot.dnsServers.joined(separator: ", "))
+    if snapshot.dnsLooksHijacked {
+        print("⚠️ 出现 198.18.x.x：DNS 被代理劫持成 fake-ip")
+    }
+
+    print("\n== 字段说明 ==")
+    for entry in FieldGuide.entries {
+        print("· \(entry.term)：\(entry.explanation)")
+    }
+    return 0
+}
+
+func runPingCheck(_ options: Options) -> Int32 {
+    let snapshot = NetworkInspector().snapshot()
+    guard let interface = SystemInterfaceProvider().physicalInterfaces()
+        .first(where: { $0.isUsableForAuthentication }) else {
+        print("没有可用网口")
+        return 2
+    }
+    print("通过 \(interface.name)（\(interface.ipv4 ?? "-")）探测 TCP 握手延迟：")
+    let service = PingService()
+    let semaphore = DispatchSemaphore(value: 0)
+    Task.detached {
+        for target in PingTarget.defaults(snapshot: snapshot) {
+            let pair = await service.compare(target, interface: interface)
+            print("  " + pair.direct.description)
+            print("    经默认出口：\(pair.viaDefault.description)")
+        }
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 40)
+    return 0
+}
+
+func runSpeedCheck(_ options: Options) -> Int32 {
+    guard let interface = SystemInterfaceProvider().physicalInterfaces()
+        .first(where: { $0.isUsableForAuthentication }) else {
+        print("没有可用网口")
+        return 2
+    }
+    print("测速：先绑 \(interface.name) 直连，再走默认出口（含 VPN）。最多 6 MB / 端点。")
+    let service = SpeedTestService()
+    let semaphore = DispatchSemaphore(value: 0)
+    Task.detached {
+        let results = await service.compare(interface: interface)
+        if results.isEmpty {
+            print("❌ 测速失败（端点不可达；可换 --speed-url 指定 HTTP 测速地址）")
+        }
+        for result in results {
+            print("  " + result.description)
+        }
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 90)
+    return 0
 }
 
 // MARK: - 网页认证链路在线判定（真机，只读）
@@ -737,6 +827,12 @@ case "detect":
     exit(runDetect(options))
 case "portal-check":
     exit(runPortalCheck(options))
+case "net-detail":
+    exit(runNetDetail(options))
+case "ping":
+    exit(runPingCheck(options))
+case "speed":
+    exit(runSpeedCheck(options))
 case "dump-login":
     runDumpLogin(options)
 case "login":
