@@ -13,7 +13,7 @@ enum SingleInstance {
         let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
             .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
         guard let existing = others.first else { return true }
-        existing.activate(options: [.activateIgnoringOtherApps])
+        existing.activate()
         terminateSelf()
         return false
     }

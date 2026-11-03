@@ -121,6 +121,26 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 520, height: 620)
         .onAppear { load() }
+        .onChange(of: draft.account) { _, newValue in
+            // 切账号就载入该账号自己的档案（PLAN M4 验收："切换账号时能按账号载入各自档案"）
+            guard newValue != model.config.account else { return }
+            guard let profile = model.config.accounts[newValue] else {
+                // 这个账号还没有档案 → 清空，让用户从头填
+                draft.ip = ""
+                draft.mask = ""
+                draft.gateway = ""
+                draft.dns = ""
+                draft.registeredMAC = ""
+                draft.password = CredentialStore.password(for: newValue) ?? ""
+                return
+            }
+            draft.ip = profile.ip ?? ""
+            draft.mask = profile.mask ?? ""
+            draft.gateway = profile.gateway ?? ""
+            draft.dns = profile.dns.joined(separator: ",")
+            draft.registeredMAC = profile.registeredMAC ?? ""
+            draft.password = CredentialStore.password(for: newValue) ?? ""
+        }
     }
 
     private func load() {
@@ -156,6 +176,7 @@ struct SettingsView: View {
 
     private func save() {
         var config = model.config
+        let hadProfileForAccount = config.accounts[draft.account] != nil
         config.account = draft.account
         config.link = draft.link
         config.channel = draft.channel
@@ -174,14 +195,18 @@ struct SettingsView: View {
             dns: draft.dns.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty },
             registeredMAC: draft.registeredMAC.isEmpty ? nil : draft.registeredMAC,
-            interfaceHint: config.currentProfile?.interfaceHint,
-            configuredAt: config.currentProfile?.configuredAt
+            interfaceHint: config.accounts[draft.account]?.interfaceHint,
+            configuredAt: config.accounts[draft.account]?.configuredAt
                 ?? ISO8601DateFormatter().string(from: .now))
         config.accounts[draft.account] = profile
 
         model.config = config
         model.password = draft.password
         model.persist()
+        if !hadProfileForAccount, config.link != "jluWiFi" {
+            // 新账号没有档案：走一次向导把地址填全，别让用户猜为什么认证失败
+            model.presentWizard()
+        }
         if !draft.password.isEmpty {
             try? CredentialStore.save(password: draft.password, account: draft.account)
         }
