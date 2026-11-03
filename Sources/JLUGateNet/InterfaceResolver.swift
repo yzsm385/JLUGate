@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import Synchronization
 import SystemConfiguration
 import JLUGateCore
 
@@ -22,7 +23,9 @@ public struct SystemInterfaceProvider: InterfaceProvider {
                                          isWireless: snapshot.isWireless, isUp: snapshot.isUp,
                                          isUSB: snapshot.isUSB,
                                          linkLocalIPv4: snapshot.linkLocalIPv4,
-                                         netmask: snapshot.netmask)
+                                         netmask: snapshot.netmask,
+                                         hardwareName: snapshot.hardwareName,
+                                         hardwareMAC: snapshot.hardwareMAC)
             }
     }
 
@@ -164,7 +167,8 @@ public struct SystemInterfaceProvider: InterfaceProvider {
                 isUSB: hardwareTable[name]?.isUSB ?? false,
                 linkLocalIPv4: acc.linkLocal,
                 netmask: acc.netmask,
-                hardwareName: hardwareTable[name]?.name)
+                hardwareName: hardwareTable[name]?.name,
+                hardwareMAC: hardwareTable[name]?.hardwareMAC ?? Self.hardwareMAC(for: name))
         }
     }
 
@@ -177,6 +181,32 @@ public struct SystemInterfaceProvider: InterfaceProvider {
         var isWireless = false
         var isUSB = false
         var name: String?
+        /// SystemConfiguration 报的硬件地址（通常就是出厂 MAC）
+        var hardwareMAC: String?
+    }
+
+    /// 出厂 MAC 缓存：`networksetup` 是子进程，别每次枚举都起一次。
+    private static let hardwareMACCache = Mutex<[String: String]>([:])
+
+    /// 读网卡出厂 MAC（`networksetup -getmacaddress enX`）。
+    /// 系统可能给网卡套"私有/随机地址"，但学校登记与官方客户端用的都是这个出厂值。
+    static func hardwareMAC(for name: String) -> String? {
+        var cache = hardwareMACCache.withLock { $0 }
+        if let cached = cache[name] { return cached.isEmpty ? nil : cached }
+
+        let output = PortOccupancy.shell("/usr/sbin/networksetup", ["-getmacaddress", name])
+        var value: String?
+        for line in output.split(separator: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.lowercased().hasPrefix("ethernet address:") else { continue }
+            let text = trimmed.dropFirst("ethernet address:".count)
+                .trimmingCharacters(in: .whitespaces)
+                .split(separator: " ").first.map(String.init) ?? ""
+            if MACAddress(text) != nil { value = text.lowercased() }
+        }
+        cache[name] = value ?? ""
+        hardwareMACCache.withLock { $0 = cache }
+        return value
     }
 
     static func hardwareInfo() -> [String: HardwareInfo] {
@@ -190,6 +220,9 @@ public struct SystemInterfaceProvider: InterfaceProvider {
             let displayName = (SCNetworkInterfaceGetLocalizedDisplayName(interface) as String?) ?? ""
             var info = HardwareInfo()
             info.name = displayName.isEmpty ? nil : displayName
+            if let mac = SCNetworkInterfaceGetHardwareAddressString(interface) as String? {
+                info.hardwareMAC = mac.lowercased()
+            }
             info.isWireless = (type == (kSCNetworkInterfaceTypeIEEE80211 as String))
             info.isUSB = type == (kSCNetworkInterfaceTypeEthernet as String)
                 && displayName.lowercased().contains("usb")

@@ -69,6 +69,8 @@ struct AppConfig: Codable, Sendable {
     var autoConnect = true
     /// 用户在小火箭里自述的模式：config / proxy / direct / scene / unknown
     var declaredProxyMode = "unknown"
+    /// 系统使用私有/随机 MAC 时，认证报文改用登记的 MAC。
+    var useRegisteredMACForAuth = false
     /// 上次成功认证成功的时间；非空 = 这台机器上"记住且连过"。
     var lastSuccessfulLogin: String?
     var logLevel = "info"

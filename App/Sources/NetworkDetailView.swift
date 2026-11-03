@@ -165,6 +165,10 @@ struct NetworkDetailView: View {
                     }
                     Text("IPv4 \(row.ipv4 ?? "—") / \(row.mask ?? "—")　MAC \(row.mac ?? "—")")
                         .font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    if let hardware = row.hardwareMAC, hardware.lowercased() != (row.mac ?? "").lowercased() {
+                        Text("出厂 MAC \(hardware)　←　认证用的是这个（系统当前是私有/随机地址）")
+                            .font(.caption2.monospaced()).foregroundStyle(.orange)
+                    }
                     Text(explanationTitle(for: row)).font(.caption2).foregroundStyle(.secondary)
                     Text(explanationNote(for: row)).font(.caption2).foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)

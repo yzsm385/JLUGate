@@ -20,6 +20,8 @@ public struct NetworkSnapshot: Sendable, Equatable {
         public let isDefaultRoute: Bool
         public let carriesCampusRoute: Bool
         public let hardwareName: String?
+        /// 网卡出厂 MAC（可能与 `mac` 不同：系统可能套了私有/随机地址）
+        public let hardwareMAC: String?
     }
 
     public struct TunnelRow: Sendable, Equatable, Identifiable {
@@ -73,7 +75,8 @@ public struct NetworkInspector: Sendable {
                     isWireless: item.isWireless, isUSB: item.isUSB, isUp: item.isUp,
                     isDefaultRoute: defaultRoute?.interface == item.name,
                     carriesCampusRoute: campusRoute?.interface == item.name,
-                    hardwareName: item.hardwareName)
+                    hardwareName: item.hardwareName,
+                    hardwareMAC: item.hardwareMAC)
             }
             // 能用来认证、并且有地址的口排前面，方便用户一眼找到"该用哪个"
             .sorted { lhs, rhs in

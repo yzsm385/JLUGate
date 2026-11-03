@@ -256,6 +256,24 @@ portal window loaded: http://127.0.0.1:18080/portal   # 真实 WKWebView 分支
 
 实现：`PassiveMonitor`（Core，4 条单测）+ `AppModel.startPassiveWatch()`，每 30s 复查一次。
 
+### 6.4.1b 私有 MAC（系统把网卡换了地址）怎么处理
+
+macOS 可能给网卡套一层"私有/随机地址"：**第一位是 02/06/0a/0e/f2…** 就是这类（U/L 位=1）。
+学校登记、官方客户端认证用的都是**出厂 MAC**，所以本程序现在：
+
+- 通过 `SCNetworkInterfaceGetHardwareAddressString`（回退 `networksetup -getmacaddress`）读**出厂 MAC**；
+- 认卡与登录报文里的 MAC 都用出厂值（`0x14C` 处那 6 字节）；
+- 「网络详情」会把两者并排列出：「当前 MAC f2:…｜出厂 MAC bc:…」。
+
+如果仍然对不上：
+
+| 做法 | 说明 |
+|---|---|
+| 设置 → 网卡 → 选具体网卡 | 直接指定用哪块，程序不再猜 |
+| 按登记 MAC 自动选一次 | 把所有网卡的（出厂/当前）MAC 过一遍，命中就锁定 |
+| 设置里打开「用登记的 MAC 认证」 | 报文按登记值填，网卡本身不动（高级开关） |
+| 关闭系统的「私有地址」 | 系统设置 → 网络 → 该网卡 → 详细信息 → 硬件 |
+
 ### 6.4.2 真机结论：JLU 按 MAC 认设备，有线和 JLU.PC 不能跨机器混用（2026-11-03 实测）
 
 实测现象：

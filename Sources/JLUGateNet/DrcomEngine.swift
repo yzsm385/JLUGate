@@ -12,6 +12,9 @@ public struct EngineConfiguration: Sendable {
     public var hostname: String
     /// 用户手动锁定的接口名（可选）。
     public var interfaceLock: String?
+    /// 系统给网卡用了私有/随机 MAC 时，允许认证报文里填"登记的 MAC"。
+    /// 只影响报文内容，不改网卡本身（UDP 认证服务器只比对报文里的 MAC）。
+    public var useRegisteredMACForAuth: Bool = false
     /// 档案里登记的静态 IP / 掩码。与接口实际值不符时报"IP 已漂移"，
     /// 而不是发一串注定失败的认证包（PLAN §6.3）。
     public var expectedIP: IPv4Address?
@@ -28,6 +31,7 @@ public struct EngineConfiguration: Sendable {
     public init(account: String, password: String, hostname: String,
                 registeredMAC: MACAddress? = nil, interfaceLock: String? = nil,
                 expectedIP: IPv4Address? = nil, expectedMask: String? = nil,
+                useRegisteredMACForAuth: Bool = false,
                 server: IPv4Address = PacketLayout.defaultServer,
                 serverPort: UInt16 = PacketLayout.serverPort,
                 localPort: UInt16 = PacketLayout.localPort,
@@ -44,6 +48,7 @@ public struct EngineConfiguration: Sendable {
         self.interfaceLock = interfaceLock
         self.expectedIP = expectedIP
         self.expectedMask = expectedMask
+        self.useRegisteredMACForAuth = useRegisteredMACForAuth
         self.server = server
         self.serverPort = serverPort
         self.localPort = localPort
@@ -283,10 +288,20 @@ public actor DrcomEngine {
         let usable = candidates.filter(\.isUsableForAuthentication)
         let pool = usable.isEmpty ? candidates : usable
 
+        if configuration.useRegisteredMACForAuth {
+            // 系统换成了私有 MAC，但报文按登记 MAC 填：不在这里拦，直接挑最合适的口
+            return pool.sorted(by: scoreSort).first!
+        }
+
         if let registered = configuration.registeredMAC {
-            let matched = pool.filter { $0.macAddress?.matches(registered) == true }
+            // 与"出厂 MAC"比对：系统换成私有 MAC 时，学校登记的仍是出厂值
+            let matched = pool.filter { $0.macForAuthentication?.matches(registered) == true }
             guard !matched.isEmpty else {
                 let actual = candidates.first?.mac ?? "无"
+                if let actualMAC = MACAddress(actual), actualMAC.isLocallyAdministrated {
+                    emit(.log("当前网卡是私有/随机 MAC（\(actual)），学校登记的是 \(registered)；"
+                              + "可在设置里打开「用登记的 MAC 认证」或关闭系统的私有地址"))
+                }
                 throw DrcomError.macMismatch(expected: registered.description, actual: actual)
             }
             return matched.sorted(by: scoreSort).first!
@@ -347,7 +362,9 @@ public actor DrcomEngine {
             clientIP: context.localIP,
             linkLocalIP: context.interface.linkLocalIPv4.flatMap(IPv4Address.init),
             hostname: configuration.hostname,
-            mac: context.interface.macAddress ?? MACAddress(bytes: [0, 0, 0, 0, 0, 0])!)
+            mac: (configuration.useRegisteredMACForAuth ? configuration.registeredMAC : nil)
+                ?? context.interface.macForAuthentication
+                ?? MACAddress(bytes: [0, 0, 0, 0, 0, 0])!)
         let login = try codec.makeLogin(loginContext)
         let digest = DrcomCodec.digestA(password: configuration.password, salt: salt)
         emit(.log("发送登录包：\(login.count) 字节，摘要A=\(Hex.string(digest, limit: 8))…，"

@@ -237,6 +237,10 @@ struct MenuContent: View {
         case .macRejected:
             return JLUAccessPolicy.rejectedByMacHint
         case .macMismatch(let expected, let actual):
+            if let actualMAC = actual.flatMap(MACAddress.init), actualMAC.isLocallyAdministrated {
+                return JLUAccessPolicy.privateMACHint(current: actual ?? "-", hardware: nil,
+                                                      registered: expected)
+            }
             return JLUAccessPolicy.macMismatchHint(expected: expected, actual: actual)
         default:
             return nil

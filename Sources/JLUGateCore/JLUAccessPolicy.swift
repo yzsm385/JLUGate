@@ -23,6 +23,20 @@ public enum JLUAccessPolicy {
         """
     }
 
+    /// 当前用的 MAC 是"私有/随机地址"时的解释与处理建议。
+    public static func privateMACHint(current: String, hardware: String?, registered: String?) -> String {
+        let hardwareText = hardware ?? "（读不到硬件地址）"
+        let registeredText = registered ?? "（未登记）"
+        return """
+        系统现在给这块网卡用的是 **私有/随机 MAC**：\(current)（第二位是 2/6/a/e 就属于这类），
+        而网卡出厂地址是 \(hardwareText)，学校登记的是 \(registeredText)。
+        三种处理方式：
+        1. 到「系统设置 → 网络 → 该网卡 → 详细信息 → 硬件」里把「私有地址/随机 MAC」关掉，恢复硬件地址；
+        2. 或在 App 设置里打开「用登记的 MAC 认证」（认证报文按登记值填，网卡本身不变）；
+        3. 或去 ip.jlu.edu.cn 把登记 MAC 改成当前这个随机地址（不推荐，换网会被系统再换一次）。
+        """
+    }
+
     /// JLU.PC 的前置说明（向导里展示）。
     public static let jluPCHint = """
     JLU.PC 使用本机 **Wi-Fi 网卡** 的 MAC 认证。若你在学校登记的是 USB/有线网卡的 MAC，

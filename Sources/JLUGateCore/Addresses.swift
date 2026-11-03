@@ -58,6 +58,14 @@ public struct MACAddress: Sendable, Hashable, CustomStringConvertible {
         bytes.map { String(format: "%02x", $0) }.joined(separator: ":")
     }
 
+    /// 本地管理地址（第一个字节的 U/L 位 = 1）：
+    /// 这类 MAC 是**软件生成**的（macOS 的"私有地址"/随机 MAC、或手动改过 MAC），
+    /// 不是网卡出厂的那一个。`f2:..`、`02:..`、`6a:..` 都是这一类。
+    public var isLocallyAdministrated: Bool {
+        guard let first = bytes.first else { return false }
+        return (first & 0x02) != 0
+    }
+
     /// 忽略大小写与分隔符的比较。
     public func matches(_ other: MACAddress?) -> Bool {
         guard let other else { return false }

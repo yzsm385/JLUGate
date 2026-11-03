@@ -183,6 +183,23 @@ struct WizardView: View {
 
     private var networkStep: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // 先让用户/程序确定用哪块网卡，避免"明明登记了却被判不匹配"
+            VStack(alignment: .leading, spacing: 6) {
+                Text(model.interfaceMatchingSummary)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Picker("使用哪块网卡", selection: Binding(
+                    get: { model.config.interfaceLock ?? "" },
+                    set: { model.selectInterface($0.isEmpty ? nil : $0) })) {
+                    Text("自动（按 MAC 认）").tag("")
+                    ForEach(model.interfaceCandidates) { candidate in
+                        Text("\(candidate.name)  \(candidate.macForAuthentication ?? "—")").tag(candidate.name)
+                    }
+                }
+                .frame(maxWidth: 360)
+            }
+
             // 分隔符由界面画出来：IP 四格、MAC 六格，填满自动跳下一格
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 LabeledAddressField(title: "IP", kind: .ipv4, text: $ip)

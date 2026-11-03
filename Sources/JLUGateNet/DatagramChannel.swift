@@ -63,11 +63,14 @@ public struct InterfaceSnapshot: Sendable, Equatable {
     public let netmask: String?
     /// 系统给的硬件端口名（"Wi-Fi" / "USB 10/100/1000 LAN" / "Thunderbolt Bridge"）。
     public let hardwareName: String?
+    /// **网卡出厂 MAC**（`networksetup -getmacaddress`），与 `mac` 可能不同：
+    /// 系统可能给网卡套一层"私有/随机地址"，那是 `mac`；官方客户端认证用的是这个。
+    public let hardwareMAC: String?
 
     public init(name: String, index: UInt32, ipv4: String?, mac: String?,
                 isWireless: Bool, isUp: Bool, isUSB: Bool = false,
                 linkLocalIPv4: String? = nil, netmask: String? = nil,
-                hardwareName: String? = nil) {
+                hardwareName: String? = nil, hardwareMAC: String? = nil) {
         self.name = name
         self.index = index
         self.ipv4 = ipv4
@@ -78,6 +81,12 @@ public struct InterfaceSnapshot: Sendable, Equatable {
         self.linkLocalIPv4 = linkLocalIPv4
         self.netmask = netmask
         self.hardwareName = hardwareName
+        self.hardwareMAC = hardwareMAC
+    }
+
+    /// 认证应该用的 MAC：优先出厂 MAC（官方客户端就是这么做的），没有才用当前生效的。
+    public var macForAuthentication: MACAddress? {
+        hardwareMAC.flatMap(MACAddress.init) ?? macAddress
     }
 
     public var ipv4Address: IPv4Address? {

@@ -273,7 +273,9 @@ func runNetDetail(_ options: Options) -> Int32 {
         if row.isUSB { marks.append("USB") }
         if !row.isUp { marks.append("down") }
         let markText = marks.isEmpty ? "" : "  [\(marks.joined(separator: "、"))]"
-        print("\(row.name) ifindex=\(row.index)  ipv4=\(row.ipv4 ?? "-")/\(row.mask ?? "-")  mac=\(row.mac ?? "-")\(markText)")
+        let macText = row.mac ?? "-"
+        let hardwareText = row.hardwareMAC.map { "（出厂 \($0)）" } ?? ""
+        print("\(row.name) ifindex=\(row.index)  ipv4=\(row.ipv4 ?? "-")/\(row.mask ?? "-")  mac=\(macText)\(hardwareText)\(markText)")
         let info = InterfaceNarrator.explain(name: row.name, hardwareName: row.hardwareName,
                                              isWireless: row.isWireless, isUSB: row.isUSB,
                                              ipv4: row.ipv4)

@@ -28,6 +28,7 @@ struct SettingsView: View {
         var autoConnect = true
         var portalEntry = ""
         var helperAuthorized = false
+        var useRegisteredMACForAuth = false
     }
 
     var body: some View {
@@ -60,6 +61,9 @@ struct SettingsView: View {
                         set: { draft.dns = $0 }))
                     LabeledAddressField(title: "登记 MAC", kind: .mac, text: $draft.registeredMAC)
                 }
+                Toggle("系统用了私有/随机 MAC 时，用登记的 MAC 认证（高级）", isOn: $draft.useRegisteredMACForAuth)
+                Text("只影响认证报文里的 MAC 字段，不改网卡本身。优选方案仍是到系统设置里把「私有地址」关掉。")
+                    .font(.caption2).foregroundStyle(.secondary)
             } header: {
                 Text("静态网络参数")
             } footer: {
@@ -70,13 +74,35 @@ struct SettingsView: View {
 
             Section("系统当前值（仅供核对）") {
                 ForEach(model.interfaces, id: \.name) { item in
-                    Text("\(item.name)：\(item.ipv4 ?? "无 IPv4")  \(item.mac ?? "")")
+                    Text("\(item.name)：\(item.ipv4 ?? "无 IPv4")  当前 MAC \(item.mac ?? "—")  出厂 MAC \(item.hardwareMAC ?? "—")")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Text("路由：\(model.routeSummary)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("网卡") {
+                Text(model.interfaceMatchingSummary)
+                    .font(.caption2)
+                    .foregroundStyle(model.interfaceCandidates.contains(where: {
+                        $0.matches(model.config.currentProfile?.registeredMAC.flatMap(MACAddress.init))
+                    }) ? Color.secondary : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Picker("使用哪块网卡", selection: Binding(
+                    get: { model.config.interfaceLock ?? "" },
+                    set: { model.selectInterface($0.isEmpty ? nil : $0) })) {
+                    Text("自动（按 MAC 认）").tag("")
+                    ForEach(model.interfaceCandidates) { candidate in
+                        Text("\(candidate.name)  \(candidate.macForAuthentication ?? "—")")
+                            .tag(candidate.name)
+                    }
+                }
+
+                Button("按登记 MAC 自动选一次") { model.autoSelectInterface() }
+                    .buttonStyle(.glass)
             }
 
             Section("链路探测") {
@@ -196,6 +222,7 @@ struct SettingsView: View {
         draft.autoConnect = config.autoConnect
         draft.portalEntry = config.portal.entryURL ?? ""
         draft.helperAuthorized = config.routeGuard.helperAuthorized == true
+        draft.useRegisteredMACForAuth = config.useRegisteredMACForAuth
     }
 
     private var routeGuardText: String {
@@ -222,6 +249,7 @@ struct SettingsView: View {
         config.autoConnect = draft.autoConnect
         config.portal.entryURL = draft.portalEntry.isEmpty ? nil : draft.portalEntry
         config.routeGuard.helperAuthorized = draft.helperAuthorized
+        config.useRegisteredMACForAuth = draft.useRegisteredMACForAuth
 
         let profile = AppConfig.NetworkProfile(
             ip: draft.ip.isEmpty ? nil : draft.ip,

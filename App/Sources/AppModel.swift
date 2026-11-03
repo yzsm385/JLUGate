@@ -328,6 +328,7 @@ final class AppModel {
             interfaceLock: devServer != nil ? "lo0" : config.interfaceLock,
             expectedIP: devServer != nil ? nil : profile?.ip.flatMap(IPv4Address.init),
             expectedMask: devServer != nil ? nil : profile?.mask,
+            useRegisteredMACForAuth: config.useRegisteredMACForAuth,
             server: server,
             serverPort: serverPort,
             localPort: UInt16(config.localPort),
@@ -671,6 +672,46 @@ final class AppModel {
     func closeSettings() {
         settingsWindow?.orderOut(nil)
         settingsWindow = nil
+    }
+
+    // MARK: 选网卡（按 MAC 自动认，认不出就让用户选）
+
+    /// 所有可用于认证的网卡（含出厂 MAC）。
+    var interfaceCandidates: [InterfaceMACCandidate] {
+        interfaces
+            .filter(\.isUsableForAuthentication)
+            .map { item in
+                InterfaceMACCandidate(name: item.name, ipv4: item.ipv4,
+                                      currentMAC: item.mac, hardwareMAC: item.hardwareMAC)
+            }
+    }
+
+    var interfaceMatchingSummary: String {
+        InterfaceMatching.summary(registered: config.currentProfile?.registeredMAC.flatMap(MACAddress.init),
+                                  candidates: interfaceCandidates,
+                                  locked: config.interfaceLock)
+    }
+
+    /// 自动认卡：命中登记 MAC 就锁定这块，避免"明明登记了还被判不匹配"。
+    @discardableResult
+    func autoSelectInterface() -> String? {
+        let registered = config.currentProfile?.registeredMAC.flatMap(MACAddress.init)
+        guard let chosen = InterfaceMatching.autoSelected(registered: registered,
+                                                          candidates: interfaceCandidates) else {
+            recentLog.insert(interfaceMatchingSummary, at: 0)
+            return nil
+        }
+        config.interfaceLock = chosen
+        persist()
+        recentLog.insert("已按 MAC 自动选用网卡 \(chosen)", at: 0)
+        FileLogger.shared.log("自动选网卡：\(chosen)")
+        return chosen
+    }
+
+    func selectInterface(_ name: String?) {
+        config.interfaceLock = name
+        persist()
+        recentLog.insert(name.map { "已指定网卡 \($0)" } ?? "已改为自动选择网卡", at: 0)
     }
 
     // MARK: 自动填入静态参数（仅在系统是手动配置时可信）
