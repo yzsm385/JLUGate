@@ -66,7 +66,16 @@ struct WizardView: View {
         }
         .padding(22)
         .frame(width: 540, height: 480)
-        .onAppear(perform: load)
+        .onAppear {
+            load()
+            FileLogger.shared.log("wizard: 打开，step=\(step) link=\(link) account=\(account.isEmpty ? "-" : account)")
+        }
+        .onChange(of: step) { _, newValue in
+            FileLogger.shared.log("wizard: 进入步骤 \(newValue)")
+        }
+        .onChange(of: link) { _, newValue in
+            FileLogger.shared.log("wizard: 选择链路 \(newValue)（needsNetwork=\(needsNetworkStep)）")
+        }
     }
 
     // MARK: 头部

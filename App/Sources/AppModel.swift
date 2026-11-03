@@ -124,6 +124,12 @@ final class AppModel {
                 self.connect()
             }
         }
+        if DevOverrides.saveWiredOnLaunch {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(1200))
+                self.devSimulateWiredSave()
+            }
+        }
         if DevOverrides.openSettingsOnLaunch {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(700))
@@ -300,6 +306,28 @@ final class AppModel {
         watchTask?.cancel()
         watchTask = nil
         observingExistingSession = false
+    }
+
+    /// 自检用：完全走一遍"设置页保存"的写入路径（含落盘、凭据、登录项、刷新诊断）。
+    func devSimulateWiredSave() {
+        FileLogger.shared.log("dev: 模拟有线保存开始")
+        var draft = config
+        draft.link = "wired"
+        draft.account = config.account.isEmpty ? "20230001" : config.account
+        draft.currentProfile = AppConfig.NetworkProfile(
+            ip: "192.0.2.10", mask: "255.255.255.0", gateway: "192.0.2.1",
+            dns: ["10.10.10.10"], registeredMAC: "02:00:00:00:00:01",
+            interfaceHint: "en0", configuredAt: ISO8601DateFormatter().string(from: .now))
+        draft.accounts[draft.account] = draft.currentProfile
+        config = draft
+        persist()
+        FileLogger.shared.log("dev: 配置已落盘")
+        LoginItem.apply(enabled: config.launchAtLogin)
+        FileLogger.shared.log("dev: 登录项已应用")
+        refreshDiagnostics()
+        FileLogger.shared.log("dev: 诊断已刷新")
+        autoSelectInterface()
+        FileLogger.shared.log("dev: 网卡自动选择完成 -> \(config.interfaceLock ?? "nil")")
     }
 
     // MARK: 动作

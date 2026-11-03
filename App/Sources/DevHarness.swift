@@ -29,6 +29,8 @@ enum DevOverrides {
         /// 自检时自动打开「网络详情」窗口
         var openNetDetail: Bool?
         var openSettings: Bool?
+        /// 自检：启动后模拟"选有线 + 填完数据 + 保存"，复现闪退
+        var saveWired: Bool?
     }
 
     private static let fileConfig: FileConfig? = {
@@ -70,6 +72,12 @@ enum DevOverrides {
             return nil
         }
         return URL(string: raw)
+    }
+
+    /// 自检时模拟一次"有线 + 保存"的完整流程。
+    static var saveWiredOnLaunch: Bool {
+        guard isEnabled else { return false }
+        return fileConfig?.saveWired ?? false
     }
 
     /// 自检时自动打开设置窗口。

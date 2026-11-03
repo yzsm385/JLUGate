@@ -186,13 +186,20 @@ public struct SystemInterfaceProvider: InterfaceProvider {
     }
 
     /// 出厂 MAC 缓存：`networksetup` 是子进程，别每次枚举都起一次。
-    private static let hardwareMACCache = Mutex<[String: String]>([:])
+    private static let hardwareMACCache = Mutex<[String: (value: String, at: Date)]>([:])
+    /// 出厂 MAC 的缓存有效期：避免每次刷新都起子进程（启动/保存时会刷新多次）
+    private static let hardwareMACTTL: TimeInterval = 60
 
     /// 读网卡出厂 MAC（`networksetup -getmacaddress enX`）。
     /// 系统可能给网卡套"私有/随机地址"，但学校登记与官方客户端用的都是这个出厂值。
     public static func hardwareMAC(for name: String) -> String? {
+        // 虚拟口（utun/anpi/lo…）不查：它们没有出厂 MAC，逐一起子进程纯属浪费
+        if VirtualInterfaceNames.isVirtual(name) { return nil }
+
         var cache = hardwareMACCache.withLock { $0 }
-        if let cached = cache[name] { return cached.isEmpty ? nil : cached }
+        if let cached = cache[name], Date().timeIntervalSince(cached.at) < hardwareMACTTL {
+            return cached.value.isEmpty ? nil : cached.value
+        }
 
         let output = PortOccupancy.shell("/usr/sbin/networksetup", ["-getmacaddress", name])
         var value: String?
@@ -204,7 +211,7 @@ public struct SystemInterfaceProvider: InterfaceProvider {
                 .split(separator: " ").first.map(String.init) ?? ""
             if MACAddress(text) != nil { value = text.lowercased() }
         }
-        cache[name] = value ?? ""
+        cache[name] = (value ?? "", Date())
         hardwareMACCache.withLock { $0 = cache }
         return value
     }
