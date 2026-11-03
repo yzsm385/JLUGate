@@ -37,6 +37,8 @@ final class AppModel {
     var pingResults: [PingSummary] = []
     var speedResults: [SpeedResult] = []
     var diagnosticsBusy = false
+    /// 上次启动闪退后进入的安全模式（不自动连、不读密码）
+    var isSafeMode = false
     /// 最近一次进入在线的时间（判断"重复登录被拒"用）
     var lastOnlineAt: Date?
     var proxyAnalysis: ProxyModeAnalysis?
@@ -73,9 +75,15 @@ final class AppModel {
     init() {
         let loaded = ConfigStore.load()
         config = loaded
+        // 上一次启动闪退过：进安全模式，不自动连、不读密码，先让用户能把配置改回来
+        let safeMode = LaunchGuard.beginLaunch()
+        isSafeMode = safeMode
+        if safeMode {
+            FileLogger.shared.log("安全模式：跳过自动连接与密码恢复")
+        }
         // dev 自检不碰钥匙串：ad-hoc 每次签名都不同，读旧条目会弹"允许访问钥匙串"
-        password = DevOverrides.isEnabled
-            ? "test-pass-2024"
+        password = (DevOverrides.isEnabled || safeMode)
+            ? (DevOverrides.isEnabled ? "test-pass-2024" : "")
             : (CredentialStore.password(for: loaded.account) ?? "")
 
         let profile = loaded.currentProfile
@@ -96,7 +104,7 @@ final class AppModel {
             showWizard = false
             startPassiveWatch()
         }
-        shouldAutoConnectOnLaunch = !DevOverrides.autostart && LaunchPolicy.shouldAutoConnect(
+        shouldAutoConnectOnLaunch = !safeMode && !DevOverrides.autostart && LaunchPolicy.shouldAutoConnect(
             hasAccount: hasAccount, hasPassword: hasPassword,
             linkRequiresStaticAddresses: needsStatic, profileIsComplete: profileComplete,
             everConnected: loaded.lastSuccessfulLogin != nil,
@@ -134,7 +142,15 @@ final class AppModel {
                 self.connect()
             }
         }
+        if safeMode {
+            recentLog.insert("上次启动异常退出，已进入安全模式：不自动连接、不读取已保存的密码。请检查设置或重置本机配置。", at: 0)
+        }
         Notifier.requestAuthorizationIfNeeded()
+        // 初始化走完 3 秒还没崩，说明这一版能正常启动
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(3))
+            LaunchGuard.markLaunchSucceeded()
+        }
 
         FileLogger.shared.log("启动 JLU Gate \(BuildInfo.display)")
         FileLogger.shared.log("credential backend=\(CredentialStore.backend.rawValue)")
