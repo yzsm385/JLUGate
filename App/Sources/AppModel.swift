@@ -708,6 +708,23 @@ final class AppModel {
         return chosen
     }
 
+    /// 用"当前选中网卡的出厂 MAC"覆盖档案里的登记值（一键纠正填错的情况）。
+    @discardableResult
+    func adoptDetectedMAC() -> String? {
+        let chosen = config.interfaceLock.flatMap { name in interfaceCandidates.first { $0.name == name } }
+            ?? interfaceCandidates.first(where: { $0.ipv4 != nil })
+            ?? interfaceCandidates.first
+        guard let mac = chosen?.macForAuthentication else { return nil }
+        var profile = config.currentProfile ?? AppConfig.NetworkProfile()
+        profile.registeredMAC = mac
+        config.currentProfile = profile
+        if config.interfaceLock == nil { config.interfaceLock = chosen?.name }
+        persist()
+        recentLog.insert("已把登记 MAC 改为检测到的出厂 MAC：\(mac)", at: 0)
+        FileLogger.shared.log("登记 MAC 改为 \(mac)（网卡 \(chosen?.name ?? "?")）")
+        return mac
+    }
+
     func selectInterface(_ name: String?) {
         config.interfaceLock = name
         persist()

@@ -93,7 +93,7 @@ public struct SystemInterfaceProvider: InterfaceProvider {
 
     // MARK: getifaddrs
 
-    static func allInterfaces() -> [InterfaceSnapshot] {
+    public static func allInterfaces() -> [InterfaceSnapshot] {
         var head: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&head) == 0, let first = head else { return [] }
         defer { freeifaddrs(head) }
@@ -190,7 +190,7 @@ public struct SystemInterfaceProvider: InterfaceProvider {
 
     /// 读网卡出厂 MAC（`networksetup -getmacaddress enX`）。
     /// 系统可能给网卡套"私有/随机地址"，但学校登记与官方客户端用的都是这个出厂值。
-    static func hardwareMAC(for name: String) -> String? {
+    public static func hardwareMAC(for name: String) -> String? {
         var cache = hardwareMACCache.withLock { $0 }
         if let cached = cache[name] { return cached.isEmpty ? nil : cached }
 

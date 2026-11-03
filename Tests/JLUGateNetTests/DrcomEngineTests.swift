@@ -220,9 +220,36 @@ struct DrcomEngineTests {
         await engine.stop()
     }
 
-    @Test("MAC 不匹配：不发任何报文")
-    func macMismatch() async throws {
+    /// 默认（非严格）：MAC 对不上也照样发，报文里用登记 MAC —— 由服务器裁定。
+    @Test("MAC 对不上时仍然发认证（报文用登记 MAC），不把用户挡在门外")
+    func macMismatchStillAuthenticates() async throws {
         let configuration = makeConfiguration()
+        let (engine, channel, _, _) = makeEngine(
+            configuration: configuration,
+            provider: FakeInterfaceProvider(
+                interfaces: [InterfaceSnapshot(name: "en7", index: 12, ipv4: "192.0.2.10",
+                                               mac: "aa:bb:cc:dd:ee:ff", isWireless: false,
+                                               isUp: true)],
+                route: RouteInfo(destination: "10.100.61.3", gateway: "192.0.2.1", interface: "en7"),
+                configMethod: "Manual", gateway: "192.0.2.1"),
+            responder: { datagram in
+                datagram.count == 20 ? [RecordedGateway.challengeReply()]
+                    : (datagram.count == 342 ? [RecordedGateway.loginSuccess()] : [])
+            })
+        await engine.start()
+        try await expectEventually("发出登录包", timeout: .seconds(3)) {
+            channel.sentFrames.contains { $0.count == 342 }
+        }
+        let login = try #require(channel.sentFrames.first { $0.count == 342 })
+        // 登记 MAC 是 02:00:00:00:00:01，即使网卡是 aa:bb:...，报文也用登记值
+        #expect([UInt8](login[0x14C..<0x152]) == [0x02, 0x00, 0x00, 0x00, 0x00, 0x01])
+        await engine.stop()
+    }
+
+    @Test("严格模式（strictMACCheck）：MAC 不匹配就不发任何报文")
+    func macMismatchStrict() async throws {
+        var configuration = makeConfiguration()
+        configuration.strictMACCheck = true
         let (engine, channel, factory, _) = makeEngine(
             configuration: configuration,
             provider: FakeInterfaceProvider(
@@ -239,7 +266,7 @@ struct DrcomEngineTests {
         }
         guard case .failed(let error) = await engine.currentState() else { return }
         #expect(error == .macMismatch(expected: "02:00:00:00:00:01", actual: "aa:bb:cc:dd:ee:ff"))
-        #expect(factory.madeCount == 0, "先证伪环境：MAC 不对时连通道都不该建")
+        #expect(factory.madeCount == 0, "严格模式下连通道都不该建")
         #expect(channel.sentFrames.isEmpty)
         await engine.stop()
     }

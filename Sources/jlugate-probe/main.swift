@@ -23,6 +23,10 @@ struct Options {
     var keepAliveExplicit = false
     var seconds = 8.0
     var salt = "49cb720f"
+    /// `--frame <path>`：用来解析一个已抓到的登录帧
+    var framePath: String?
+    /// `--ip`：dump-login 时用的客户端 IP
+    var ip = "192.0.2.10"
     var gatewayPort = 61441
     var gatewayPath = "Tools/mock-gateway/mock_gateway.py"
     var portalPort = 18080
@@ -57,6 +61,8 @@ func parseOptions(_ arguments: [String]) -> Options {
             options.keepAliveExplicit = true
         case "--seconds": options.seconds = Double(value()) ?? options.seconds
         case "--salt": options.salt = value()
+        case "--frame": options.framePath = value()
+        case "--ip": options.ip = value()
         case "--gateway-port": options.gatewayPort = Int(value()) ?? options.gatewayPort
         case "--portal-port": options.portalPort = Int(value()) ?? options.portalPort
         case "--dns": options.dnsServers = value().split(separator: ",").map(String.init)
@@ -107,6 +113,8 @@ func printHelp() {
       jlugate-probe --ping                                      # TCP 握手延迟（网关/认证服务器/公网）
       jlugate-probe --speed                                     # 下载测速：网口直连 vs 当前出口（含 VPN）
       jlugate-probe --auth-ping                                 # 认证通道往返延迟：直连 vs 经代理
+      jlugate-probe --mac-check                                 # 三处 MAC 对照（排查"匹配不上"）
+      jlugate-probe --frame <hex文件>                            # 解析一个登录帧（和 --dump-login 对照）
       jlugate-probe --dump-login --account X --password Y       # 离线打印 342 字节登录包
       jlugate-probe --login --account X --password Y [--mac ..] # 真机认证（只能在环境 B 执行）
 
@@ -167,7 +175,7 @@ func runDumpLogin(_ options: Options) {
         print("需要 --account 与 --password")
         return
     }
-    guard let ip = IPv4Address("192.0.2.10"), let mac = MACAddress(options.mac ?? "02:00:00:00:00:01") else {
+    guard let ip = IPv4Address(options.ip), let mac = MACAddress(options.mac ?? "02:00:00:00:00:01") else {
         print("IP/MAC 参数不合法")
         return
     }
@@ -187,6 +195,7 @@ func runDumpLogin(_ options: Options) {
             let ascii = String(decoding: chunk.map { (32...126).contains($0) ? $0 : 0x2E }, as: UTF8.self)
             print(String(format: "%04x  %-47@ %@", offset, hexString(chunk) as NSString, ascii as NSString))
         }
+        print("HEX:" + frame.map { String(format: "%02x", $0) }.joined())
         let digest = DrcomCodec.digestA(password: options.password, salt: hexBytes(options.salt))
         print("摘要 A: \(hexString(digest))")
     } catch {
@@ -869,10 +878,80 @@ case "speed":
     exit(runSpeedCheck(options))
 case "auth-ping":
     exit(runAuthPing(options))
+case "mac-check":
+    exit(runMACCheck())
+case "frame":
+    exit(runFrameDump(options))
 case "dump-login":
     runDumpLogin(options)
 case "login":
     exit(runLogin(options))
 default:
     printHelp()
+}
+
+/// 解析一个 342 字节登录帧，按我们的布局把关键字段打出来。
+/// 用途：把官方客户端抓到的登录帧喂进来，和我们的 `--dump-login` 对照，看差在哪个字段。
+func runFrameDump(_ options: Options) -> Int32 {
+    guard let path = options.framePath,
+          let text = try? String(contentsOfFile: path, encoding: .utf8) else {
+        print("用法：--frame <十六进制文本文件>（一行，342 字节）")
+        return 2
+    }
+    let hex = text.filter(\.isHexDigit)
+    var bytes: [UInt8] = []
+    var index = hex.startIndex
+    while index < hex.endIndex {
+        let next = hex.index(index, offsetBy: 2, limitedBy: hex.endIndex) ?? hex.endIndex
+        if let byte = UInt8(hex[index..<next], radix: 16) { bytes.append(byte) }
+        index = next
+    }
+    guard bytes.count >= 60 else {
+        print("字节数太少：\(bytes.count)")
+        return 2
+    }
+    print("帧长：\(bytes.count) 字节（登录帧应为 342）")
+    print("类型：\(Hex.string(bytes, limit: 2))  版本：\(Hex.string(Array(bytes[2..<4])))")
+    print("0x00..0x10：\(Hex.string(bytes, limit: 16))")
+    let mac = Array(bytes.count >= 0x152 ? bytes[0x14C..<0x152] : [])
+    print("0x14C MAC：\(MACAddress(bytes: mac)?.description ?? Hex.string(mac))")
+    if bytes.count >= 0x1E5 {
+        let ip = Array(bytes[0x1E1..<0x1E5])
+        print("0x1E1 IP：\(ip.map(String.init).joined(separator: "."))")
+    }
+    // 主机名：从 0x270 起按   截断
+    if bytes.count > 0x270 {
+        var name: [UInt8] = []
+        for byte in bytes[0x270...] where byte != 0 { name.append(byte) }
+        print("0x270 主机名：\(String(decoding: name, as: UTF8.self))")
+    }
+    if bytes.count >= 0x294 {
+        print("0x294 归属字段：\(Hex.string(Array(bytes[0x290..<0x29C])))")
+    }
+    print("00 0c 标记（0x143/0x144）：\(Hex.string(Array(bytes[0x142..<0x146])))")
+    print("末尾 8 字节：\(Hex.string(Array(bytes[(bytes.count - 8)...])))")
+    return 0
+}
+
+/// 把"三处 MAC"一次打全，用于排查"为什么匹配不上"：
+/// 每块网卡的 当前 MAC（getifaddrs）、出厂 MAC（SystemConfiguration）、出厂 MAC（networksetup）。
+func runMACCheck() -> Int32 {
+    let provider = SystemInterfaceProvider()
+    print("== 登记值（配置里的 registeredMAC）==")
+    print("  见 App 设置；命令行下从参数卡或设置里查看")
+    print("")
+    print("== 所有网卡 ==")
+    print("name   ipv4            当前MAC(getifaddrs)     出厂MAC(SC)           出厂MAC(networksetup)")
+    for item in SystemInterfaceProvider.allInterfaces() {
+        let sc = item.hardwareMAC ?? "—"
+        let ns = SystemInterfaceProvider.hardwareMAC(for: item.name) ?? "—"
+        let ip = (item.ipv4 ?? "—").padding(toLength: 16, withPad: " ", startingAt: 0)
+        print(String(format: "%-5@  %@  %-22@  %-20@  %@",
+                     item.name as NSString, ip as NSString,
+                     (item.mac ?? "—") as NSString, sc as NSString, ns as NSString))
+    }
+    print("")
+    print("提示：第一位是 02/06/0a/0e/f2 等（U/L 位=1）就是系统套的私有 MAC；")
+    print("      学校登记/官方客户端用的是「出厂」那一列。")
+    return 0
 }

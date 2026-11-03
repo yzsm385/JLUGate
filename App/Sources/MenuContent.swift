@@ -149,8 +149,8 @@ struct MenuContent: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if case .macRejected = error { openSelfServiceButton }
-                if case .macMismatch = error { openSelfServiceButton }
+                if case .macRejected = error { macFixButtons }
+                if case .macMismatch = error { macFixButtons }
             }
 
             if case .manual(let command, _) = model.routeGuarantee, !model.state.isOnline {
@@ -214,6 +214,25 @@ struct MenuContent: View {
                 }
                 .buttonStyle(.glass)
             }
+        }
+    }
+
+    /// MAC 类错误的两个动作：改用检测到的出厂 MAC / 去自助平台改登记
+    private var macFixButtons: some View {
+        HStack(spacing: 10) {
+            if let detected = model.interfaceCandidates.first(where: { $0.name == model.config.interfaceLock })?
+                .macForAuthentication
+                ?? model.interfaceCandidates.first(where: { $0.ipv4 != nil })?.macForAuthentication {
+                Button {
+                    model.adoptDetectedMAC()
+                    model.retry()
+                } label: {
+                    Label("改用出厂 MAC \(detected)", systemImage: "wand.and.stars")
+                        .font(.caption2)
+                }
+                .buttonStyle(.link)
+            }
+            openSelfServiceButton
         }
     }
 

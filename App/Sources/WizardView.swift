@@ -298,7 +298,12 @@ struct WizardView: View {
         mask = suggestion.mask ?? ""
         gateway = suggestion.gateway ?? ""
         dns = suggestion.dns.joined(separator: ", ")
-        mac = suggestion.mac ?? ""
+        // 登记 MAC 用**出厂 MAC**（系统可能套了私有地址，直接抄当前值会认证失败）
+        mac = model.config.interfaceLock
+            .flatMap { name in model.interfaceCandidates.first { $0.name == name } }?
+            .macForAuthentication
+            ?? model.interfaceCandidates.first(where: { $0.ipv4 != nil })?.macForAuthentication
+            ?? suggestion.mac ?? ""
     }
 
     private func clearFields() {
