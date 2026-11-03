@@ -50,6 +50,13 @@ enum DiagnosticsReport {
             lines.append("登记 MAC：\(profile.registeredMAC ?? "-")")
         }
         lines.append("")
+        let logTail = FileLogger.shared.tail(120)
+        if !logTail.isEmpty {
+            lines.append("")
+            lines.append("== 最近日志 ==")
+            lines.append(logTail)
+        }
+
         lines.append("== 端口占用 ==")
         switch BSDChannel.diagnosePort(PacketLayout.localPort) {
         case .officialClient(let process, let pid):

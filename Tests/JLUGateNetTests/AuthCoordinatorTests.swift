@@ -5,9 +5,10 @@ import JLUGateCore
 
 // MARK: - 假 provider
 
-final class FakeAuthProvider: AuthProvider, @unchecked Sendable {
+final class FakeAuthProvider: AuthProvider, SessionTelemetryProviding, @unchecked Sendable {
     let link: AccessLink
     private let hub = AuthStateHub()
+    private let telemetryHub = AuthTelemetryHub()
     private let box = Atomic<[String]>([])
 
     init(link: AccessLink) {
@@ -29,6 +30,12 @@ final class FakeAuthProvider: AuthProvider, @unchecked Sendable {
 
     func emit(_ state: AuthState) {
         hub.publish(state)
+    }
+
+    var telemetry: AsyncStream<AuthTelemetry> { telemetryHub.makeStream() }
+
+    func emitTelemetry(_ event: AuthTelemetry) {
+        telemetryHub.publish(event)
     }
 }
 
@@ -246,6 +253,32 @@ struct AuthCoordinatorTests {
         await coordinator.start()
         #expect(spy.count == 2)
         #expect(await coordinator.currentLink() == .wired)
+        await coordinator.stop()
+    }
+
+    @Test("保活遥测（流量/会话）会经协调器转给 UI")
+    func forwardsTelemetry() async throws {
+        let spy = ProviderSpy()
+        let coordinator = makeCoordinator(detector: FakeLinkDetector(drcomReachable: true), spy: spy)
+        let stream = await coordinator.events()
+        let received = Atomic<[AuthCoordinator.Event]>([])
+        let collector = Task {
+            for await event in stream {
+                if case .telemetry = event { received.withLock { $0.append(event) } }
+            }
+        }
+        await coordinator.start()
+        let provider = try #require(spy.last)
+        provider.emitTelemetry(.traffic(secondsOnline: 42, stats: [732, 42, 0, 0, 1, 2]))
+        provider.emitTelemetry(.session(account: "20230001", clientIP: "192.0.2.10", session: 0x631D))
+
+        try await expectEventually("收到两条遥测", timeout: .seconds(2)) {
+            received.withLock { $0.count } >= 2
+        }
+        collector.cancel()
+        let events = received.withLock { $0 }
+        #expect(events.contains(.telemetry(.traffic(secondsOnline: 42, stats: [732, 42, 0, 0, 1, 2]))))
+        #expect(events.contains(.telemetry(.session(account: "20230001", clientIP: "192.0.2.10", session: 0x631D))))
         await coordinator.stop()
     }
 

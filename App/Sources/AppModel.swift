@@ -244,6 +244,29 @@ final class AppModel {
         ConfigStore.save(config)
     }
 
+    /// 网络参数卡片：文本进剪贴板，二维码另存为 PNG。
+    func exportConfigCard() {
+        guard let profile = config.currentProfile else {
+            recentLog.insert("还没有网络参数可导出：先完成向导", at: 0)
+            return
+        }
+        let text = ConfigCard.text(config: config, profile: profile)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+
+        if let image = ConfigCard.qrImage(for: text),
+           let tiff = image.tiffRepresentation,
+           let bitmap = NSBitmapImageRep(data: tiff),
+           let png = bitmap.representation(using: .png, properties: [:]) {
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("JLU-Gate-网络参数卡.png")
+            try? png.write(to: url)
+            NSWorkspace.shared.activateFileViewerSelecting([url])
+        }
+        recentLog.insert("已导出网络参数卡（文本在剪贴板，二维码已保存）", at: 0)
+        FileLogger.shared.log("导出网络参数卡：账号 \(config.account)")
+    }
+
     func finishWizard() {
         showWizard = false
         refreshDiagnostics()
@@ -307,6 +330,7 @@ final class AppModel {
     // MARK: 事件
 
     private func handle(_ event: AuthCoordinator.Event) async {
+        FileLogger.shared.log("event \(event)")
         switch event {
         case .state(let next):
             state = next

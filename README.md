@@ -13,7 +13,7 @@ macOS 26 的校园网认证客户端（Dr.Com UDP + 菜单栏常驻 + Liquid Gla
 ## 快速开始
 
 ```bash
-make test        # 100 条单元测试（编码器黄金向量 + 状态机 + 通道 + 探针/选路/网页认证/路由守卫）
+make test        # 105 条单元测试（编码器黄金向量 + 状态机 + 通道 + 探针/选路/网页认证/路由守卫）
 make self-test        # 对 127.0.0.1 的模拟网关跑 challenge→login→保活 全流程
 make portal-self-test # 对 127.0.0.1 的模拟门户跑 302→登录页→POST→204
 make ci               # 上面三件 + 隐私扫描（与 GitHub Actions 一致）

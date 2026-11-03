@@ -14,7 +14,7 @@
 |---|---|
 | 342 字节登录包能否复现抓包 | ✅ 逐字节相同（含摘要 A） |
 | 保活 A / B 能否复现抓包 | ✅ 逐字节相同（A 的 16 字节 = 登录摘要 A，已解） |
-| 单元测试 | ✅ `swift test` 100 条全绿（Core 45 + Net 55） |
+| 单元测试 | ✅ `swift test` 105 条全绿（Core 49 + Net 56） |
 | 离线全流程（模拟网关） | ✅ `swift run jlugate-probe --self-test` 通过 |
 | 真实认证 | ⛔ **未执行**，必须拿到环境 B 上跑（见 §6） |
 | UI | ✅ 源码完成并通过编译校验；`.app` 需在装了 XcodeGen 的机器上生成（见 §5） |
@@ -71,7 +71,7 @@ swift run jlugate-probe --self-test
 
 # 3) 全量
 swift test
-#    → 100 tests passed
+#    → 105 tests passed
 ```
 
 > **本机注意**：这个工作区跑在受限沙箱里，SwiftPM 需要把缓存与临时目录指到工作区内、
@@ -166,6 +166,16 @@ c2s  38 ff<digest>000000Drco…
 
 helper 进程本身（`SMAppService.daemon` + 签名）仍属 M2.5：**没有开发者账号签不出来**，
 但最容易出事的那部分（参数白名单、argv 拼装、拒绝非法入参）已经离线测完了。
+
+### 4.8 App 收尾（也都是离线能做完的）
+
+| 项 | 实现 |
+|---|---|
+| 单实例 | `NSRunningApplication` 查重 → 激活已有实例并退出自己（避免两个进程抢 61440） |
+| 文件日志 | `~/Library/Logs/JLUGate/agent.log`，2 MB 滚动一份，诊断包带最近 120 行 |
+| 诊断导出 | 菜单"导出" → 临时目录 .txt + 访达定位；内容含接口/路由/ConfigMethod/端口占用/日志尾 |
+| 网络参数卡 | 文本进剪贴板 + `CIFilter.qrCodeGenerator` 生成二维码 PNG（**不含密码**） |
+| 鲁棒性 | 3000 个随机载荷的 fuzz：`classify` 不崩、解析器只抛错、DNS 解析不越界 |
 
 ---
 

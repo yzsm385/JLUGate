@@ -194,6 +194,13 @@ struct MenuContent: View {
             }
             .buttonStyle(.plain)
 
+            Button {
+                model.exportConfigCard()
+            } label: {
+                Label("参数卡", systemImage: "qrcode")
+            }
+            .buttonStyle(.plain)
+
             Spacer()
 
             Button("退出") {

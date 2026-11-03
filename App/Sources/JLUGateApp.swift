@@ -8,6 +8,8 @@ struct JLUGateApp: App {
 
     init() {
         NSApplication.shared.setActivationPolicy(.accessory)
+        // 单实例：已经有实例在跑就激活它并退出自己（端口 61440 不能有两个主人）
+        _ = SingleInstance.claim { NSApp.terminate(nil) }
     }
 
     var body: some Scene {
