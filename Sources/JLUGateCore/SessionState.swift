@@ -53,13 +53,24 @@ public enum AuthState: Sendable, Equatable {
         case (.discovering, .challenging),
              (.discovering, .reconnecting):
             return true
+        // Portal 链路没有 challenge 阶段：detect 完直接进"等用户登录"。
+        case (.discovering, .authenticating):
+            return true
+        // Portal 的在线判定就是探针本身：detect 完发现 204 通过，直接 online。
+        case (.discovering, .online):
+            return true
         case (.challenging, .authenticating),
              (.challenging, .reconnecting):
             return true
         case (.authenticating, .online),
              (.authenticating, .reconnecting):
             return true
-        case (.online, .reconnecting):
+        case (.online, .reconnecting),
+             (.online, .authenticating):
+            return true
+        // Portal 掉线后回到"重新探测"，不经过 Dr.Com 的 reconnecting 语义。
+        case (.online, .discovering),
+             (.authenticating, .discovering):
             return true
         case (.reconnecting, .discovering),
              (.reconnecting, .challenging),

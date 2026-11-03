@@ -1,4 +1,4 @@
-.PHONY: test core-test self-test build release probe release-probe dump-login app clean
+.PHONY: test core-test self-test portal-self-test build release release-probe dump-login app ci clean
 
 # 本工作区跑在受限沙箱里，需要把 SwiftPM 缓存/临时目录指到仓库内。
 # 在普通 Mac 上这些变量是可选的（不会造成副作用）。
@@ -14,6 +14,10 @@ core-test:
 # 施工机唯一能做的"联网"动作：对 127.0.0.1 的模拟网关跑完整流程
 self-test:
 	$(SANDBOX_ENV) swift run $(SWIFT_FLAGS) jlugate-probe --self-test --seconds 8 --keepalive 1
+
+# 网页认证链路：对 127.0.0.1 的模拟门户跑 302 → 登录页 → POST → 204
+portal-self-test:
+	$(SANDBOX_ENV) swift run $(SWIFT_FLAGS) jlugate-probe --portal-self-test --seconds 6
 
 build:
 	$(SANDBOX_ENV) swift build $(SWIFT_FLAGS)
@@ -32,6 +36,10 @@ dump-login:
 # App 工程由 XcodeGen 生成（需要 brew install xcodegen）
 app:
 	cd App && xcodegen generate && open JLUGate.xcodeproj
+
+# 本地跑一遍 CI 里的三件事
+ci: test self-test portal-self-test
+	./scripts/privacy-scan.sh
 
 clean:
 	rm -rf .build

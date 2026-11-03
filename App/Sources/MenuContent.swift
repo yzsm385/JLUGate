@@ -58,7 +58,7 @@ struct MenuContent: View {
         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
             GridRow {
                 Text("链路").font(.caption).foregroundStyle(.secondary)
-                Text(linkTitle).font(.caption)
+                Text(model.linkTitle).font(.caption)
             }
             if let ip = model.clientIP {
                 GridRow {
@@ -76,15 +76,6 @@ struct MenuContent: View {
                 Text("接口").font(.caption).foregroundStyle(.secondary)
                 Text(model.routeSummary).font(.caption2).foregroundStyle(.secondary)
             }
-        }
-    }
-
-    private var linkTitle: String {
-        switch model.config.link {
-        case "wired": "有线"
-        case "jluPC": "JLU.PC"
-        case "jluWiFi": "JLU.WIFI"
-        default: "自动"
         }
     }
 
@@ -134,6 +125,49 @@ struct MenuContent: View {
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            if case .manual(let command, _) = model.routeGuarantee, !model.state.isOnline {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("代理接管了校园网段，需要先加一条直连路由：")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                    Text(command)
+                        .font(.system(.caption2, design: .monospaced))
+                        .textSelection(.enabled)
+                        .lineLimit(3)
+                    HStack {
+                        Button("复制命令") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(command, forType: .string)
+                        }
+                        Button("我已执行，重新检测") { model.refreshDiagnostics() }
+                    }
+                    .buttonStyle(.link)
+                    .font(.caption2)
+                }
+                .padding(8)
+                .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
+            }
+
+            if model.canOpenPortalLogin {
+                Button {
+                    model.openPortalLogin()
+                } label: {
+                    Label("打开网页登录页", systemImage: "safari")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+            }
+
+            if !model.isConfigured {
+                Button {
+                    model.presentWizard()
+                } label: {
+                    Label("重新填写网络参数", systemImage: "wand.and.stars")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+            }
         }
     }
 
@@ -150,6 +184,13 @@ struct MenuContent: View {
                 model.copyDiagnostics()
             } label: {
                 Label("复制诊断", systemImage: "doc.on.clipboard")
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                model.exportDiagnostics()
+            } label: {
+                Label("导出", systemImage: "square.and.arrow.up")
             }
             .buttonStyle(.plain)
 

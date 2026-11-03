@@ -78,8 +78,11 @@ struct SessionStateTests {
         #expect(AuthState.idle.canTransition(to: .online) == true)
         #expect(AuthState.challenging.canTransition(to: .authenticating))
         #expect(AuthState.challenging.canTransition(to: .online) == false)
-        #expect(AuthState.online.canTransition(to: .authenticating) == false)
-        #expect(AuthState.authenticating.canTransition(to: .discovering) == false)
+        // `online → authenticating` 与 `authenticating → discovering` 是 Portal 链路要用的：
+        // 204 探针失败后需要重新登录 / 重新探测（PLAN §7.1 的状态子集）。
+        #expect(AuthState.online.canTransition(to: .authenticating) == true)
+        #expect(AuthState.authenticating.canTransition(to: .discovering) == true)
+        #expect(AuthState.discovering.canTransition(to: .idle) == true)
     }
 
     @Test("failed 之后可以重新开始（用户改完凭据/网卡）")

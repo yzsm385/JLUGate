@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    # macOS 26 才有 Liquid Glass / SwiftUI 新 API；旧 runner 会因为 deployment target 26.0 直接编译失败。
+    runs-on: macos-26
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 工具链
+        run: |
+          swift --version
+          xcodebuild -version
+          python3 --version
+
+      - name: 单元测试（编码器黄金向量 + 通道 + 状态机 + 探针 + 选路）
+        run: swift test
+
+      - name: 离线自测 · Dr.Com（模拟网关）
+        run: swift run jlugate-probe --self-test --seconds 6
+
+      - name: 离线自测 · 网页认证（模拟门户）
+        run: swift run jlugate-probe --portal-self-test --seconds 6
+
+      - name: 隐私自检（不许有真实抓包/MAC/学号）
+        run: ./scripts/privacy-scan.sh

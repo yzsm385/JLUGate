@@ -13,8 +13,10 @@ macOS 26 的校园网认证客户端（Dr.Com UDP + 菜单栏常驻 + Liquid Gla
 ## 快速开始
 
 ```bash
-make test        # 74 条单元测试（编码器黄金向量 + 状态机 + 通道 + 探针/选路）
-make self-test   # 对 127.0.0.1 的模拟网关跑 challenge→login→保活 全流程
+make test        # 100 条单元测试（编码器黄金向量 + 状态机 + 通道 + 探针/选路/网页认证/路由守卫）
+make self-test        # 对 127.0.0.1 的模拟网关跑 challenge→login→保活 全流程
+make portal-self-test # 对 127.0.0.1 的模拟门户跑 302→登录页→POST→204
+make ci               # 上面三件 + 隐私扫描（与 GitHub Actions 一致）
 make dump-login  # 离线打印 342 字节登录包，人工核对偏移
 ```
 
@@ -45,8 +47,9 @@ make release-probe        # universal 二进制
 | `Sources/jlugate-probe` | 诊断 + 离线自测 CLI |
 | `App/` | SwiftUI 菜单栏应用（XcodeGen 工程描述在 `App/project.yml`） |
 | `Tools/mock-gateway` | 按帧表应答的 Dr.Com 模拟网关（支持丢包/延迟/拒绝） |
+| `Tools/mock-portal` | 模拟校园网页认证（302 → 登录页 → POST → 204） |
 | `Fixtures/` | 抓包样本（含凭据摘要，**不要公开**） |
-| `docs/` | CHECKLIST / PLAN / protocol-findings / progress |
+| `docs/` | CHECKLIST / PLAN / protocol-findings / progress / runbook |
 
 ## 生成 App
 

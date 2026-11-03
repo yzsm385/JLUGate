@@ -25,6 +25,8 @@ struct Options {
     var salt = "49cb720f"
     var gatewayPort = 61441
     var gatewayPath = "Tools/mock-gateway/mock_gateway.py"
+    var portalPort = 18080
+    var portalPath = "Tools/mock-portal/portal_server.py"
 }
 
 func parseOptions(_ arguments: [String]) -> Options {
@@ -55,6 +57,7 @@ func parseOptions(_ arguments: [String]) -> Options {
         case "--seconds": options.seconds = Double(value()) ?? options.seconds
         case "--salt": options.salt = value()
         case "--gateway-port": options.gatewayPort = Int(value()) ?? options.gatewayPort
+        case "--portal-port": options.portalPort = Int(value()) ?? options.portalPort
         default:
             if key.hasPrefix("--") { options.command = String(key.dropFirst(2)) }
         }
@@ -93,6 +96,7 @@ func printHelp() {
 
     用法：
       jlugate-probe --self-test [--seconds 8] [--keepalive 1]   # 对 127.0.0.1 模拟网关跑全流程
+      jlugate-probe --portal-self-test [--seconds 8]            # 对 127.0.0.1 模拟门户跑网页认证
       jlugate-probe --interfaces                                # 列出物理网卡（只读）
       jlugate-probe --route-check [--server 10.100.61.3]        # 路由出口 / ConfigMethod（只读）
       jlugate-probe --detect                                    # 判定当前网络走哪条链路（会发 1 个 challenge）
@@ -381,6 +385,199 @@ func runSelfTest(_ options: Options) -> Int32 {
     return 1
 }
 
+
+// MARK: - 网页认证自测（对模拟门户）
+
+/// 不跟随跳转的 delegate：这样才能看见真实的 302 与 Location。
+final class NoRedirectDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest,
+                    completionHandler: @escaping (URLRequest?) -> Void) {
+        completionHandler(nil)
+    }
+}
+
+/// 把"204 探针"换成本地 HTTP 站点：语义与 `ConnectivityProbe` 完全一样。
+struct LocalPortalProbe: ConnectivityProbing {
+    let base: URL
+
+    func run(interface: InterfaceSnapshot, dnsServers: [IPv4Address]) async -> ProbeOutcome {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 3
+        let session = URLSession(configuration: configuration,
+                                 delegate: NoRedirectDelegate(), delegateQueue: nil)
+        defer { session.invalidateAndCancel() }
+
+        var request = URLRequest(url: base.appendingPathComponent("generate_204"))
+        request.timeoutInterval = 3
+        do {
+            let (_, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                return .unreachable(reason: "没有 HTTP 响应")
+            }
+            if http.statusCode == 204 { return .healthy }
+            return .captivePortal(statusCode: http.statusCode,
+                                  location: http.value(forHTTPHeaderField: "Location"))
+        } catch {
+            return .unreachable(reason: error.localizedDescription)
+        }
+    }
+}
+
+/// 自测用的"浏览器"：取页面 → 找 form action → POST 表单。
+///
+/// 注意：这是**测试替身**，不是生产路径。生产用 `WKWebView`（`App/Sources/WKPortalBrowser.swift`），
+/// 程序永远不碰明文密码（PLAN §5.4.2）。
+final class CLIPortalBrowser: PortalBrowser, @unchecked Sendable {
+    let credentials: PortalCredentials
+    private let fetcher = URLSessionPortalFetcher()
+
+    init(credentials: PortalCredentials) {
+        self.credentials = credentials
+    }
+
+    func presentLogin(url: URL, credentials: PortalCredentials?) async -> PortalLoginResult {
+        let creds = credentials ?? self.credentials
+        var target = url
+        let dummy = InterfaceSnapshot(name: "lo0", index: 1, ipv4: "127.0.0.1", mac: nil,
+                                      isWireless: false, isUp: true)
+        if let page = try? await fetcher.fetch(url, interface: dummy),
+           let action = PortalDetector.formAction(in: page.body, base: url) {
+            target = action
+            print("  登录页表单 action → \(action.absoluteString)")
+        }
+        print("  POST \(target.absoluteString)（账号 \(creds.account)）")
+
+        let body = "username=\(percentEncode(creds.account))&password=\(percentEncode(creds.password))"
+        var request = URLRequest(url: target)
+        request.httpMethod = "POST"
+        request.httpBody = Data(body.utf8)
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 10
+
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+        do {
+            let (data, response) = try await session.data(for: request)
+            let text = String(decoding: data, as: UTF8.self)
+            guard let http = response as? HTTPURLResponse else {
+                return .failed(reason: "没有 HTTP 响应")
+            }
+            if text.contains("错误") || text.contains("error") {
+                return .failed(reason: text)
+            }
+            guard (200..<400).contains(http.statusCode) else {
+                return .failed(reason: "HTTP \(http.statusCode)")
+            }
+            return .succeeded
+        } catch {
+            return .failed(reason: error.localizedDescription)
+        }
+    }
+
+    func clearCookies() async {}
+
+    private func percentEncode(_ text: String) -> String {
+        text.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? text
+    }
+}
+
+func runPortalSelfTest(_ options: Options) -> Int32 {
+    guard FileManager.default.fileExists(atPath: options.portalPath) else {
+        print("找不到模拟门户：\(options.portalPath)（请在仓库根目录执行）")
+        return 2
+    }
+    let account = options.account.isEmpty ? "20230001" : options.account
+    let password = options.password.isEmpty ? "test-pass-2024" : options.password
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+    process.arguments = ["python3", options.portalPath,
+                         "--host", "127.0.0.1", "--port", String(options.portalPort),
+                         "--user", account, "--password", password]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = pipe
+    do {
+        try process.run()
+    } catch {
+        print("启动模拟门户失败：\(error)")
+        return 2
+    }
+    Thread.sleep(forTimeInterval: 0.4)
+    defer { if process.isRunning { process.terminate() } }
+
+    guard let base = URL(string: "http://127.0.0.1:\(options.portalPort)") else {
+        print("门户地址不合法")
+        return 2
+    }
+    let interface = InterfaceSnapshot(name: "lo0", index: 1, ipv4: "127.0.0.1", mac: nil,
+                                      isWireless: true, isUp: true, linkLocalIPv4: nil,
+                                      netmask: "255.0.0.0")
+    let configuration = PortalConfiguration(
+        credentials: PortalCredentials(account: account, password: password),
+        silentRetryOnce: true,
+        silentRetryDelay: .milliseconds(300),
+        promptCooldown: .seconds(300),
+        probeInterval: .seconds(1),
+        failTolerance: 2,
+        successChecks: 5)
+    let engine = PortalEngine(
+        probe: LocalPortalProbe(base: base),
+        browser: CLIPortalBrowser(credentials: PortalCredentials(account: account, password: password)),
+        detector: PortalDetector(configuredURL: base.appendingPathComponent("portal")),
+        configuration: configuration)
+
+    let semaphore = DispatchSemaphore(value: 0)
+    let recorder = PortalStateBox()
+    Task.detached {
+        let stream = await engine.events()
+        let collector = Task {
+            for await event in stream {
+                switch event {
+                case .state(let state):
+                    recorder.states.append(state.phase)
+                    print("状态 → \(state.phase)")
+                case .entry(let url):
+                    print("门户入口 → \(url.absoluteString)")
+                case .note(let message): print("日志：\(message)")
+                case .online: print("已在线（204 通过）")
+                case .needsUser: print("需要用户登录")
+                }
+            }
+        }
+        await engine.start(using: interface)
+        try? await Task.sleep(for: .seconds(options.seconds))
+        await engine.stop()
+        collector.cancel()
+        recorder.online = recorder.states.contains("online")
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + options.seconds + 15)
+
+    if process.isRunning { process.terminate() }
+    let output = pipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+    let serverLog = String(decoding: output, as: UTF8.self)
+
+    print("—— 模拟门户输出 ——")
+    print(serverLog.isEmpty ? "(空)" : serverLog)
+    print("—— 自测结果 ——")
+    print("状态序列：\(recorder.states.joined(separator: " → "))")
+    if recorder.online {
+        print("✅ 网页认证自测通过（302 → 登录页 → POST → 204）")
+        return 0
+    }
+    print("❌ 网页认证自测失败")
+    return 1
+}
+
+final class PortalStateBox: @unchecked Sendable {
+    var states: [String] = []
+    var online = false
+}
+
 // MARK: - 真机认证
 
 func runLogin(_ options: Options) -> Int32 {
@@ -453,6 +650,8 @@ let options = parseOptions(CommandLine.arguments)
 switch options.command {
 case "self-test":
     exit(runSelfTest(options))
+case "portal-self-test":
+    exit(runPortalSelfTest(options))
 case "interfaces":
     runInterfaces()
 case "route-check":

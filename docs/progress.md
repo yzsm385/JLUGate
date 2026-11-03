@@ -14,7 +14,7 @@
 |---|---|
 | 342 字节登录包能否复现抓包 | ✅ 逐字节相同（含摘要 A） |
 | 保活 A / B 能否复现抓包 | ✅ 逐字节相同（A 的 16 字节 = 登录摘要 A，已解） |
-| 单元测试 | ✅ `swift test` 74 条全绿（Core 45 + Net 29） |
+| 单元测试 | ✅ `swift test` 100 条全绿（Core 45 + Net 55） |
 | 离线全流程（模拟网关） | ✅ `swift run jlugate-probe --self-test` 通过 |
 | 真实认证 | ⛔ **未执行**，必须拿到环境 B 上跑（见 §6） |
 | UI | ✅ 源码完成并通过编译校验；`.app` 需在装了 XcodeGen 的机器上生成（见 §5） |
@@ -43,7 +43,10 @@ Sources/
 │   ├── InterfaceResolver.swift # getifaddrs + route get + ipconfig getsummary
 │   ├── PathMonitor.swift       # NWPathMonitor → PathEvent
 │   ├── ConnectivityProbe.swift # 自带 DNS 的 204 探针（BSD 传输实现）
-│   ├── AuthCoordinator.swift   # AccessLink / AuthProvider / 选链路 / teardown
+│   ├── PortalDetector.swift    # 门户入口解析（Location / form action / meta refresh）
+│   ├── PortalEngine.swift      # JLU.WIFI 状态子集 + Cookie 静默 + 弹窗节流
+│   ├── AuthCoordinator.swift   # AccessLink / AuthProvider / 选链路 / 遥测转发 / teardown
+│   ├── RouteGuard.swift        # 三层路由判定 + helper 参数白名单
 │   └── DrcomEngine.swift       # actor + epoch 状态机 + 保活 + 退避
 ├── jlugate-probe/          # --self-test / --interfaces / --route-check / --dump-login / --login
 App/                        # MenuBarExtra + Liquid Glass（SwiftUI）
@@ -68,7 +71,7 @@ swift run jlugate-probe --self-test
 
 # 3) 全量
 swift test
-#    → 74 tests passed
+#    → 100 tests passed
 ```
 
 > **本机注意**：这个工作区跑在受限沙箱里，SwiftPM 需要把缓存与临时目录指到工作区内、
@@ -140,8 +143,29 @@ c2s  38 ff<digest>000000Drco…
 - `notCampusNetwork(detail:)` —— 两个探针都不通时给的一句话；
 - `unsupportedLink(_:)` —— 选到了还没实现的链路（如 `JLU.WIFI`），**不进重试**。
 
-> App 层目前仍直连 `DrcomEngine`：协调器选完链路后还要能拿到保活流量统计，等 Portal 落地时
-> 再统一改成"协调器 + 双 provider"，避免现在为了统一而把 UI 事件流砍掉一半。
+> App 层已改为**全部经协调器**：`AppModel` 只订阅 `AuthCoordinator.Event`，
+> 保活流量通过 `SessionTelemetryProviding` 转发上来（`.telemetry(.traffic(...))`），UI 事件没丢。
+
+### 4.6 网页认证（`JLU.WIFI`）
+
+| 组件 | 行为 | 测试 |
+|---|---|---|
+| `PortalDetector` | 302 的 Location → 入口；200 页面里抓 `<form action>` / meta refresh；都没有就回落配置入口 | 5 条 |
+| `PortalEngine` | `detect → 静默重试 → 弹窗 → 204 确认 → online`；在线时探针连败 2 次回到 `authenticating`；弹窗 1 次/5 分钟 | 8 条 |
+| `WKPortalBrowser`（App） | 真正的 `WKWebView` 窗口，Cookie 落盘可复用；自动填充**只填不交** | 编译校验 |
+| `Tools/mock-portal` | 302 → 登录页 → POST → 204 的完整门户 | `make portal-self-test` |
+
+刻意不做的事：**不重放表单**。认证永远是"浏览器里点一下"，页面改版/JS 加密/验证码都不会让客户端失效（PLAN §5.4.2）。
+
+### 4.7 路由保障（M2.5 的离线部分）
+
+| 组件 | 行为 | 测试 |
+|---|---|---|
+| `RouteGuard` | A（出口已是物理口）/ B（helper 加 `-ifscope` /32）/ C（给可复制命令）/ 无路由，四态 | 7 条 |
+| `RouteValidator` | host 必须在 /32 白名单、gateway 必须是 IPv4 字面量（挡住注入）、接口必须 `enN`、网关必须与接口一致 | 7 条 |
+
+helper 进程本身（`SMAppService.daemon` + 签名）仍属 M2.5：**没有开发者账号签不出来**，
+但最容易出事的那部分（参数白名单、argv 拼装、拒绝非法入参）已经离线测完了。
 
 ---
 

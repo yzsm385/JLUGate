@@ -49,6 +49,18 @@ public protocol AuthProvider: AnyObject, Sendable {
     var state: AsyncStream<AuthState> { get }
 }
 
+// MARK: - 遥测（保活流量等 UI 需要的信息）
+
+public enum AuthTelemetry: Sendable, Equatable {
+    case session(account: String, clientIP: String?, session: UInt16)
+    case traffic(secondsOnline: UInt32, stats: [UInt32])
+    case note(String)
+}
+
+public protocol SessionTelemetryProviding: Sendable {
+    var telemetry: AsyncStream<AuthTelemetry> { get }
+}
+
 // MARK: - 状态广播
 
 /// 把 provider 的内部事件收敛成"当前状态 + 订阅"。
@@ -89,21 +101,30 @@ final class AuthStateHub: @unchecked Sendable {
 
 /// 把 `DrcomEngine` 包成 `AuthProvider`。
 /// 引擎自己是 actor，`state` 用一次广播转成 `AsyncStream<AuthState>`。
-public final class DrcomAuthProvider: AuthProvider, @unchecked Sendable {
+public final class DrcomAuthProvider: AuthProvider, SessionTelemetryProviding, @unchecked Sendable {
     public let link: AccessLink
     public let engine: DrcomEngine
     private let hub = AuthStateHub()
+    private let telemetryHub = AuthTelemetryHub()
     private let relay: Task<Void, Never>
 
     public init(engine: DrcomEngine, link: AccessLink) {
         self.engine = engine
         self.link = link
         let hub = self.hub
+        let telemetryHub = self.telemetryHub
         relay = Task {
             let events = await engine.events()
             for await event in events {
-                if case .state(let state) = event {
+                switch event {
+                case .state(let state):
                     hub.publish(state)
+                case .session(let account, let clientIP, let session):
+                    telemetryHub.publish(.session(account: account, clientIP: clientIP, session: session))
+                case .traffic(let secondsOnline, let stats):
+                    telemetryHub.publish(.traffic(secondsOnline: secondsOnline, stats: stats))
+                case .log(let message):
+                    telemetryHub.publish(.note(message))
                 }
             }
         }
@@ -128,6 +149,32 @@ public final class DrcomAuthProvider: AuthProvider, @unchecked Sendable {
     public func stop() async {
         await engine.stop()
         relay.cancel()
+    }
+
+    public var telemetry: AsyncStream<AuthTelemetry> { telemetryHub.makeStream() }
+
+    /// 让 UI 能"打开 Portal 登录页"时读到当前入口（Dr.Com 链路没有）。
+    public func pendingPortalEntry() async -> URL? { nil }
+}
+
+/// 遥测广播（与 `AuthStateHub` 同构，只是载荷不同）。
+final class AuthTelemetryHub: @unchecked Sendable {
+    private let state = Mutex<[UUID: AsyncStream<AuthTelemetry>.Continuation]>([:])
+
+    func publish(_ event: AuthTelemetry) {
+        for continuation in state.withLock({ Array($0.values) }) {
+            continuation.yield(event)
+        }
+    }
+
+    func makeStream() -> AsyncStream<AuthTelemetry> {
+        AsyncStream { continuation in
+            let id = UUID()
+            state.withLock { $0[id] = continuation }
+            continuation.onTermination = { [weak self] _ in
+                self?.state.withLock { $0[id] = nil }
+            }
+        }
     }
 }
 
@@ -185,6 +232,7 @@ public actor AuthCoordinator {
         case link(AccessLink)
         case state(AuthState)
         case note(String)
+        case telemetry(AuthTelemetry)
     }
 
     public struct Configuration: Sendable {
@@ -225,6 +273,7 @@ public actor AuthCoordinator {
 
     private var provider: (any AuthProvider)?
     private var providerRelay: Task<Void, Never>?
+    private var telemetryRelay: Task<Void, Never>?
     private var hub: [UUID: AsyncStream<Event>.Continuation] = [:]
     private var activeLink: AccessLink?
     private var state: AuthState = .idle
@@ -290,6 +339,8 @@ public actor AuthCoordinator {
         _ = nextEpoch()
         providerRelay?.cancel()
         providerRelay = nil
+        telemetryRelay?.cancel()
+        telemetryRelay = nil
         if let provider {
             await provider.stop()
         }
@@ -374,6 +425,36 @@ public actor AuthCoordinator {
                 await self?.applyExternalState(state)
             }
         }
+
+        telemetryRelay?.cancel()
+        telemetryRelay = nil
+        if let telemetryProvider = provider as? any SessionTelemetryProviding {
+            let telemetryStream = telemetryProvider.telemetry
+            telemetryRelay = Task { [weak self] in
+                for await event in telemetryStream {
+                    await self?.forwardTelemetry(event)
+                }
+            }
+        }
+    }
+
+    private func forwardTelemetry(_ event: AuthTelemetry) {
+        guard provider != nil else { return }
+        emit(.telemetry(event))
+    }
+
+    /// 菜单里的"打开 Portal 登录页"：只有 Portal 链路认这个动作。
+    public func requestPortalLogin() async {
+        guard let portal = provider as? any PortalLoginControlling else {
+            emit(.note("当前链路不是网页认证，没有登录页可打开"))
+            return
+        }
+        await portal.requestLogin()
+    }
+
+    public func portalEntry() async -> URL? {
+        guard let portal = provider as? any PortalLoginControlling else { return nil }
+        return await portal.pendingEntry()
     }
 
     private func applyExternalState(_ next: AuthState) {
