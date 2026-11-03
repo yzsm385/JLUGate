@@ -116,12 +116,73 @@ sudo launchctl bootout system/com.doctorcom.DrClientHelper
 
 ## 6. 网页认证（JLU.WIFI）
 
-1. 连上 `JLU.WIFI`；
-2. `./jlugate-probe --detect` 应显示"被拦截 → 应走 JLU.WIFI"；
-3. App 版会弹 `WKWebView` 登录窗（命令行版没有浏览器，只能验证探测与状态机）；
-4. 首次要人工输入一次，之后靠 Cookie 静默恢复。
+### 6.1 命令行先验证判定
 
-想省掉向导里的手填：把表单字段名（`username` / `password` 之类）和入口 URL 记下来，填进设置页的"网页认证入口 URL"。
+```bash
+./jlugate-probe --detect
+# 期望：204 探针：被拦截（HTTP 302/200 → http://…）→ 应走 JLU.WIFI 网页认证
+```
+
+若显示"已在线（无需认证）"，说明此时**没有被门户拦截**（可能已登录过，或者根本没连上 JLU.WIFI）。
+
+### 6.2 App 里走一遍完整流程
+
+```bash
+make app-bundle
+open "dist/JLU Gate.app"
+```
+
+菜单栏图标 →「登录」→ 自动判定链路 → 弹出 `WKWebView` 登录窗：
+
+| 观察点 | 期望 |
+|---|---|
+| 登录窗是否出现 | 只会在"需要用户输入"时出现，不抢焦点以外的行为 |
+| 窗口里能不能正常登录 | 就是浏览器，用户自己输账号密码（**不做任何预填**，D-001） |
+| 登录后 | 窗口自动关闭、菜单栏图标转实心、显示"在线"和在线时长 |
+| 断网 30s 再恢复 | 自动回到在线，不需要点任何按钮 |
+
+### 6.3 Cookie 复用
+
+登录成功后**不要退出 App**，直接关掉 Wi-Fi 再打开：`PortalEngine` 会先静默试一次
+（复用 Cookie），通了就不弹窗；只有静默失败才再弹一次（5 分钟内不重复打扰）。
+
+### 6.4 没有校园网时怎么验证 App 真的能跑
+
+`make app-bundle` 产出的 `dist/JLU Gate.app` 可以直接运行。想在没有校园网的机器上
+把「App → 协调器 → 引擎 → 保活 → 状态/遥测」整条链路跑通，用随包附带的 dev 自检：
+
+```bash
+python3 Tools/mock-gateway/mock_gateway.py --port 61441 --duration 30 --assert \
+    --account 20230001 --password test-pass-2024 &
+./scripts/make-app-bundle.sh --dev      # 往 App 里塞 dev-config.json（server=127.0.0.1:61441）
+open -n "dist/JLU Gate.app"
+tail -f ~/Library/Logs/JLUGate/agent.log # 应看到 …→online + traffic
+```
+
+`--dev` 构建**不碰钥匙串**、不走物理网卡（用 lo0 + BSD 通道），只用于自检；
+正式包不会读取 `dev-config.json`。
+
+### 6.5 为什么重新构建后会弹"允许访问钥匙串"
+
+ad-hoc 签名每次构建的签名都不一样，而 Keychain 条目的 ACL 是绑定签名的，
+所以新构建读旧条目时 macOS 会重新征求许可。**这不是程序在扫别的东西**：
+
+- 凭据只在向导/设置页保存时写入，**重连不会重写**；
+- dev 自检模式完全跳过钥匙串；
+- 正式签名（Developer ID）稳定之后就不会再问。
+
+点「允许」（或「始终允许」）即可；不想留条目可以在「钥匙串访问」里删掉
+`dev.jlugate.app`。
+
+### 6.6 失败时回传什么
+
+```bash
+# 菜单 →「复制诊断」/「导出」→ 生成的文件
+# 另外补一条：
+./jlugate-probe --detect
+```
+
+登录窗若报错，把窗口里的**原文**一起回传（服务器/门户自己给的文案，不要翻译）。
 
 ---
 

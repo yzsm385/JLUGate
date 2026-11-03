@@ -191,6 +191,8 @@ public actor DrcomEngine {
 
                 if error == .cancelled { return }
                 lastError = error
+                // 这条在真机排障时最值钱：把"为什么重连"的原始原因写进日志
+                emit(.log("认证失败：\(error.userMessage)（\(error)）"))
 
                 // 拔网线 / 网卡暂时没地址：停下等网络变化，不做无意义的退避空转（PLAN §6.3）
                 if error.awaitsPathChange {

@@ -207,7 +207,7 @@ struct SettingsView: View {
             // 新账号没有档案：走一次向导把地址填全，别让用户猜为什么认证失败
             model.presentWizard()
         }
-        if !draft.password.isEmpty {
+        if !draft.password.isEmpty, !DevOverrides.isEnabled {
             try? CredentialStore.save(password: draft.password, account: draft.account)
         }
         LoginItem.apply(enabled: draft.launchAtLogin)

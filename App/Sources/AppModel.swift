@@ -39,18 +39,34 @@ final class AppModel {
     init() {
         let loaded = ConfigStore.load()
         config = loaded
-        password = CredentialStore.password(for: loaded.account) ?? ""
+        // dev 自检不碰钥匙串：ad-hoc 每次签名都不同，读旧条目会弹"允许访问钥匙串"
+        password = DevOverrides.isEnabled
+            ? "test-pass-2024"
+            : (CredentialStore.password(for: loaded.account) ?? "")
         showWizard = loaded.currentProfile?.configuredAt == nil
         refreshDiagnostics()
         observeSleepWake()
         observeNetworkPaths()
-        if showWizard {
+        if showWizard, !DevOverrides.autostart {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(600))
                 self.presentWizard()
             }
         }
+        if DevOverrides.autostart {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(500))
+                self.connect()
+            }
+        }
         Notifier.requestAuthorizationIfNeeded()
+
+        if DevOverrides.isEnabled {
+            let devState = "dev server=\(DevOverrides.server?.description ?? "-"):\(DevOverrides.port ?? 0)"
+                + " autostart=\(DevOverrides.autostart)"
+            print("JLUDev \(devState)")
+            FileLogger.shared.log("start \(devState)")
+        }
     }
 
     /// 首次启动 / 换账号时的向导窗口（PLAN §9.1）。
@@ -127,6 +143,11 @@ final class AppModel {
     // MARK: 动作
 
     func connect() {
+        if DevOverrides.isEnabled {
+            if config.account.isEmpty { config.account = "20230001" }
+            if password.isEmpty { password = "test-pass-2024" }
+            config.link = "wired"
+        }
         guard !config.account.isEmpty, !password.isEmpty else {
             state = .failed(.malformed("还没填账号或密码"))
             return
@@ -135,26 +156,35 @@ final class AppModel {
             state = .failed(.malformed("服务器地址不合法"))
             return
         }
-        try? CredentialStore.save(password: password, account: config.account)
-        ConfigStore.save(config)
+        // 注意：这里**不写钥匙串**。凭据只在向导/设置页保存时落盘（用户明确动作），
+        // 否则每次重连都会改一次 keychain item，签名一变就会弹授权框。
+        if !DevOverrides.isEnabled {
+            ConfigStore.save(config)
+        }
 
         let profile = config.currentProfile
-        let server = IPv4Address(config.server)!
+        let devServer = DevOverrides.server
+        let server = devServer ?? IPv4Address(config.server)!
+        let serverPort = devServer != nil ? (DevOverrides.port ?? 61441) : UInt16(config.serverPort)
+        let interfaceProvider: any InterfaceProvider = devServer != nil
+            ? DevLoopbackProvider()
+            : interfacesProvider
         let engineConfiguration = EngineConfiguration(
             account: config.account,
             password: password,
             hostname: SystemHostname.value,
             registeredMAC: profile?.registeredMAC.flatMap(MACAddress.init),
-            interfaceLock: config.interfaceLock,
-            expectedIP: profile?.ip.flatMap(IPv4Address.init),
-            expectedMask: profile?.mask,
+            interfaceLock: devServer != nil ? "lo0" : config.interfaceLock,
+            expectedIP: devServer != nil ? nil : profile?.ip.flatMap(IPv4Address.init),
+            expectedMask: devServer != nil ? nil : profile?.mask,
             server: server,
-            serverPort: UInt16(config.serverPort),
+            serverPort: serverPort,
             localPort: UInt16(config.localPort),
             keepAliveInterval: .seconds(config.keepAlive.interval),
             missTolerance: config.keepAlive.missTolerance)
 
-        let channelFactory: any ChannelFactory = config.channel == "bsd"
+        // dev 模式用 BSD：NWPath 不会把 loopback 交出来，`requiredInterface` 建不起来
+        let channelFactory: any ChannelFactory = (devServer != nil || config.channel == "bsd")
             ? BSDChannelFactory()
             : NWChannelFactory()
         let backoff = Backoff(base: config.backoff.base, cap: config.backoff.cap,
@@ -174,7 +204,7 @@ final class AppModel {
                 let engine = DrcomEngine(configuration: engineConfiguration,
                                          codec: DrcomCodec(),
                                          channelFactory: channelFactory,
-                                         interfaces: SystemInterfaceProvider(),
+                                         interfaces: interfaceProvider,
                                          clock: SystemClock(),
                                          backoff: backoff)
                 return DrcomAuthProvider(engine: engine, link: link)
@@ -186,9 +216,9 @@ final class AppModel {
         }
 
         let coordinatorConfiguration = AuthCoordinator.Configuration(
-            preference: LinkPreference(rawValue: config.link) ?? .auto,
-            autoDetect: config.autoDetect,
-            server: IPv4Endpoint(host: server, port: UInt16(config.serverPort)),
+            preference: devServer != nil ? .wired : (LinkPreference(rawValue: config.link) ?? .auto),
+            autoDetect: devServer != nil ? false : config.autoDetect,
+            server: IPv4Endpoint(host: server, port: serverPort),
             localPort: UInt16(config.localPort),
             registeredMAC: profile?.registeredMAC.flatMap(MACAddress.init),
             interfaceLock: config.interfaceLock,
@@ -196,7 +226,7 @@ final class AppModel {
             probeTimeout: .seconds(config.probe.timeout))
 
         let coordinator = AuthCoordinator(configuration: coordinatorConfiguration,
-                                          interfaces: interfacesProvider,
+                                          interfaces: interfaceProvider,
                                           detector: DefaultLinkDetector(),
                                           makeProvider: factory)
         self.coordinator = coordinator

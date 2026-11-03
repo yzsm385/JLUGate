@@ -216,7 +216,9 @@ struct WizardView: View {
         model.config = config
         model.password = password
         model.persist()
-        try? CredentialStore.save(password: password, account: account)
+        if !DevOverrides.isEnabled {
+            try? CredentialStore.save(password: password, account: account)
+        }
         model.finishWizard()
     }
 }

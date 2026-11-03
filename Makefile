@@ -33,9 +33,17 @@ dump-login:
 		--account 20230001 --password test-pass-2024 --salt 49cb720f \
 		--hostname test-mac.local --mac 02:00:00:00:00:01
 
-# App 工程由 XcodeGen 生成（需要 brew install xcodegen）
+# App 工程由 XcodeGen 生成（需要 brew install xcodegen；正式签名/公证走这条路）
 app:
 	cd App && xcodegen generate && open JLUGate.xcodeproj
+
+# 没有开发者账号时的本机构建：SwiftPM 产物 + ad-hoc 签名 → dist/JLU Gate.app
+app-bundle:
+	./scripts/make-app-bundle.sh
+
+# 构建并直接运行（调试用）
+run-app: app-bundle
+	open "dist/JLU Gate.app"
 
 # 本地跑一遍 CI 里的三件事
 ci: test self-test portal-self-test

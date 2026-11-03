@@ -51,7 +51,16 @@ make release-probe        # universal 二进制
 | `Fixtures/` | 抓包样本（含凭据摘要，**不要公开**） |
 | `docs/` | CHECKLIST / PLAN / protocol-findings / progress / runbook |
 
-## 生成 App
+## 生成 / 运行 App
+
+没有开发者账号也能在本机跑起来（ad-hoc 签名，不能分发、不能公证）：
+
+```bash
+make app-bundle     # → dist/JLU Gate.app（LSUIElement，菜单栏常驻）
+open "dist/JLU Gate.app"
+```
+
+有账号、要签名和公证时走 XcodeGen：
 
 ```bash
 brew install xcodegen
