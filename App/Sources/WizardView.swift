@@ -63,7 +63,7 @@ struct WizardView: View {
             footer
         }
         .padding(22)
-        .frame(width: 540, height: 480)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
             Task { @MainActor in
                 load()

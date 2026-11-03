@@ -26,7 +26,7 @@ struct NetworkDetailView: View {
             Divider()
             footer
         }
-        .frame(width: 640, height: 620)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear { Task { @MainActor in model.refreshNetworkDetail() } }
     }
 

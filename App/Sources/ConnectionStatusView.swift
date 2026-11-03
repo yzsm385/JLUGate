@@ -66,7 +66,7 @@ struct ConnectionStatusView: View {
             }
         }
         .padding(18)
-        .frame(width: 420)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
             // 布局周期里不要改 model 状态：AppKit 会在 display cycle 抛异常（真机崩溃栈）
             Task { @MainActor in model.refreshDiagnostics() }

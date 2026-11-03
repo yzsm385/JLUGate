@@ -47,9 +47,15 @@ struct MenuContent: View {
                 .buttonStyle(.plain)
                 Spacer()
             }
-            content()
+            // 关键：面板宽度固定、内容可滚动。
+            // 之前子页面带着 540~640 的写死宽度塞进 360 的面板里，直接把布局撑爆。
+            ScrollView(.vertical, showsIndicators: true) {
+                content()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(height: 520)
         }
-        .frame(width: 360)
+        .frame(width: 380)
         .padding(12)
     }
 

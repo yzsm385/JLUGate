@@ -97,9 +97,10 @@ final class AppModel {
     init() {
         let loaded = ConfigStore.load()
         config = loaded
-        AppearanceCompat.apply(configFlag: loaded.compatibilityMode)
         // 上一次启动闪退过：进安全模式，不自动连、不读密码，先让用户能把配置改回来
         let safeMode = LaunchGuard.beginLaunch()
+        // 闪退后自动关掉液态玻璃（最可能的渲染诱因），保证下次一定能进来改配置
+        AppearanceCompat.apply(configFlag: loaded.compatibilityMode || safeMode)
         isSafeMode = safeMode
         if safeMode {
             FileLogger.shared.log("安全模式：跳过自动连接与密码恢复")
@@ -339,7 +340,8 @@ final class AppModel {
         ]
         for (name, view) in probes {
             let host = NSHostingView(rootView: view)
-            host.frame = NSRect(x: 0, y: 0, width: 600, height: 720)
+            // 按"面板内"的真实宽度布局（380 宽），验证不会撑爆
+            host.frame = NSRect(x: 0, y: 0, width: 380, height: 560)
             host.layoutSubtreeIfNeeded()
             FileLogger.shared.log("ui-probe: \(name) 布局完成")
         }
