@@ -31,6 +31,8 @@ enum DevOverrides {
         var openSettings: Bool?
         /// 自检：启动后模拟"选有线 + 填完数据 + 保存"，复现闪退
         var saveWired: Bool?
+        /// 自检：把每个面板视图都实例化并强制布局一次
+        var uiProbe: Bool?
     }
 
     private static let fileConfig: FileConfig? = {
@@ -72,6 +74,11 @@ enum DevOverrides {
             return nil
         }
         return URL(string: raw)
+    }
+
+    static var uiProbeOnLaunch: Bool {
+        guard isEnabled else { return false }
+        return fileConfig?.uiProbe ?? false
     }
 
     /// 自检时模拟一次"有线 + 保存"的完整流程。

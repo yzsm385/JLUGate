@@ -17,6 +17,7 @@ for arg in "$@"; do
         --dev-net-detail) DEV=4 ;;
         --dev-settings) DEV=5 ;;
         --dev-save-wired) DEV=6 ;;
+        --dev-ui-probe) DEV=7 ;;
     esac
 done
 
@@ -78,6 +79,11 @@ fi
 if [ "$DEV" = "4" ]; then
     echo "==> dev harness: open network detail on launch"
     echo '{ "openNetDetail": true }' > "$APP/Contents/Resources/dev-config.json"
+fi
+
+if [ "$DEV" = "7" ]; then
+    echo "==> dev harness: UI probe"
+    echo '{ "uiProbe": true }' > "$APP/Contents/Resources/dev-config.json"
 fi
 
 if [ "$DEV" = "6" ]; then

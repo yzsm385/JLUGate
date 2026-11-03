@@ -134,6 +134,12 @@ final class AppModel {
                 self.connect()
             }
         }
+        if DevOverrides.uiProbeOnLaunch {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(800))
+                self.runUIProbe()
+            }
+        }
         if DevOverrides.saveWiredOnLaunch {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(1200))
@@ -304,6 +310,25 @@ final class AppModel {
         watchTask?.cancel()
         watchTask = nil
         observingExistingSession = false
+    }
+
+    /// 自检：把每个面板视图都建一次并强制布局，验证视图本身不会崩。
+    func runUIProbe() {
+        FileLogger.shared.log("ui-probe: 开始")
+        let probes: [(String, AnyView)] = [
+            ("wizard", AnyView(WizardView().environment(self))),
+            ("settings", AnyView(SettingsView().environment(self))),
+            ("detail", AnyView(NetworkDetailView().environment(self))),
+            ("status", AnyView(ConnectionStatusView().environment(self))),
+            ("portal", AnyView(PortalViewerView(url: portalViewerURL).environment(self))),
+        ]
+        for (name, view) in probes {
+            let host = NSHostingView(rootView: view)
+            host.frame = NSRect(x: 0, y: 0, width: 600, height: 720)
+            host.layoutSubtreeIfNeeded()
+            FileLogger.shared.log("ui-probe: \(name) 布局完成")
+        }
+        FileLogger.shared.log("ui-probe: 全部通过")
     }
 
     /// 自检用：完全走一遍"设置页保存"的写入路径（含落盘、凭据、登录项、刷新诊断）。
