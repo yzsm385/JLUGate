@@ -179,7 +179,7 @@
 1. **三条接入链路**都能用，且互不干扰：
    - 有线（**用户自行录入的**静态 IP / 掩码 / 网关 / DNS）→ Dr.Com UDP（已抓包证实）
    - `JLU.PC` 无线（**同一套地址**，F15）→ **Dr.Com 客户端认证**（F11，复用同一引擎；帧格式待 U9b 抓包确认）
-   - `JLU.WIFI` 无线 → **HTTP Portal 网页认证**（F9，用户要求一并实现）
+   - `JLU.WIFI` 无线 → **HTTP Portal 网页认证**，v1 **只做“检测 + Cookie 复用 + 失败弹窗”，不做表单自动化**（决策 D-001）
 2. 认证协议只有**两种**（Dr.Com / Portal），但要按**三条链路**做 UI 与配置；架构上用 `AuthProvider` 抽象隔开，不允许把 Portal 硬塞进 Dr.Com 状态机（§5.4）。
 3. 菜单栏常驻、无 Dock 图标、开机自启、首次启动引导；**纯 SwiftUI + Liquid Glass**，最低 **macOS 26.0**（用户要求）。
 4. **在 TUN 模式代理全程开启的条件下**正常工作，且**断线后无人值守自动恢复**（用户明确要求）。实现路径是三层：路由已放行 → 直连；被 TUN 接管 → 最小特权 helper 加 `-ifscope` 的 `/32` 路由；helper 被拒 → 给用户可复制命令（§6.5）。**不允许静默失败，也不允许"让用户关代理"**。
@@ -190,6 +190,43 @@
 **v1 不做**：802.1X/EAPOL（等 U5）、Portal 的**纯 headless 抓包重放**（改为 WKWebView 兜底，见 §5.4）、Mac App Store、路由器端、流量统计图表、多账号、自动更新（v1 手动下载 DMG）。
 
 **完成定义（DoD）**：§11 的 M0–M6（含 M4.5 Portal）全部通过验收命令；`docs/runbook.md` 能让第三方按文档排查"登录失败/闪断/端口占用"三类问题。
+
+### 3.1 产品定位：它是"网络守护进程"，不是"另一个登录工具"
+
+**要被回答的质疑**：`JLU.WIFI` 本来就是浏览器网页认证、不需要任何 App，那为什么要装这个？
+
+按价值强度排序，理由只有四条，前两条是刚需：
+
+| # | 理由 | 为什么浏览器/官方客户端替代不了 |
+|---|---|---|
+| 1 | **有线休眠唤醒后自动恢复** | 官方客户端休眠必断、必须手动重启（用户实测，体验最差的一环）。浏览器完全无关。这是唯一"不装就解决不了"的场景 |
+| 2 | **跨链路自动切换** | 拔网线 → 自动切 `JLU.PC`/`JLU.WIFI` 并认证；插回 → 自动切回有线。浏览器做不到"知道你现在插的是哪个口" |
+| 3 | **无感后台** | 常驻菜单栏、不占 Dock、不弹浏览器标签；掉线自动补登，用户不需要知道"认证"这件事发生过 |
+| 4 | **状态可见** | 菜单栏一眼看到"在线 / 认证中 / 失败原因"，不用去猜"我到底连上没有" |
+
+**诚实的边界**：
+
+- 如果用户**只用 `JLU.WIFI`**，这个 App 的增量只有"省一个标签页 + 自动补登"，**不足以支撑安装**；
+- 所以 v1 的重心必须是**有线 + `JLU.PC`**；`JLU.WIFI` 是"顺手支持"，不是卖点；
+- 对外文案不能写"帮你登录校园网"，要写"**让校园网一直在线，你不用管**"。
+
+**对 `JLU.WIFI` 的取舍**（v1）：
+
+- 只做三件事：检测被拦截 → 复用 Cookie 静默登录 → 失败才弹一次登录窗；
+- **不做**自动填表/表单逆向（门户结构未公开、改版即失效）；
+- 工期紧张时可整体推迟到 v1.1，不影响主体价值。
+
+### 3.2 "在后台活动"的技术要求（这是产品体验的核心）
+
+| 要求 | 实现 |
+|---|---|
+| 不占 Dock、不进 Cmd-Tab | `LSUIElement=YES` + `NSApp.setActivationPolicy(.accessory)` |
+| 不抢焦点 | 平时只有 `MenuBarExtra`；Portal 登录窗**只在需要用户输入时**出现 |
+| 不被 App Nap 挂起 | `ProcessInfo.processInfo.beginActivity(options: [.userInitiatedAllowingIdleSystemSleep], reason: ...)`，在 `online` 期间持有 |
+| 低功耗 | 心跳 10s（38/40 字节）+ 探针 30s，均无轮询；无定时器风暴 |
+| 休眠不空转 | `willSleep` 立即停任务、关通道；`didWake` 等 2s 再重连（§8.3） |
+| 开机自启 | `SMAppService.mainApp`，用户可在"登录项"里撤销 |
+| 失败不打扰 | 只有"需要用户决策"（密码错/顶号/路由被接管）才发通知，其余静默重试 |
 
 ---
 
@@ -403,7 +440,9 @@ let digestA = Insecure.MD5.hash(data: Data([0x03, 0x01]) + salt + Data(password.
 
 - 首次：菜单栏点击 → 弹出登录窗（`PortalLoginView`）→ 用户输入一次 → 成功后窗口自动关闭、图标转在线。
 - 之后：`PortalEngine` 检测到掉线 → 先**静默**用现有 Cookie 请求一次登录页；若被要求重新登录 → 再弹窗（可配置"静默失败自动弹窗"开关）。
-- 自动填充：若 U10 表明表单是标准 `<input name=...>`，可用 `evaluateJavaScript` 预填账号密码，把"两次输入"降为"一次点击"。**密码仍然不落盘到 WebView 之外**。
+- **不做任何 DOM 操作 / 表单填充**（决策 D-001）：登录窗就是一个普通 `WKWebView`，用户自己输。
+  理由：门户结构未公开、改版即失效；预填的收益（少打两行字）远小于它带来的脆弱面。
+  代码里若残留 `autoFill` 路径，应删除（见 §11 M4.5 变更项）。
 
 #### 5.4.3 会话与保活
 
@@ -979,9 +1018,15 @@ sudo tcpdump -i en7 -n "udp port 61440" &   # 同时跑（环境 B 有线口）
 
 验收：`LSUIElement` 生效（Dock 与 Cmd-Tab 无图标）；自启注册后"系统设置 → 登录项"可见并可关闭；Keychain 读写正常；设置页改配置即时生效；单实例检查有效。向导专项：空表单不能提交；填一个不在同网段的网关能被拦下；把系统网卡 IP 改掉后 App 报 `staticConfigMismatch` 而不是"登录失败"；**换一块 MAC 不同的 USB 网卡后 App 报 `macMismatch` 并列出所有有线口**；**把接口切回 DHCP 后 App 报 `dhcpAssigned` 且不发认证包**；**首次填完后再启动，不得再次弹出地址表单**；**切换账号时能按账号载入各自档案**；导出的档案卡片能在另一台机器粘贴还原。
 
-### M4.5 · Portal 路径（`JLU.WIFI`，2 天）
+### M4.5 · Portal 路径（`JLU.WIFI`，1 天；**施工方已提前完成，剩余为收尾**）
 
-任务：`PortalDetector`（302/200 判定 + 登录页解析）、`PortalEngine`（actor）、`PortalLoginView`（WKWebView + Cookie）、`AuthCoordinator` 链路切换、`Tools/mock-portal/portal_server.py`。
+任务：`PortalDetector`（302/200 判定）、`PortalEngine`（actor）、`PortalLoginView`（纯 WKWebView + Cookie）、`AuthCoordinator` 链路切换、`Tools/mock-portal/portal_server.py`。
+
+**决策 D-001（2026-11-03）**：v1 不做表单自动化。收尾项：
+1. 删除 `PortalEngine.Configuration.autoFill` 与其传递链（`PortalEngine.swift` → `PortalBrowser.presentLogin(credentials:)`）；
+2. `presentLogin` 只接收 `url`；
+3. 设置页不放任何“自动填写”开关；
+4. 验收不看“预填成功”，只看“能弹窗、能检测、Cookie 能复用”。
 
 ```bash
 # 离线可测部分（施工机）
@@ -1160,7 +1205,6 @@ tcpdump -r ~/Desktop/login.pcap -n "udp port 61440" | awk '{print $1, $3, $5, $7
   },
   "portal": {
     "entryURL": null,
-    "autoFill": true,
     "silentRetryOnce": true,
     "promptCooldownSeconds": 300
   },
