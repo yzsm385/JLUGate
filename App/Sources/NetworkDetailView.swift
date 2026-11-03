@@ -16,6 +16,7 @@ struct NetworkDetailView: View {
                     vpnSection
                     interfaceSection
                     routeSection
+                    authLivenessSection
                     pingSection
                     speedSection
                     glossarySection
@@ -197,6 +198,32 @@ struct NetworkDetailView: View {
                       systemImage: "exclamationmark.triangle")
                     .font(.caption2).foregroundStyle(.orange)
             }
+        }
+    }
+
+    // MARK: 认证通道（不是模式，是实际延迟）
+
+    private var authLivenessSection: some View {
+        card("认证通道延迟（UDP 61440 往返）") {
+            Text("全局代理能不能用，取决于这条路——不是看模式。直连与经代理各测 3 次真实 challenge。")
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let sample = model.authLiveness {
+                Text(sample.direct.description).font(.caption.monospaced())
+                Text(sample.viaDefault.description).font(.caption.monospaced())
+                Label(sample.verdict, systemImage: "info.circle")
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Button {
+                model.measureAuthLiveness()
+            } label: {
+                Label(model.diagnosticsBusy ? "测量中…" : "测认证通道", systemImage: "waveform.path.ecg.rectangle")
+            }
+            .buttonStyle(.glass)
+            .disabled(model.diagnosticsBusy)
         }
     }
 

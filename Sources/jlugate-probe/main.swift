@@ -106,6 +106,7 @@ func printHelp() {
       jlugate-probe --net-detail                                # 网口/路由/DNS/VPN 全量快照（比终端清楚）
       jlugate-probe --ping                                      # TCP 握手延迟（网关/认证服务器/公网）
       jlugate-probe --speed                                     # 下载测速：网口直连 vs 当前出口（含 VPN）
+      jlugate-probe --auth-ping                                 # 认证通道往返延迟：直连 vs 经代理
       jlugate-probe --dump-login --account X --password Y       # 离线打印 342 字节登录包
       jlugate-probe --login --account X --password Y [--mac ..] # 真机认证（只能在环境 B 执行）
 
@@ -354,6 +355,25 @@ func runSpeedCheck(_ options: Options) -> Int32 {
         semaphore.signal()
     }
     _ = semaphore.wait(timeout: .now() + 90)
+    return 0
+}
+
+func runAuthPing(_ options: Options) -> Int32 {
+    guard let interface = SystemInterfaceProvider().physicalInterfaces()
+        .first(where: { $0.isUsableForAuthentication }) else {
+        print("没有可用网口")
+        return 2
+    }
+    print("发真实 challenge 测认证通道（\(interface.name) 直连 vs 默认出口）：")
+    let semaphore = DispatchSemaphore(value: 0)
+    Task.detached {
+        let sample = await AuthLivenessProbe().measure(interface: interface)
+        print("  " + sample.direct.description)
+        print("  " + sample.viaDefault.description)
+        print("  结论：" + sample.verdict)
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 30)
     return 0
 }
 
@@ -845,6 +865,8 @@ case "ping":
     exit(runPingCheck(options))
 case "speed":
     exit(runSpeedCheck(options))
+case "auth-ping":
+    exit(runAuthPing(options))
 case "dump-login":
     runDumpLogin(options)
 case "login":

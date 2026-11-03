@@ -38,6 +38,21 @@ final class AppModel {
     var speedResults: [SpeedResult] = []
     var diagnosticsBusy = false
     var proxyAnalysis: ProxyModeAnalysis?
+    var authLiveness: AuthLivenessProbe.Sample?
+
+    /// 测认证通道：直连 vs 经默认出口（含代理/VPN）。
+    func measureAuthLiveness() {
+        guard !diagnosticsBusy else { return }
+        diagnosticsBusy = true
+        let interface = interfaces.first(where: \.isUsableForAuthentication) ?? interfaces.first
+        Task { @MainActor in
+            let sample = await AuthLivenessProbe().measure(interface: interface)
+            authLiveness = sample
+            diagnosticsBusy = false
+            recentLog.insert(sample.verdict, at: 0)
+            FileLogger.shared.log("认证通道：\(sample.verdict)")
+        }
+    }
 
     @ObservationIgnored private var coordinator: AuthCoordinator?
     @ObservationIgnored private var coordinatorTask: Task<Void, Never>?

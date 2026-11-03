@@ -14,13 +14,15 @@ struct ProxyModeTests {
                    proxyAppNames: apps)
     }
 
-    @Test("全局代理：默认和校园网段都被接管 → 认证必失败")
+    @Test("全局代理：不一定失败，取决于绕路的延迟/丢包")
     func global() {
         let analysis = ProxyModeAnalyzer.analyze(facts(defaultTunnel: true, campusTunnel: true))
         #expect(analysis.mode == .global)
-        #expect(analysis.summary.contains("认证包到不了"))
+        #expect(analysis.summary.contains("取决于"))
+        #expect(analysis.summary.contains("延迟"))
         #expect(analysis.advice.contains("配置"))
         #expect(analysis.advice.contains("10.0.0.0/8"))
+        #expect(analysis.advice.contains("延迟"), "建议里要先测延迟，而不是断言必失败")
     }
 
     @Test("规则/配置模式：默认走代理，校园网段直连 → 认证能成功")
