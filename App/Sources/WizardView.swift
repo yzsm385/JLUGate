@@ -65,8 +65,10 @@ struct WizardView: View {
         .padding(22)
         .frame(width: 540, height: 480)
         .onAppear {
-            load()
-            FileLogger.shared.log("wizard: 打开，step=\(step) link=\(link) account=\(account.isEmpty ? "-" : account)")
+            Task { @MainActor in
+                load()
+                FileLogger.shared.log("wizard: 打开，step=\(step) link=\(link) account=\(account.isEmpty ? "-" : account)")
+            }
         }
         .onChange(of: step) { _, newValue in
             FileLogger.shared.log("wizard: 进入步骤 \(newValue)")
@@ -378,7 +380,7 @@ struct WizardView: View {
         case .link:
             if needsNetworkStep {
                 step = .network
-                fillFromSystem()   // 手动配置时自动填好；DHCP 时只提示原因
+                Task { @MainActor in fillFromSystem() }   // 手动配置时自动填；DHCP 只提示原因
             } else {
                 finish()
             }

@@ -176,6 +176,7 @@ final class AppModel {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
+        FileLogger.shared.log("窗口：向导 创建开始")
         let controller = NSHostingController(rootView: WizardView().environment(self).plainWindowChrome())
         let window = NSWindow(contentViewController: controller)
         window.title = "JLU Gate · 初始设置"
@@ -185,6 +186,7 @@ final class AppModel {
         window.styleMask = [.titled, .closable]
         wizardWindow = window
         showWizard = true
+        FileLogger.shared.log("窗口：向导 创建完成")
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
@@ -642,6 +644,7 @@ final class AppModel {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
+        FileLogger.shared.log("窗口：连接状态 创建开始")
         let controller = NSHostingController(rootView: ConnectionStatusView().environment(self).plainWindowChrome())
         let window = NSWindow(contentViewController: controller)
         window.title = "JLU Gate · 连接状态"
@@ -715,6 +718,7 @@ final class AppModel {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
+        FileLogger.shared.log("窗口：设置 创建开始")
         let controller = NSHostingController(rootView: SettingsView().environment(self).plainWindowChrome())
         let window = NSWindow(contentViewController: controller)
         window.title = "JLU Gate 设置"
@@ -723,6 +727,7 @@ final class AppModel {
         window.isReleasedWhenClosed = false
         window.styleMask = [.titled, .closable]
         settingsWindow = window
+        FileLogger.shared.log("窗口：设置 创建完成")
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         FileLogger.shared.log("打开设置窗口")
@@ -839,6 +844,7 @@ final class AppModel {
             refreshNetworkDetail()
             return
         }
+        FileLogger.shared.log("窗口：网络详情 创建开始")
         let controller = NSHostingController(rootView: NetworkDetailView().environment(self).plainWindowChrome())
         let window = NSWindow(contentViewController: controller)
         window.title = "JLU Gate · 网络详情"

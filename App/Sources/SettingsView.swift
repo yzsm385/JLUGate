@@ -181,7 +181,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 560, height: 640)
-        .onAppear { load() }
+        .onAppear { Task { @MainActor in load() } }
         .onChange(of: draft.account) { _, newValue in
             // 切账号就载入该账号自己的档案（PLAN M4 验收："切换账号时能按账号载入各自档案"）
             guard newValue != model.config.account else { return }

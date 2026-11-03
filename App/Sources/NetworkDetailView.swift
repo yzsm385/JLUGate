@@ -27,7 +27,7 @@ struct NetworkDetailView: View {
             footer
         }
         .frame(width: 640, height: 620)
-        .onAppear { model.refreshNetworkDetail() }
+        .onAppear { Task { @MainActor in model.refreshNetworkDetail() } }
     }
 
     private var snapshot: NetworkSnapshot? { model.networkSnapshot }
