@@ -18,7 +18,9 @@ final class WKPortalBrowser: PortalBrowser, @unchecked Sendable {
     }
 
     func presentLogin(url: URL) async -> PortalLoginResult {
-        await withCheckedContinuation { (continuation: CheckedContinuation<PortalLoginResult, Never>) in
+        // 用系统浏览器完成网页认证：App 内不承载 WKWebView（真机上是崩溃来源）。
+        await MainActor.run { _ = NSWorkspace.shared.open(url) }
+        return await withCheckedContinuation { (continuation: CheckedContinuation<PortalLoginResult, Never>) in
             Task { @MainActor in
                 guard let model else {
                     continuation.resume(returning: .cancelled)
