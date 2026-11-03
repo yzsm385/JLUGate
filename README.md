@@ -26,6 +26,9 @@ make dump-login  # 离线打印 342 字节登录包，人工核对偏移
 swift run jlugate-probe --interfaces     # 网卡 / MAC / IPv4
 swift run jlugate-probe --route-check    # 10.100.61.3 的出口是不是被 TUN 接管、ConfigMethod 是否 Manual
 swift run jlugate-probe --detect         # 只判定走哪条链路（发 1 个 challenge，不认证；真机用）
+swift run jlugate-probe --net-detail     # 网口/路由/DNS/VPN 快照 + 每个字段的白话解释
+swift run jlugate-probe --ping           # 网关/公网延迟（直连 vs 默认出口含 VPN）
+swift run jlugate-probe --speed          # 下载测速（直连 vs VPN）
 ```
 
 ## 真机（只能在有线 Mac 上做）
