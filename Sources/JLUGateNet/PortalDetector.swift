@@ -25,16 +25,6 @@ public struct PortalEntry: Sendable, Equatable {
     }
 }
 
-public struct PortalCredentials: Sendable, Equatable {
-    public var account: String
-    public var password: String
-
-    public init(account: String, password: String) {
-        self.account = account
-        self.password = password
-    }
-}
-
 public enum PortalLoginResult: Sendable, Equatable {
     case succeeded
     case cancelled
@@ -42,8 +32,11 @@ public enum PortalLoginResult: Sendable, Equatable {
 }
 
 /// 由 App 层注入的浏览器能力（Core/Net 不 import WebKit，PLAN §4）。
+///
+/// **决策 D-001**：只打开登录页，不做任何 DOM 操作/表单填充。
+/// 因此这里连账号密码都不传——认证过程中程序不接触明文凭据。
 public protocol PortalBrowser: AnyObject, Sendable {
-    func presentLogin(url: URL, credentials: PortalCredentials?) async -> PortalLoginResult
+    func presentLogin(url: URL) async -> PortalLoginResult
     func clearCookies() async
 }
 

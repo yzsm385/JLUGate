@@ -120,6 +120,17 @@ public enum DrcomError: Error, Sendable, Equatable {
         }
     }
 
+    /// 是否应当"停下来等网络变化"，而不是按退避空转重试。
+    ///
+    /// 拔网线 / 网卡没地址这两种情况，插回去就是几秒钟的事；按 8 次退避空转
+    /// 除了刷日志没有任何意义（PLAN §6.3）。真正的恢复由 `PathMonitor` 触发。
+    public var awaitsPathChange: Bool {
+        switch self {
+        case .adapterUnplugged, .interfaceHasNoIPv4: true
+        default: false
+        }
+    }
+
     /// 重连时是否需要"等用户"（进 `failed` 而不是 `reconnecting`）。
     public var requiresUserAction: Bool {
         switch self {

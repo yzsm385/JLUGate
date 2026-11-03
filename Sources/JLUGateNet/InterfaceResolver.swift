@@ -159,11 +159,28 @@ public struct SystemInterfaceProvider: InterfaceProvider {
                 mac: acc.mac,
                 isWireless: acc.isWireless,
                 isUp: acc.isUp,
-                isUSB: false,
+                isUSB: Self.usbDevices.contains(name),
                 linkLocalIPv4: acc.linkLocal,
                 netmask: acc.netmask)
         }
     }
+
+    /// USB 网卡（"USB 10/100/1000 LAN" 这类硬件端口）。
+    /// 用途：拔插后接口名会变，诊断里要能一眼看出"这是块 USB 卡"（PLAN §9.2）。
+    static let usbDevices: Set<String> = {
+        let output = PortOccupancy.shell("/usr/sbin/networksetup", ["-listallhardwareports"])
+        var currentIsUSB = false
+        var names: Set<String> = []
+        for line in output.split(separator: "\n").map(String.init) {
+            if line.hasPrefix("Hardware Port:") {
+                currentIsUSB = line.lowercased().contains("usb")
+            } else if currentIsUSB, line.hasPrefix("Device:") {
+                names.insert(line.replacingOccurrences(of: "Device:", with: "")
+                    .trimmingCharacters(in: .whitespaces))
+            }
+        }
+        return names
+    }()
 
     /// 无线口名（`en0`/`en1` 这种由 `networksetup -listallhardwareports` 决定，
     /// 这里只做"是否 Wi-Fi"的启发式判断，选口仍然按 MAC 命中）。

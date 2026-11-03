@@ -427,18 +427,20 @@ struct LocalPortalProbe: ConnectivityProbing {
 
 /// 自测用的"浏览器"：取页面 → 找 form action → POST 表单。
 ///
-/// 注意：这是**测试替身**，不是生产路径。生产用 `WKWebView`（`App/Sources/WKPortalBrowser.swift`），
-/// 程序永远不碰明文密码（PLAN §5.4.2）。
+/// ⚠️ 这是**测试替身**，只存在于 `jlugate-probe` 的离线自测里，不参与任何生产路径。
+/// 生产实现是 `WKWebView`（`App/Sources/WKPortalBrowser.swift`），按决策 D-001
+/// **不做表单自动化、不预填、不接触明文密码**。
 final class CLIPortalBrowser: PortalBrowser, @unchecked Sendable {
-    let credentials: PortalCredentials
+    let account: String
+    let password: String
     private let fetcher = URLSessionPortalFetcher()
 
-    init(credentials: PortalCredentials) {
-        self.credentials = credentials
+    init(account: String, password: String) {
+        self.account = account
+        self.password = password
     }
 
-    func presentLogin(url: URL, credentials: PortalCredentials?) async -> PortalLoginResult {
-        let creds = credentials ?? self.credentials
+    func presentLogin(url: URL) async -> PortalLoginResult {
         var target = url
         let dummy = InterfaceSnapshot(name: "lo0", index: 1, ipv4: "127.0.0.1", mac: nil,
                                       isWireless: false, isUp: true)
@@ -447,9 +449,9 @@ final class CLIPortalBrowser: PortalBrowser, @unchecked Sendable {
             target = action
             print("  登录页表单 action → \(action.absoluteString)")
         }
-        print("  POST \(target.absoluteString)（账号 \(creds.account)）")
+        print("  POST \(target.absoluteString)（账号 \(account)）")
 
-        let body = "username=\(percentEncode(creds.account))&password=\(percentEncode(creds.password))"
+        let body = "username=\(percentEncode(account))&password=\(percentEncode(password))"
         var request = URLRequest(url: target)
         request.httpMethod = "POST"
         request.httpBody = Data(body.utf8)
@@ -516,7 +518,6 @@ func runPortalSelfTest(_ options: Options) -> Int32 {
                                       isWireless: true, isUp: true, linkLocalIPv4: nil,
                                       netmask: "255.0.0.0")
     let configuration = PortalConfiguration(
-        credentials: PortalCredentials(account: account, password: password),
         silentRetryOnce: true,
         silentRetryDelay: .milliseconds(300),
         promptCooldown: .seconds(300),
@@ -525,7 +526,7 @@ func runPortalSelfTest(_ options: Options) -> Int32 {
         successChecks: 5)
     let engine = PortalEngine(
         probe: LocalPortalProbe(base: base),
-        browser: CLIPortalBrowser(credentials: PortalCredentials(account: account, password: password)),
+        browser: CLIPortalBrowser(account: account, password: password),
         detector: PortalDetector(configuredURL: base.appendingPathComponent("portal")),
         configuration: configuration)
 

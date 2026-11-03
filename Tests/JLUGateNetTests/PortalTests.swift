@@ -26,18 +26,19 @@ struct ScriptedProbing: ConnectivityProbing {
 
 final class FakePortalBrowser: PortalBrowser, @unchecked Sendable {
     private let result: PortalLoginResult
-    private let box = Atomic<[(String, PortalCredentials?)]>([])
+    private let box = Atomic<[String]>([])
     private let cleared = Atomic(false)
 
     init(result: PortalLoginResult) {
         self.result = result
     }
 
-    var presented: [(url: String, credentials: PortalCredentials?)] { box.withLock { $0 } }
+    var presented: [String] { box.withLock { $0 } }
     var didClearCookies: Bool { cleared.withLock { $0 } }
 
-    func presentLogin(url: URL, credentials: PortalCredentials?) async -> PortalLoginResult {
-        box.withLock { $0.append((url.absoluteString, credentials)) }
+    /// 决策 D-001：浏览器只收 URL，没有任何凭据参数。
+    func presentLogin(url: URL) async -> PortalLoginResult {
+        box.withLock { $0.append(url.absoluteString) }
         return result
     }
 
@@ -164,7 +165,6 @@ struct PortalEngineTests {
                             browser: FakePortalBrowser,
                             failTolerance: Int = 999) -> PortalEngine {
         let configuration = PortalConfiguration(
-            credentials: PortalCredentials(account: "20230001", password: "test-pass-2024"),
             silentRetryOnce: true,
             silentRetryDelay: .milliseconds(1),
             promptCooldown: .seconds(300),
@@ -221,8 +221,8 @@ struct PortalEngineTests {
         try await portalExpect("进入 online") { recorder.saw(.online) }
         let presented = browser.presented
         #expect(presented.count == 1)
-        #expect(presented.first?.url == "http://10.100.61.3/login")
-        #expect(presented.first?.credentials?.account == "20230001", "自动填充要带上账号")
+        #expect(presented.first == "http://10.100.61.3/login")
+        #expect(presented.first?.contains("password") == false, "URL 里不该出现任何凭据")
         recorder.cancel()
         await engine.stop()
     }

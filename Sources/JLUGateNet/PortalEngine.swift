@@ -10,8 +10,6 @@ public protocol ConnectivityProbing: Sendable {
 extension ConnectivityProbe: ConnectivityProbing {}
 
 public struct PortalConfiguration: Sendable {
-    public var credentials: PortalCredentials?
-    public var autoFill: Bool
     public var silentRetryOnce: Bool
     public var silentRetryDelay: Duration
     /// 弹窗频率上限（PLAN §5.4.3：1 次 / 5 分钟）。
@@ -23,9 +21,7 @@ public struct PortalConfiguration: Sendable {
     /// 认证成功后等 204 的轮询次数与间隔。
     public var successChecks: Int
 
-    public init(credentials: PortalCredentials? = nil,
-                autoFill: Bool = true,
-                silentRetryOnce: Bool = true,
+    public init(silentRetryOnce: Bool = true,
                 silentRetryDelay: Duration = .seconds(1),
                 promptCooldown: Duration = .seconds(300),
                 probeInterval: Duration = .seconds(30),
@@ -33,8 +29,6 @@ public struct PortalConfiguration: Sendable {
                 dnsServers: [IPv4Address] = [],
                 backoff: Backoff = Backoff(),
                 successChecks: Int = 5) {
-        self.credentials = credentials
-        self.autoFill = autoFill
         self.silentRetryOnce = silentRetryOnce
         self.silentRetryDelay = silentRetryDelay
         self.promptCooldown = promptCooldown
@@ -262,10 +256,10 @@ public actor PortalEngine: AuthProvider {
         return false
     }
 
+    /// 决策 D-001：只弹窗，不预填、不代填。
     private func presentLogin(url: URL) async -> PortalLoginResult {
         lastPromptAt = clock.now()
-        let credentials = configuration.autoFill ? configuration.credentials : nil
-        let result = await browser.presentLogin(url: url, credentials: credentials)
+        let result = await browser.presentLogin(url: url)
         if case .succeeded = result {
             emit(.note("网页登录流程返回成功"))
         }

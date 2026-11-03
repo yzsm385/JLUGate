@@ -186,10 +186,16 @@ struct WizardView: View {
 
     private func finish() {
         errorText = nil
-        // 实时校验：能当场发现的错误不要留到认证时
-        if !ip.isEmpty, IPv4Address(ip) == nil { errorText = "IP 不是合法的 IPv4"; return }
-        if !gateway.isEmpty, IPv4Address(gateway) == nil { errorText = "网关不是合法的 IPv4"; return }
-        if !mac.isEmpty, MACAddress(mac) == nil { errorText = "MAC 格式不对（aa:bb:cc:dd:ee:ff）"; return }
+        // 实时校验：能当场发现的错误不要留到认证时（网段/掩码连续性是最常见的抄错）
+        let issues = NetworkValidation.issues(
+            ip: ip.isEmpty ? nil : ip,
+            mask: mask.isEmpty ? nil : mask,
+            gateway: gateway.isEmpty ? nil : gateway,
+            mac: mac.isEmpty ? nil : mac)
+        if let first = issues.first {
+            errorText = first.message
+            return
+        }
         if link != "jluWiFi", ip.isEmpty {
             errorText = "有线 / JLU.PC 需要填写 IP"
             return

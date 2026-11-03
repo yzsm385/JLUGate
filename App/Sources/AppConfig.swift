@@ -24,7 +24,6 @@ struct AppConfig: Codable, Sendable {
 
     struct Portal: Codable, Sendable {
         var entryURL: String?
-        var autoFill = true
         var silentRetryOnce = true
         var promptCooldownSeconds = 300
     }

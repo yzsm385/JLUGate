@@ -14,7 +14,7 @@
 |---|---|
 | 342 字节登录包能否复现抓包 | ✅ 逐字节相同（含摘要 A） |
 | 保活 A / B 能否复现抓包 | ✅ 逐字节相同（A 的 16 字节 = 登录摘要 A，已解） |
-| 单元测试 | ✅ `swift test` 105 条全绿（Core 49 + Net 56） |
+| 单元测试 | ✅ `swift test` 119 条全绿（Core 61 + Net 58） |
 | 离线全流程（模拟网关） | ✅ `swift run jlugate-probe --self-test` 通过 |
 | 真实认证 | ⛔ **未执行**，必须拿到环境 B 上跑（见 §6） |
 | UI | ✅ 源码完成并通过编译校验；`.app` 需在装了 XcodeGen 的机器上生成（见 §5） |
@@ -71,7 +71,7 @@ swift run jlugate-probe --self-test
 
 # 3) 全量
 swift test
-#    → 105 tests passed
+#    → 119 tests passed
 ```
 
 > **本机注意**：这个工作区跑在受限沙箱里，SwiftPM 需要把缓存与临时目录指到工作区内、
@@ -152,10 +152,13 @@ c2s  38 ff<digest>000000Drco…
 |---|---|---|
 | `PortalDetector` | 302 的 Location → 入口；200 页面里抓 `<form action>` / meta refresh；都没有就回落配置入口 | 5 条 |
 | `PortalEngine` | `detect → 静默重试 → 弹窗 → 204 确认 → online`；在线时探针连败 2 次回到 `authenticating`；弹窗 1 次/5 分钟 | 8 条 |
-| `WKPortalBrowser`（App） | 真正的 `WKWebView` 窗口，Cookie 落盘可复用；自动填充**只填不交** | 编译校验 |
+| `WKPortalBrowser`（App） | 真正的 `WKWebView` 窗口，Cookie 落盘可复用；**无任何 DOM 操作/表单填充**（决策 D-001） | 编译校验 |
 | `Tools/mock-portal` | 302 → 登录页 → POST → 204 的完整门户 | `make portal-self-test` |
 
-刻意不做的事：**不重放表单**。认证永远是"浏览器里点一下"，页面改版/JS 加密/验证码都不会让客户端失效（PLAN §5.4.2）。
+刻意不做的事（决策 D-001，2026-11-03）：**不重放表单、不预填**。
+`PortalBrowser.presentLogin(url:)` 只接收 URL，账号密码根本不进入浏览器接口；
+认证永远是"浏览器里点一下"，页面改版/JS 加密/验证码都不会让客户端失效。
+`PortalCredentials` / `PortalConfiguration.autoFill` / `AppConfig.portal.autoFill` / `WKWebView.evaluateJavaScript` 全部已删除。
 
 ### 4.7 路由保障（M2.5 的离线部分）
 
@@ -176,6 +179,14 @@ helper 进程本身（`SMAppService.daemon` + 签名）仍属 M2.5：**没有开
 | 诊断导出 | 菜单"导出" → 临时目录 .txt + 访达定位；内容含接口/路由/ConfigMethod/端口占用/日志尾 |
 | 网络参数卡 | 文本进剪贴板 + `CIFilter.qrCodeGenerator` 生成二维码 PNG（**不含密码**） |
 | 鲁棒性 | 3000 个随机载荷的 fuzz：`classify` 不崩、解析器只抛错、DNS 解析不越界 |
+| App Nap | `online` 期间 `ProcessInfo.beginActivity([.userInitiatedAllowingIdleSystemSleep])`，掉线/退出即释放（PLAN §3.2） |
+| 失败通知 | 只有 `requiresUserAction` 的失败才发系统通知，同一原因只提醒一次；超时/退避静默（PLAN §3.2） |
+| 网络跃迁 | `PathMonitor` 事件去抖 1.5s → 自动 `retry()`；拔插网线不再等 30s 心跳超时（PLAN §8.6 的 ≤5s） |
+| 拔线语义 | `adapterUnplugged` / `interfaceHasNoIPv4` 直接 `failed`，**不进退避空转**，等网络变化再重来（PLAN §6.3） |
+| 地址漂移 | 接口 IP / 掩码与档案不一致 → `staticConfigMismatch`，一个认证包都不发（PLAN §6.3） |
+| 参数卡导入 | 剪贴板里的参数卡可解析还原（全角冒号、乱序、注释都能吃）；**不含密码** |
+| 静态参数校验 | 掩码连续性、"网关是否同网段"、"网关=本机 IP"、MAC 格式，全部在向导里当场拦下 |
+| USB 网卡 | 用 `networksetup -listallhardwareports` 标出 USB 口（拔插换名时诊断用） |
 
 ---
 

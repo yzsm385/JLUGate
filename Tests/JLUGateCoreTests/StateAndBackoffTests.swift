@@ -115,6 +115,14 @@ struct DrcomErrorTests {
         }
     }
 
+    @Test("拔网线 / 网卡没地址 → 等网络变化，而不是退避空转")
+    func awaitsPathChangeClassification() {
+        #expect(DrcomError.adapterUnplugged(interface: "en7").awaitsPathChange)
+        #expect(DrcomError.interfaceHasNoIPv4(interface: "en7").awaitsPathChange)
+        #expect(DrcomError.gatewayUnreachable(host: "192.0.2.1").awaitsPathChange == false)
+        #expect(DrcomError.accountInUse(reason: "x").awaitsPathChange == false)
+    }
+
     @Test("账号冲突必须等用户，不能自己循环")
     func accountInUseRequiresUser() {
         #expect(DrcomError.accountInUse(reason: "x").requiresUserAction)

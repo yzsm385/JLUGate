@@ -31,6 +31,10 @@ final class AppModel {
     @ObservationIgnored private let portalBrowser = WKPortalBrowser()
     @ObservationIgnored private let interfacesProvider = SystemInterfaceProvider()
     @ObservationIgnored private var wizardWindow: NSWindow?
+    @ObservationIgnored private let activityKeeper = ActivityKeeper()
+    @ObservationIgnored private let pathMonitor = PathMonitor()
+    @ObservationIgnored private var pathTask: Task<Void, Never>?
+    @ObservationIgnored private var pathDebounce: Task<Void, Never>?
 
     init() {
         let loaded = ConfigStore.load()
@@ -39,12 +43,14 @@ final class AppModel {
         showWizard = loaded.currentProfile?.configuredAt == nil
         refreshDiagnostics()
         observeSleepWake()
+        observeNetworkPaths()
         if showWizard {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(600))
                 self.presentWizard()
             }
         }
+        Notifier.requestAuthorizationIfNeeded()
     }
 
     /// 首次启动 / 换账号时的向导窗口（PLAN §9.1）。
@@ -140,6 +146,8 @@ final class AppModel {
             hostname: SystemHostname.value,
             registeredMAC: profile?.registeredMAC.flatMap(MACAddress.init),
             interfaceLock: config.interfaceLock,
+            expectedIP: profile?.ip.flatMap(IPv4Address.init),
+            expectedMask: profile?.mask,
             server: server,
             serverPort: UInt16(config.serverPort),
             localPort: UInt16(config.localPort),
@@ -152,8 +160,6 @@ final class AppModel {
         let backoff = Backoff(base: config.backoff.base, cap: config.backoff.cap,
                               jitter: config.backoff.jitter, maxAttempts: config.backoff.maxAttempts)
         let portalConfiguration = PortalConfiguration(
-            credentials: PortalCredentials(account: config.account, password: password),
-            autoFill: config.portal.autoFill,
             silentRetryOnce: config.portal.silentRetryOnce,
             promptCooldown: .seconds(Double(config.portal.promptCooldownSeconds)),
             probeInterval: .seconds(config.probe.interval),
@@ -206,6 +212,7 @@ final class AppModel {
     }
 
     func disconnect() {
+        activityKeeper.end()
         coordinatorTask?.cancel()
         coordinatorTask = nil
         let coordinator = self.coordinator
@@ -242,6 +249,48 @@ final class AppModel {
 
     func persist() {
         ConfigStore.save(config)
+    }
+
+    /// 从剪贴板里的参数卡还原配置（换机/重装用）。
+    @discardableResult
+    func importConfigCardFromClipboard() -> Bool {
+        guard let text = NSPasteboard.general.string(forType: .string), !text.isEmpty else {
+            recentLog.insert("剪贴板里没有文本", at: 0)
+            return false
+        }
+        let parsed = NetworkCard.parse(text)
+        guard let account = parsed.account, !account.isEmpty else {
+            recentLog.insert("这段文本里没有“账号:”行，无法还原", at: 0)
+            return false
+        }
+        if let issues = validationIssues(parsed: parsed), !issues.isEmpty {
+            recentLog.insert("参数卡校验失败：\(issues.first?.message ?? "")", at: 0)
+            return false
+        }
+
+        config.account = account
+        if let link = parsed.link, LinkPreference(rawValue: link) != nil {
+            config.link = link
+        }
+        if let server = parsed.server { config.server = server }
+        if let port = parsed.serverPort { config.serverPort = port }
+        config.accounts[account] = AppConfig.NetworkProfile(
+            ip: parsed.ip, mask: parsed.mask, gateway: parsed.gateway,
+            dns: parsed.dns, registeredMAC: parsed.mac,
+            interfaceHint: config.accounts[account]?.interfaceHint,
+            configuredAt: config.accounts[account]?.configuredAt
+                ?? ISO8601DateFormatter().string(from: .now))
+        persist()
+        refreshDiagnostics()
+        showWizard = false
+        recentLog.insert("已从参数卡还原账号 \(account) 的网络参数", at: 0)
+        FileLogger.shared.log("导入参数卡：\(account)")
+        return true
+    }
+
+    private func validationIssues(parsed: NetworkCard.Parsed) -> [NetworkValidation.Issue]? {
+        NetworkValidation.issues(ip: parsed.ip, mask: parsed.mask,
+                                 gateway: parsed.gateway, mac: parsed.mac)
     }
 
     /// 网络参数卡片：文本进剪贴板，二维码另存为 PNG。
@@ -334,7 +383,20 @@ final class AppModel {
         switch event {
         case .state(let next):
             state = next
-            if case .failed(let error) = next { lastError = error }
+            switch next {
+            case .online:
+                // 在线期间别被 App Nap 挂起（不然 10s 心跳会被延迟成几十秒）
+                activityKeeper.begin()
+                Notifier.resetDeduplication()
+            case .idle, .failed:
+                activityKeeper.end()
+            default:
+                break
+            }
+            if case .failed(let error) = next {
+                lastError = error
+                Notifier.notifyFailure(error)
+            }
         case .link(let next):
             link = next
             recentLog.insert("链路：\(next.displayName)", at: 0)
@@ -354,6 +416,44 @@ final class AppModel {
                 recentLog.insert(message, at: 0)
             }
         }
+    }
+
+    // MARK: 网络跃迁（PLAN §6.3 / §8.6：拔插网线 ≤5s 自动恢复）
+
+    private func observeNetworkPaths() {
+        let monitor = pathMonitor
+        pathTask = Task { [weak self] in
+            for await event in monitor.events() {
+                guard let self else { return }
+                await self.handlePathEvent(event)
+            }
+        }
+    }
+
+    private func handlePathEvent(_ event: PathEvent) async {
+        FileLogger.shared.log("path \(event)")
+        switch event {
+        case .becameUnsatisfied:
+            // 先别急着拆：引擎会在保活/探针上很快发现；网卡回来时再统一重建
+            return
+        case .becameSatisfied, .interfacesChanged:
+            break
+        }
+        guard state.isOnline || isWaitingForPath else { return }
+        // 插拔 USB 网卡会连着来好几个事件，去抖一次就够
+        pathDebounce?.cancel()
+        pathDebounce = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(1500))
+            guard let self, !Task.isCancelled else { return }
+            self.recentLog.insert("检测到网络变化，重新建立连接", at: 0)
+            self.retry()
+        }
+    }
+
+    /// 是否正卡在"等网络变化"的失败态（拔网线 / 网卡没地址）。
+    private var isWaitingForPath: Bool {
+        if case .failed(let error) = state { return error.awaitsPathChange }
+        return false
     }
 
     // MARK: 休眠 / 唤醒（PLAN §8.3）

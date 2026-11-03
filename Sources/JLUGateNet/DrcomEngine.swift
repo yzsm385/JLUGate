@@ -12,6 +12,10 @@ public struct EngineConfiguration: Sendable {
     public var hostname: String
     /// 用户手动锁定的接口名（可选）。
     public var interfaceLock: String?
+    /// 档案里登记的静态 IP / 掩码。与接口实际值不符时报"IP 已漂移"，
+    /// 而不是发一串注定失败的认证包（PLAN §6.3）。
+    public var expectedIP: IPv4Address?
+    public var expectedMask: String?
 
     public var challengeSubtype: UInt8
     public var challengeTimeout: Duration
@@ -23,6 +27,7 @@ public struct EngineConfiguration: Sendable {
 
     public init(account: String, password: String, hostname: String,
                 registeredMAC: MACAddress? = nil, interfaceLock: String? = nil,
+                expectedIP: IPv4Address? = nil, expectedMask: String? = nil,
                 server: IPv4Address = PacketLayout.defaultServer,
                 serverPort: UInt16 = PacketLayout.serverPort,
                 localPort: UInt16 = PacketLayout.localPort,
@@ -37,6 +42,8 @@ public struct EngineConfiguration: Sendable {
         self.hostname = hostname
         self.registeredMAC = registeredMAC
         self.interfaceLock = interfaceLock
+        self.expectedIP = expectedIP
+        self.expectedMask = expectedMask
         self.server = server
         self.serverPort = serverPort
         self.localPort = localPort
@@ -185,6 +192,12 @@ public actor DrcomEngine {
                 if error == .cancelled { return }
                 lastError = error
 
+                // 拔网线 / 网卡暂时没地址：停下等网络变化，不做无意义的退避空转（PLAN §6.3）
+                if error.awaitsPathChange {
+                    setState(.failed(error))
+                    return
+                }
+
                 // 账号冲突 / MAC / DHCP / TUN / 服务器明确拒绝：一律停下等用户
                 // （CHECKLIST §12：认证失败不许自动重试，否则会被打成顶号乒乓）
                 if error.requiresUserAction || !error.isRetryable {
@@ -240,6 +253,18 @@ public actor DrcomEngine {
         if let method = interfaces.configMethod(of: chosen.name),
            method.lowercased() != "manual" {
             throw DrcomError.dhcpAssigned(interface: chosen.name)
+        }
+
+        // 静态地址漂移：接口在、也是 Manual，但地址不是档案里那个（换口/换网后最常见）
+        if let expected = configuration.expectedIP, localIP != expected {
+            throw DrcomError.staticConfigMismatch(field: "IP", expected: expected.description,
+                                                  actual: localIP.description)
+        }
+        if let expectedMask = configuration.expectedMask,
+           let actualMask = chosen.netmask,
+           !expectedMask.isEmpty, actualMask != expectedMask {
+            throw DrcomError.staticConfigMismatch(field: "掩码", expected: expectedMask,
+                                                  actual: actualMask)
         }
 
         if let route = interfaces.route(to: configuration.server), route.isTunnel {

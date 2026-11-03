@@ -104,6 +104,12 @@ struct SettingsView: View {
                     Button("保存") { save() }
                         .buttonStyle(.glass)
                     Button("重新检测") { model.refreshDiagnostics() }
+                    Button("从剪贴板导入参数卡") {
+                        if model.importConfigCardFromClipboard() {
+                            load()
+                            saved = true
+                        }
+                    }
                     if saved {
                         Label("已保存", systemImage: "checkmark.circle")
                             .font(.caption)

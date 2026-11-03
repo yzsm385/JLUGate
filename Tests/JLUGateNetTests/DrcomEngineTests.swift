@@ -108,6 +108,40 @@ struct DrcomEngineTests {
         await engine.stop()
     }
 
+    @Test("静态 IP 漂移：报 staticConfigMismatch，不发任何认证包")
+    func ipDrifted() async throws {
+        var configuration = makeConfiguration()
+        configuration.expectedIP = IPv4Address("192.0.2.99")   // 档案里记的旧地址
+        let (engine, channel, factory, _) = makeEngine(configuration: configuration,
+                                                       responder: { _ in [] })
+        await engine.start()
+        try await expectEventually("进入 failed") {
+            if case .failed = await engine.currentState() { true } else { false }
+        }
+        guard case .failed(let error) = await engine.currentState() else { return }
+        #expect(error == .staticConfigMismatch(field: "IP", expected: "192.0.2.99",
+                                               actual: "192.0.2.10"))
+        #expect(error.requiresUserAction)
+        #expect(channel.sentFrames.isEmpty, "地址不对时发认证包毫无意义")
+        #expect(factory.madeCount == 0)
+        await engine.stop()
+    }
+
+    @Test("掩码漂移同样拦下")
+    func maskDrifted() async throws {
+        var configuration = makeConfiguration()
+        configuration.expectedMask = "255.255.255.128"
+        let (engine, _, _, _) = makeEngine(configuration: configuration, responder: { _ in [] })
+        await engine.start()
+        try await expectEventually("进入 failed") {
+            if case .failed = await engine.currentState() { true } else { false }
+        }
+        guard case .failed(let error) = await engine.currentState() else { return }
+        #expect(error == .staticConfigMismatch(field: "掩码", expected: "255.255.255.128",
+                                               actual: "255.255.255.0"))
+        await engine.stop()
+    }
+
     @Test("登录被拒：原样展示服务器串，且不自动重试")
     func rejectionStopsRetrying() async throws {
         let (engine, channel, _, _) = makeEngine(
@@ -245,18 +279,34 @@ struct DrcomEngineTests {
         await engine.stop()
     }
 
-    @Test("网卡拔掉：报 adapterUnplugged，插回后能自动重来")
+    @Test("网卡拔掉：立刻 failed，不进退避空转（等 PathMonitor 触发重来）")
     func adapterUnplugged() async throws {
-        let (engine, _, _, _) = makeEngine(
+        let (engine, channel, factory, _) = makeEngine(
             configuration: makeConfiguration(),
             provider: FakeInterfaceProvider(interfaces: [], route: nil, configMethod: nil, gateway: nil),
             responder: { _ in [] })
+        let stream = await engine.events()
+        let reconnects = Atomic<[Int]>([])
+        let collector = Task {
+            for await event in stream {
+                if case .state(.reconnecting(let attempt)) = event {
+                    reconnects.withLock { $0.append(attempt) }
+                }
+            }
+        }
         await engine.start()
         try await expectEventually("进入 failed") {
             if case .failed = await engine.currentState() { true } else { false }
         }
+        try await Task.sleep(for: .milliseconds(80))
+        collector.cancel()
+
         guard case .failed(let error) = await engine.currentState() else { return }
         #expect(error == .adapterUnplugged(interface: "en*"))
+        #expect(error.awaitsPathChange, "这类错误要等网络变化，而不是退避")
+        #expect(reconnects.withLock { $0 }.isEmpty, "拔网线不该走 reconnecting 空转")
+        #expect(factory.madeCount == 0, "没有网卡就不该建通道")
+        #expect(channel.sentFrames.isEmpty)
         await engine.stop()
     }
 

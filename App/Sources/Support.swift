@@ -2,6 +2,7 @@ import AppKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
 import Foundation
+import JLUGateCore
 
 /// 单实例：菜单栏工具被复制成两份会互相抢 61440，动作很隐蔽（一人顶两人的号）。
 enum SingleInstance {
@@ -78,17 +79,12 @@ final class FileLogger: @unchecked Sendable {
 /// **不含密码**——卡片只承载"学校分配的网络参数"，凭据永远留在 Keychain。
 enum ConfigCard {
     static func text(config: AppConfig, profile: AppConfig.NetworkProfile) -> String {
-        """
-        # JLU Gate 网络参数卡
-        账号: \(config.account)
-        链路: \(config.link)
-        IP: \(profile.ip ?? "")
-        掩码: \(profile.mask ?? "")
-        网关: \(profile.gateway ?? "")
-        DNS: \(profile.dns.joined(separator: ","))
-        登记MAC: \(profile.registeredMAC ?? "")
-        服务器: \(config.server):\(config.serverPort)
-        """
+        NetworkCard.format(account: config.account,
+                           profile: (ip: profile.ip, mask: profile.mask, gateway: profile.gateway,
+                                     dns: profile.dns, mac: profile.registeredMAC),
+                           link: config.link,
+                           server: config.server,
+                           serverPort: config.serverPort)
     }
 
     /// 二维码（CoreImage 生成，不依赖第三方库）。
