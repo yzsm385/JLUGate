@@ -163,7 +163,8 @@ public struct SystemInterfaceProvider: InterfaceProvider {
                 isUp: acc.isUp,
                 isUSB: hardwareTable[name]?.isUSB ?? false,
                 linkLocalIPv4: acc.linkLocal,
-                netmask: acc.netmask)
+                netmask: acc.netmask,
+                hardwareName: hardwareTable[name]?.name)
         }
     }
 
@@ -175,6 +176,7 @@ public struct SystemInterfaceProvider: InterfaceProvider {
     struct HardwareInfo: Sendable {
         var isWireless = false
         var isUSB = false
+        var name: String?
     }
 
     static func hardwareInfo() -> [String: HardwareInfo] {
@@ -187,6 +189,7 @@ public struct SystemInterfaceProvider: InterfaceProvider {
             let type = SCNetworkInterfaceGetInterfaceType(interface) as String?
             let displayName = (SCNetworkInterfaceGetLocalizedDisplayName(interface) as String?) ?? ""
             var info = HardwareInfo()
+            info.name = displayName.isEmpty ? nil : displayName
             info.isWireless = (type == (kSCNetworkInterfaceTypeIEEE80211 as String))
             info.isUSB = type == (kSCNetworkInterfaceTypeEthernet as String)
                 && displayName.lowercased().contains("usb")

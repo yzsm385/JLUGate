@@ -61,10 +61,13 @@ public struct InterfaceSnapshot: Sendable, Equatable {
     public let linkLocalIPv4: String?
     /// 子网掩码（诊断用）。
     public let netmask: String?
+    /// 系统给的硬件端口名（"Wi-Fi" / "USB 10/100/1000 LAN" / "Thunderbolt Bridge"）。
+    public let hardwareName: String?
 
     public init(name: String, index: UInt32, ipv4: String?, mac: String?,
                 isWireless: Bool, isUp: Bool, isUSB: Bool = false,
-                linkLocalIPv4: String? = nil, netmask: String? = nil) {
+                linkLocalIPv4: String? = nil, netmask: String? = nil,
+                hardwareName: String? = nil) {
         self.name = name
         self.index = index
         self.ipv4 = ipv4
@@ -74,6 +77,7 @@ public struct InterfaceSnapshot: Sendable, Equatable {
         self.isUSB = isUSB
         self.linkLocalIPv4 = linkLocalIPv4
         self.netmask = netmask
+        self.hardwareName = hardwareName
     }
 
     public var ipv4Address: IPv4Address? {

@@ -273,6 +273,11 @@ func runNetDetail(_ options: Options) -> Int32 {
         if !row.isUp { marks.append("down") }
         let markText = marks.isEmpty ? "" : "  [\(marks.joined(separator: "、"))]"
         print("\(row.name) ifindex=\(row.index)  ipv4=\(row.ipv4 ?? "-")/\(row.mask ?? "-")  mac=\(row.mac ?? "-")\(markText)")
+        let info = InterfaceNarrator.explain(name: row.name, hardwareName: row.hardwareName,
+                                             isWireless: row.isWireless, isUSB: row.isUSB,
+                                             ipv4: row.ipv4)
+        print("   用途：\(info.title)｜持有者：\(info.owner)")
+        print("   \(info.note)")
     }
 
     print("\n== 隧道 / VPN ==")

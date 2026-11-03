@@ -164,6 +164,9 @@ struct NetworkDetailView: View {
                     }
                     Text("IPv4 \(row.ipv4 ?? "—") / \(row.mask ?? "—")　MAC \(row.mac ?? "—")")
                         .font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    Text(explanationTitle(for: row)).font(.caption2).foregroundStyle(.secondary)
+                    Text(explanationNote(for: row)).font(.caption2).foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                     if let linkLocal = row.linkLocal {
                         Text("链路本地 \(linkLocal)").font(.caption2.monospaced()).foregroundStyle(.tertiary)
                     }
@@ -284,6 +287,22 @@ struct NetworkDetailView: View {
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .glassEffect(.regular, in: .rect(cornerRadius: 14))
+    }
+
+    private func explanation(for row: NetworkSnapshot.InterfaceRow) -> InterfaceExplanation {
+        InterfaceNarrator.explain(name: row.name, hardwareName: row.hardwareName,
+                                  isWireless: row.isWireless, isUSB: row.isUSB,
+                                  ipv4: row.ipv4,
+                                  proxyApps: model.detectedProxyAppNames)
+    }
+
+    private func explanationTitle(for row: NetworkSnapshot.InterfaceRow) -> String {
+        let info = explanation(for: row)
+        return "\(info.title) · \(info.owner)"
+    }
+
+    private func explanationNote(for row: NetworkSnapshot.InterfaceRow) -> String {
+        explanation(for: row).note
     }
 
     private func tag(_ text: String, _ color: Color) -> some View {

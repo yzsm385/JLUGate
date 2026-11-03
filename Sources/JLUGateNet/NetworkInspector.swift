@@ -19,6 +19,7 @@ public struct NetworkSnapshot: Sendable, Equatable {
         public let isUp: Bool
         public let isDefaultRoute: Bool
         public let carriesCampusRoute: Bool
+        public let hardwareName: String?
     }
 
     public struct TunnelRow: Sendable, Equatable, Identifiable {
@@ -71,12 +72,22 @@ public struct NetworkInspector: Sendable {
                     mac: item.mac, linkLocal: item.linkLocalIPv4,
                     isWireless: item.isWireless, isUSB: item.isUSB, isUp: item.isUp,
                     isDefaultRoute: defaultRoute?.interface == item.name,
-                    carriesCampusRoute: campusRoute?.interface == item.name)
+                    carriesCampusRoute: campusRoute?.interface == item.name,
+                    hardwareName: item.hardwareName)
+            }
+            // 能用来认证、并且有地址的口排前面，方便用户一眼找到"该用哪个"
+            .sorted { lhs, rhs in
+                let leftScore = (lhs.ipv4 != nil ? 2 : 0) + (lhs.carriesCampusRoute ? 1 : 0)
+                let rightScore = (rhs.ipv4 != nil ? 2 : 0) + (rhs.carriesCampusRoute ? 1 : 0)
+                if leftScore != rightScore { return leftScore > rightScore }
+                return lhs.name < rhs.name
             }
 
         let tunnels = raw
             .filter { VirtualInterfaceNames.isVirtual($0.name) && $0.name.hasPrefix("utun") }
             .map { NetworkSnapshot.TunnelRow(name: $0.name, ipv4: $0.ipv4, ipv6: nil, isUp: $0.isUp) }
+            // 有地址（真正在承载流量）的隧道排前面
+            .sorted { ($0.ipv4 != nil ? 1 : 0, $0.name) > ($1.ipv4 != nil ? 1 : 0, $1.name) }
 
         let dns = Self.systemDNS()
         return NetworkSnapshot(

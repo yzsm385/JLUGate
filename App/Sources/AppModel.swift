@@ -565,6 +565,9 @@ final class AppModel {
         refreshDiagnostics()
     }
 
+    /// 网络详情里解释 utun 归属时要用
+    var detectedProxyAppNames: [String] { Self.detectedProxyApps() }
+
     /// 当前正在运行的代理 App（小火箭 / Clash / Surge …），只用于展示与归因。
     static func detectedProxyApps() -> [String] {
         let keywords = ["shadowrocket", "小火箭", "clash", "surge", "stash", "quantumult",
