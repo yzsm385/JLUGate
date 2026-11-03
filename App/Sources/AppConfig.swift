@@ -24,6 +24,8 @@ struct AppConfig: Codable, Sendable {
 
     struct Portal: Codable, Sendable {
         var entryURL: String?
+        /// 最近一次被门户拦下时记下的入口地址（App 内"校园网门户"用它）
+        var lastKnownURL: String?
         var silentRetryOnce = true
         var promptCooldownSeconds = 300
     }

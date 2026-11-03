@@ -28,6 +28,7 @@ struct WizardView: View {
     @State private var dns = ""
     @State private var mac = ""
     @State private var errorText: String?
+    @State private var hasSavedProfile = false
 
     var body: some View {
         @Namespace var glassNamespace
@@ -180,32 +181,20 @@ struct WizardView: View {
 
     private var networkStep: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // 分隔符由界面画出来：IP 四格、MAC 六格，填满自动跳下一格
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                LabeledAddressField(title: "IP", kind: .ipv4, text: $ip)
+                LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $mask)
+                LabeledAddressField(title: "网关", kind: .ipv4, text: $gateway)
                 GridRow {
-                    Text("IP").frame(width: 72, alignment: .leading)
-                    TextField("学校分配的固定 IP", text: $ip)
-                        .textFieldStyle(.roundedBorder)
+                    Text("DNS").frame(width: 72, alignment: .leading).foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        AddressField(kind: .ipv4, text: Binding(
+                            get: { FieldFormatting.ipv4ListInput(dns).components(separatedBy: ", ").first ?? "" },
+                            set: { dns = FieldFormatting.ipv4ListInput($0) }))
+                    }
                 }
-                GridRow {
-                    Text("子网掩码").frame(width: 72, alignment: .leading)
-                    TextField("通常是 255.255.255.0", text: $mask)
-                        .textFieldStyle(.roundedBorder)
-                }
-                GridRow {
-                    Text("网关").frame(width: 72, alignment: .leading)
-                    TextField("与 IP 同网段", text: $gateway)
-                        .textFieldStyle(.roundedBorder)
-                }
-                GridRow {
-                    Text("DNS").frame(width: 72, alignment: .leading)
-                    TextField("可留空", text: $dns)
-                        .textFieldStyle(.roundedBorder)
-                }
-                GridRow {
-                    Text("登记 MAC").frame(width: 72, alignment: .leading)
-                    TextField("该网卡的 MAC", text: $mac)
-                        .textFieldStyle(.roundedBorder)
-                }
+                LabeledAddressField(title: "登记 MAC", kind: .mac, text: $mac)
             }
 
             Label("这些值只能从学校通知单照抄。下面是系统当前读数，仅供核对——**不要照抄 DHCP 分到的地址**。",
@@ -213,6 +202,15 @@ struct WizardView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 10) {
+                if hasSavedProfile {
+                    Button("载入上次保存的参数") { loadSavedProfile() }
+                        .buttonStyle(.glass)
+                }
+                Button("清空这几格") { clearFields() }
+                    .buttonStyle(.glass)
+            }
 
             ForEach(model.interfaces.filter { $0.ipv4 != nil }, id: \.name) { item in
                 Text("\(item.name)：\(item.ipv4 ?? "-")  \(item.mac ?? "")")
@@ -243,18 +241,30 @@ struct WizardView: View {
 
     // MARK: 逻辑
 
+    /// 打开向导时**不自动回填网络参数**（那些是敏感信息，清掉就该真的没了）。
+    /// 只带出账号名与链接方式；要复用旧参数需用户主动点「载入上次保存的参数」。
     private func load() {
         let current = model.config
         account = current.account
-        password = model.password
+        password = ""
         link = current.link
-        if let profile = current.currentProfile {
-            ip = profile.ip ?? ""
-            mask = profile.mask ?? ""
-            gateway = profile.gateway ?? ""
-            dns = profile.dns.joined(separator: ", ")
-            mac = profile.registeredMAC ?? ""
-        }
+        hasSavedProfile = current.currentProfile.map {
+            !(($0.ip ?? "").isEmpty || ($0.mask ?? "").isEmpty)
+        } ?? false
+    }
+
+    /// 用户主动要求时才把已保存的参数填进来。
+    private func loadSavedProfile() {
+        guard let profile = model.config.currentProfile else { return }
+        ip = profile.ip ?? ""
+        mask = profile.mask ?? ""
+        gateway = profile.gateway ?? ""
+        dns = profile.dns.joined(separator: ", ")
+        mac = profile.registeredMAC ?? ""
+    }
+
+    private func clearFields() {
+        ip = ""; mask = ""; gateway = ""; dns = ""; mac = ""
     }
 
     private func advance() {

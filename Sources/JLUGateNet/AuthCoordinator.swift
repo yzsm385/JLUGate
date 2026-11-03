@@ -466,6 +466,12 @@ public actor AuthCoordinator {
         await portal.reclaim()
     }
 
+    /// 当前 Portal 链路的入口地址（用于 App 内"校园网门户"与缓存）。
+    public func currentPortalEntry() async -> URL? {
+        guard let portal = provider as? any PortalLoginControlling else { return nil }
+        return await portal.pendingEntry()
+    }
+
     public func portalEntry() async -> URL? {
         guard let portal = provider as? any PortalLoginControlling else { return nil }
         return await portal.pendingEntry()

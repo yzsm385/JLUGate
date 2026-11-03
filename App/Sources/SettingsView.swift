@@ -51,11 +51,15 @@ struct SettingsView: View {
             }
 
             Section {
-                TextField("IP", text: $draft.ip)
-                TextField("子网掩码", text: $draft.mask)
-                TextField("网关", text: $draft.gateway)
-                TextField("DNS（逗号分隔）", text: $draft.dns)
-                TextField("登记 MAC", text: $draft.registeredMAC)
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                    LabeledAddressField(title: "IP", kind: .ipv4, text: $draft.ip)
+                    LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $draft.mask)
+                    LabeledAddressField(title: "网关", kind: .ipv4, text: $draft.gateway)
+                    LabeledAddressField(title: "DNS", kind: .ipv4, text: Binding(
+                        get: { draft.dns.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? "" },
+                        set: { draft.dns = $0 }))
+                    LabeledAddressField(title: "登记 MAC", kind: .mac, text: $draft.registeredMAC)
+                }
             } header: {
                 Text("静态网络参数")
             } footer: {
@@ -124,6 +128,17 @@ struct SettingsView: View {
                             }
                         }
                         Spacer()
+                        Button("清空网络参数") {
+                            draft.ip = ""; draft.mask = ""; draft.gateway = ""
+                            draft.dns = ""; draft.registeredMAC = ""
+                            model.clearNetworkParameters()
+                            saved = true
+                        }
+                        Button("删除已保存的密码") {
+                            model.clearSavedPassword()
+                            draft.password = ""
+                            saved = true
+                        }
                         Button("重置本机配置…") { model.resetLocalConfiguration() }
                             .foregroundStyle(.red)
                     }

@@ -46,6 +46,8 @@ final class AppModel {
     @ObservationIgnored private var wizardWindow: NSWindow?
     @ObservationIgnored private var networkDetailWindow: NSWindow?
     @ObservationIgnored private var settingsWindow: NSWindow?
+    @ObservationIgnored private var connectionStatusWindow: NSWindow?
+    @ObservationIgnored private var portalViewerWindow: NSWindow?
     @ObservationIgnored private let activityKeeper = ActivityKeeper()
     @ObservationIgnored private let pathMonitor = PathMonitor()
     @ObservationIgnored private var pathTask: Task<Void, Never>?
@@ -366,6 +368,7 @@ final class AppModel {
             dnsServers: (profile?.dns ?? []).compactMap(IPv4Address.init),
             probeTimeout: .seconds(config.probe.timeout))
 
+        presentConnectionStatus()
         let coordinator = AuthCoordinator(configuration: coordinatorConfiguration,
                                           interfaces: interfaceProvider,
                                           detector: DefaultLinkDetector(),
@@ -516,6 +519,24 @@ final class AppModel {
         }
     }
 
+    /// 只清网络参数（IP/掩码/网关/DNS/登记 MAC），账号密码保留。
+    func clearNetworkParameters() {
+        config.currentProfile = AppConfig.NetworkProfile(configuredAt: nil)
+        persist()
+        refreshDiagnostics()
+        recentLog.insert("已清空本机保存的网络参数", at: 0)
+        FileLogger.shared.log("清空网络参数")
+    }
+
+    /// 清掉保存的密码（连带账号名也清空？不——只清密码，账号留着方便重填）。
+    func clearSavedPassword() {
+        guard !config.account.isEmpty else { return }
+        CredentialStore.delete(account: config.account)
+        password = ""
+        recentLog.insert("已删除保存的密码（本机不再记住）", at: 0)
+        FileLogger.shared.log("删除已保存的密码")
+    }
+
     /// 把本机配置恢复成出厂状态（清空 config.json、账号档案与保存的密码），然后重新走向导。
     /// 用在"配置被写坏 / 换了账号想重来"的场景。
     func resetLocalConfiguration() {
@@ -534,6 +555,78 @@ final class AppModel {
     func finishWizard() {
         showWizard = false
         refreshDiagnostics()
+        presentConnectionStatus()   // 点完成立刻有反馈
+    }
+
+    // MARK: 连接结果窗（点完成/登录后立刻给反馈）
+
+    /// 点「完成」或「登录」之后立刻弹出来，显示进度与结果——不把错误藏在菜单栏里。
+    func presentConnectionStatus() {
+        if let connectionStatusWindow {
+            connectionStatusWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let controller = NSHostingController(rootView: ConnectionStatusView().environment(self))
+        let window = NSWindow(contentViewController: controller)
+        window.title = "JLU Gate · 连接状态"
+        window.setContentSize(NSSize(width: 440, height: 260))
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.styleMask = [.titled, .closable]
+        connectionStatusWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func closeConnectionStatus() {
+        connectionStatusWindow?.orderOut(nil)
+        connectionStatusWindow = nil
+    }
+
+    // MARK: 校园网门户（App 内查看，不自动弹）
+
+    var portalViewerURL: URL? {
+        config.portal.entryURL.flatMap(URL.init(string:))
+            ?? config.portal.lastKnownURL.flatMap(URL.init(string:))
+    }
+
+    func presentPortalViewer() {
+        if let portalViewerWindow {
+            portalViewerWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let controller = NSHostingController(
+            rootView: PortalViewerView(url: portalViewerURL).environment(self))
+        let window = NSWindow(contentViewController: controller)
+        window.title = "JLU Gate · 校园网门户"
+        window.setContentSize(NSSize(width: 760, height: 620))
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.styleMask = [.titled, .closable, .resizable]
+        portalViewerWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// 被门户拦下时记下入口地址，并把页面 HTML 缓存一份，供 App 内离线查看。
+    private func rememberPortalEntry(_ url: URL) {
+        config.portal.lastKnownURL = url.absoluteString
+        persist()
+    }
+
+    func cachePortalPageIfPossible() async {
+        guard let url = portalViewerURL else { return }
+        guard let page = try? await URLSessionPortalFetcher().fetch(
+            url, interface: interfaces.first ?? InterfaceSnapshot(name: "en0", index: 0, ipv4: nil,
+                                                                mac: nil, isWireless: false, isUp: true))
+        else { return }
+        let fileURL = ConfigStore.directory.appendingPathComponent(PortalAssets.cacheFileName)
+        try? FileManager.default.createDirectory(at: ConfigStore.directory,
+                                                 withIntermediateDirectories: true)
+        try? page.body.write(to: fileURL, atomically: true, encoding: .utf8)
+        FileLogger.shared.log("已缓存门户页面：\(page.body.count) 字符")
     }
 
     // MARK: 设置窗口
@@ -766,6 +859,11 @@ final class AppModel {
         case .link(let next):
             link = next
             recentLog.insert("链路：\(next.displayName)", at: 0)
+            if next == .jluWiFi, let coordinator {
+                if let entry = await coordinator.currentPortalEntry() {
+                    rememberPortalEntry(entry)
+                }
+            }
         case .note(let message):
             recentLog.insert(message, at: 0)
             if recentLog.count > 50 { recentLog.removeLast() }
@@ -778,6 +876,9 @@ final class AppModel {
             case .traffic(let seconds, let stats):
                 secondsOnline = seconds
                 trafficStats = stats
+                if portalViewerURL != nil, seconds <= 2 {
+                    Task { await self.cachePortalPageIfPossible() }
+                }
             case .note(let message):
                 recentLog.insert(message, at: 0)
             }

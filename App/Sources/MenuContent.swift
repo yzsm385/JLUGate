@@ -254,6 +254,15 @@ struct MenuContent: View {
 
             Spacer()
 
+            if model.portalViewerURL != nil {
+                Button {
+                    model.presentPortalViewer()
+                } label: {
+                    Label("校园网门户", systemImage: "globe.asia.australia")
+                }
+                .buttonStyle(.plain)
+            }
+
             Button {
                 model.presentNetworkDetail()
             } label: {
