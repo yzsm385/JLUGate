@@ -420,25 +420,39 @@ struct WizardView: View {
         }
 
         let trimmedAccount = account.trimmingCharacters(in: .whitespaces)
-        var config = model.config
-        config.account = trimmedAccount
-        config.link = link
-        // 账号密码三网共用：只存一份，存在账号名下
-        config.accounts[trimmedAccount] = AppConfig.NetworkProfile(
-            ip: ip.isEmpty ? nil : ip,
-            mask: mask.isEmpty ? nil : mask,
-            gateway: gateway.isEmpty ? nil : gateway,
-            dns: dns.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
-                .filter { !$0.isEmpty },
-            registeredMAC: mac.isEmpty ? nil : mac,
-            interfaceHint: config.accounts[trimmedAccount]?.interfaceHint,
-            configuredAt: config.accounts[trimmedAccount]?.configuredAt
-                ?? ISO8601DateFormatter().string(from: .now))
-        model.config = config
-        model.password = password
-        model.persist()
-        try? CredentialStore.save(password: password, account: trimmedAccount)
-        model.finishWizard()
-        model.connect()
+        let capturedLink = link
+        let capturedPassword = password
+        let capturedIP = ip.isEmpty ? nil : ip
+        let capturedMask = mask.isEmpty ? nil : mask
+        let capturedGateway = gateway.isEmpty ? nil : gateway
+        let capturedDNS = dns.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        let capturedMAC = mac.isEmpty ? nil : mac
+        let previousHint = model.config.accounts[trimmedAccount]?.interfaceHint
+        let previousConfiguredAt = model.config.accounts[trimmedAccount]?.configuredAt
+
+        // 关键：不要在按钮动作里同步拆掉自己的视图再开新窗口、启动引擎（AppKit 重入会崩）。
+        // 先把数据落盘，回到主线程下一轮再关窗口、开状态窗、连接。
+        FileLogger.shared.log("wizard: 完成，链路=\(capturedLink)，账号=\(trimmedAccount.isEmpty ? "-" : trimmedAccount)")
+        Task { @MainActor in
+            var config = model.config
+            config.account = trimmedAccount
+            config.link = capturedLink
+            config.accounts[trimmedAccount] = AppConfig.NetworkProfile(
+                ip: capturedIP, mask: capturedMask, gateway: capturedGateway,
+                dns: capturedDNS, registeredMAC: capturedMAC,
+                interfaceHint: previousHint,
+                configuredAt: previousConfiguredAt ?? ISO8601DateFormatter().string(from: .now))
+            model.config = config
+            model.password = capturedPassword
+            model.persist()
+            try? CredentialStore.save(password: capturedPassword, account: trimmedAccount)
+
+            model.finishWizard()
+            // 让向导先真正退场，再创建结果窗口
+            try? await Task.sleep(for: .milliseconds(200))
+            model.presentConnectionStatus()
+            model.connect()
+        }
     }
 }

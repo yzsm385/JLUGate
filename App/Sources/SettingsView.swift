@@ -265,7 +265,7 @@ struct SettingsView: View {
 
         model.config = config
         model.password = draft.password
-        model.persist()
+        model.persist(); model.refreshDiagnostics()
         if !hadProfileForAccount, config.link != "jluWiFi", (draft.ip.isEmpty || draft.mask.isEmpty) {
             // 新账号但地址没填全：只提示，不再弹一次"输入账号密码"（刚在设置里填过）
             model.recentLog.insert("有线/JLU.PC 还需要 IP、掩码等静态参数：可以点「用系统当前读数填入」", at: 0)
@@ -275,7 +275,6 @@ struct SettingsView: View {
             try? CredentialStore.save(password: draft.password, account: draft.account)
         }
         LoginItem.apply(enabled: draft.launchAtLogin)
-        model.refreshDiagnostics()
         saved = true
         Task {
             try? await Task.sleep(for: .seconds(2))
