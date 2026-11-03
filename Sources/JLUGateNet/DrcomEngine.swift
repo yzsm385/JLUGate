@@ -297,10 +297,14 @@ public actor DrcomEngine {
     private func chooseInterface(from candidates: [InterfaceSnapshot]) throws -> InterfaceSnapshot {
         let usable = candidates.filter(\.isUsableForAuthentication)
         let pool = usable.isEmpty ? candidates : usable
+        // 一个网卡都没有：这是拔线/没地址，绝不能对着空数组 first!（会直接崩）
+        guard !pool.isEmpty else {
+            throw DrcomError.interfaceHasNoIPv4(interface: configuration.interfaceLock ?? "en*")
+        }
 
         if configuration.useRegisteredMACForAuth {
             // 系统换成了私有 MAC，但报文按登记 MAC 填：不在这里拦，直接挑最合适的口
-            return pool.sorted(by: scoreSort).first!
+            return pool.sorted(by: scoreSort).first ?? pool[0]
         }
 
         if let registered = configuration.registeredMAC {
@@ -316,11 +320,11 @@ public actor DrcomEngine {
                     throw DrcomError.macMismatch(expected: registered.description, actual: actual)
                 }
                 // 非严格模式：继续，登录报文里用登记 MAC
-                return pool.sorted(by: scoreSort).first!
+                return pool.sorted(by: scoreSort).first ?? pool[0]
             }
-            return matched.sorted(by: scoreSort).first!
+            return matched.sorted(by: scoreSort).first ?? pool[0]
         }
-        return pool.sorted(by: scoreSort).first!
+        return pool.sorted(by: scoreSort).first ?? pool[0]
     }
 
     private func scoreSort(_ lhs: InterfaceSnapshot, _ rhs: InterfaceSnapshot) -> Bool {

@@ -88,6 +88,7 @@ struct AuthCoordinatorTests {
                                  autoDetect: Bool = true,
                                  interfaces: [InterfaceSnapshot]? = nil,
                                  registeredMAC: String? = nil,
+                                 strictMACCheck: Bool = false,
                                  detector: FakeLinkDetector,
                                  spy: ProviderSpy) -> AuthCoordinator {
         let provider = FakeInterfaceProvider(
@@ -102,7 +103,8 @@ struct AuthCoordinatorTests {
             localPort: 61440,
             registeredMAC: registeredMAC.flatMap(MACAddress.init),
             dnsServers: [IPv4Address("10.10.10.10")!],
-            probeTimeout: .seconds(1))
+            probeTimeout: .seconds(1),
+            strictMACCheck: strictMACCheck)
         return AuthCoordinator(configuration: configuration,
                                interfaces: provider,
                                detector: detector,
@@ -218,11 +220,12 @@ struct AuthCoordinatorTests {
         await coordinator.stop()
     }
 
-    @Test("MAC 不匹配：直接 failed(.macMismatch)，不选口、不探测")
+    @Test("严格模式：MAC 不匹配才 failed(.macMismatch)，不选口、不探测")
     func macMismatch() async throws {
         let spy = ProviderSpy()
         let detector = FakeLinkDetector(drcomReachable: true)
         let coordinator = makeCoordinator(registeredMAC: "02:00:00:00:00:09",
+                                          strictMACCheck: true,
                                           detector: detector, spy: spy)
         await coordinator.start()
 

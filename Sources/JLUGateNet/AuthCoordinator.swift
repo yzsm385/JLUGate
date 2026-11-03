@@ -247,6 +247,8 @@ public actor AuthCoordinator {
         public var probeTimeout: Duration
         /// 保活收不到应答时，用它确认网络是否真的通（透传给 DrcomEngine）。
         public var livenessCheck: (@Sendable (InterfaceSnapshot) async -> Bool)?
+        /// 严格 MAC 校验（只在测试里开）
+        public var strictMACCheck = false
 
         public init(preference: LinkPreference = .auto,
                     autoDetect: Bool = true,
@@ -257,7 +259,8 @@ public actor AuthCoordinator {
                     interfaceLock: String? = nil,
                     dnsServers: [IPv4Address] = [],
                     probeTimeout: Duration = .seconds(3),
-                    livenessCheck: (@Sendable (InterfaceSnapshot) async -> Bool)? = nil) {
+                    livenessCheck: (@Sendable (InterfaceSnapshot) async -> Bool)? = nil,
+                    strictMACCheck: Bool = false) {
             self.preference = preference
             self.autoDetect = autoDetect
             self.server = server
@@ -267,6 +270,7 @@ public actor AuthCoordinator {
             self.dnsServers = dnsServers
             self.probeTimeout = probeTimeout
             self.livenessCheck = livenessCheck
+            self.strictMACCheck = strictMACCheck
         }
     }
 
@@ -366,7 +370,7 @@ public actor AuthCoordinator {
             candidates = candidates.filter { $0.name == lock }
         }
         guard !candidates.isEmpty else {
-            throw DrcomError.adapterUnplugged(interface: configuration.interfaceLock ?? "en*")
+            throw DrcomError.interfaceHasNoIPv4(interface: configuration.interfaceLock ?? "en*")
         }
 
         let chosen = try pick(from: candidates)
@@ -406,22 +410,32 @@ public actor AuthCoordinator {
         let usable = candidates.filter(\.isUsableForAuthentication)
         let pool = usable.isEmpty ? candidates : usable
 
-        if let registered = configuration.registeredMAC {
-            let matched = pool.filter { $0.macAddress?.matches(registered) == true }
-            guard !matched.isEmpty else {
-                throw DrcomError.macMismatch(expected: registered.description,
-                                             actual: candidates.first?.mac ?? "无")
-            }
-            return matched.sorted { lhs, rhs in
-                (lhs.isWireless ? 1 : 0, lhs.index) < (rhs.isWireless ? 1 : 0, rhs.index)
-            }.first!
+        // 一个可用网口都没有：这是"拔了网线/网卡没地址"，不是 MAC 问题
+        guard !pool.isEmpty else {
+            throw DrcomError.interfaceHasNoIPv4(interface: pool.first?.name ?? "未知")
         }
-        return pool.sorted { lhs, rhs in
-            let lscore = (lhs.isWireless ? 0 : 2) + (lhs.ipv4 != nil ? 1 : 0)
-            let rscore = (rhs.isWireless ? 0 : 2) + (rhs.ipv4 != nil ? 1 : 0)
-            if lscore != rscore { return lscore > rscore }
-            return lhs.index < rhs.index
-        }.first!
+
+        func best(_ list: [InterfaceSnapshot]) -> InterfaceSnapshot {
+            list.sorted { lhs, rhs in
+                let lscore = (lhs.isWireless ? 0 : 2) + (lhs.ipv4 != nil ? 1 : 0)
+                let rscore = (rhs.isWireless ? 0 : 2) + (rhs.ipv4 != nil ? 1 : 0)
+                if lscore != rscore { return lscore > rscore }
+                return lhs.index < rhs.index
+            }.first ?? pool[0]
+        }
+
+        // MAC 比对一律用**出厂 MAC**（系统可能套了私有/随机地址），
+        // 并且默认**不再因为对不上就抛错**——由服务器裁定，客户端只做提示。
+        if let registered = configuration.registeredMAC {
+            let matched = pool.filter { $0.macForAuthentication?.matches(registered) == true }
+            if !matched.isEmpty { return best(matched) }
+            if configuration.strictMACCheck {
+                throw DrcomError.macMismatch(expected: registered.description,
+                                             actual: pool.first?.macForAuthentication?.description ?? "无")
+            }
+            // 由服务器裁定；这里不打印（Net 层没有 logger 依赖）
+        }
+        return best(pool)
     }
 
     // MARK: 内部
