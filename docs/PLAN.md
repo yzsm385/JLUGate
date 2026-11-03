@@ -1429,6 +1429,72 @@ relay 读 ClientHello → 域名
 
 ---
 
+## 17. iOS 端可行性（连 `JLU.PC`）
+
+> 动机：`JLU.PC` 是"客户端认证"网络，而 **iOS 上没有任何正式客户端**——iPhone 用户根本用不了这条链路，
+> 只能去连 `JLU.WIFI`（网页认证）。一个能认证 `JLU.PC` 的 iOS App 是填补空白，不是重复造轮子。
+
+### 17.1 结论
+
+**协议层完全可行，真正的门槛在 iOS 的平台限制；其中两条是硬限制，必须用"让用户配合"的方式绕过。**
+
+| 维度 | 结论 |
+|---|---|
+| 协议（编码/摘要/状态机） | ✅ 直接复用 `JLUGateCore`（纯 Swift，无 I/O 依赖） |
+| UDP 收发 | ✅ `NWConnection` / BSD socket 都可用；`IP_BOUND_IF` 在 iOS SDK 里也存在 |
+| 读取 Wi-Fi MAC | ❌ **禁止**（见 17.2-①），必须用户手输 |
+| 后台保活 | ❌ 普通 App 不行，必须走 Network Extension（见 17.2-②） |
+| 程序化连 SSID | ⚠️ 可以，但要 `HotspotConfiguration` 权限（需 Apple 审批） |
+
+### 17.2 四个平台限制
+
+| # | 限制 | 影响 | 绕过方式 |
+|---|---|---|---|
+| ① | **App 读不到本机 Wi-Fi MAC**（iOS 7 起禁止；`CNCopyCurrentNetworkInfo` 只给 SSID/BSSID） | 登录包 `0x14C` 的 MAC 填不出来 | 让用户从「设置 → 无线局域网 → JLU.PC → ⓘ → Wi-Fi 地址」抄下来手输（与 macOS 手填地址同一套思路）；并在 App 里提示**把"私有 Wi-Fi 地址"设为"固定"**，否则这个 MAC 会变，认证立刻失效 |
+| ② | **普通 App 进后台几十秒即挂起**，10s 心跳必断 | 手机锁屏就掉线，"守护"无从谈起 | 把心跳跑在 `NEPacketTunnelProvider` 进程里（需 `networkextension` 权限）；或用 BGTaskScheduler 做"尽量保活"（不可靠，只能当降级） |
+| ③ | **不能自由加入指定 SSID** | 无法自动连 `JLU.PC` | 让用户手动连；或用 `NEHotspotConfigurationManager`（需 `HotspotConfiguration` 权限，Apple 审批） |
+| ④ | 未认证时 iOS 判定"无 Internet"，可能弹 Captive 页 | 体验割裂 | 认证期间关闭 CNA 干扰；认证完成后再触发系统重连 |
+
+### 17.3 代码复用边界
+
+| 层 | 复用 | 说明 |
+|---|---|---|
+| `JLUGateCore`（编解码/摘要/状态/退避/错误） | ✅ 100% | 已无任何 `Network`/`AppKit` 依赖 |
+| `JLUGateNet`（通道/网卡/路由/引擎） | ⚠️ 部分 | `BSDChannel` 的 `IP_BOUND_IF`、`InterfaceResolver` 的 `getifaddrs` 逻辑可移植；`PathMonitor`、`SMAppService`、`pf` 相关整段不可用 |
+| UI | ❌ 重写 | `MenuBarExtra` → `TabView`/`@Observable` 的普通 SwiftUI |
+
+> 工程做法：把 `JLUGateCore` 抽成独立 Package（`platforms: [.macOS(.v26), .iOS(.v26)]`），
+> iOS 端只依赖它，不依赖 macOS 的 Net 层。
+
+### 17.4 四个 Spike（按顺序，每步都能独立判死活）
+
+| 步 | 内容 | 判定标准 | 估时 |
+|---|---|---|---|
+| **S1** | 前台 App 发 20 字节 challenge | 3s 内收到 **76 字节**应答（证明 UDP 通、MAC 填对、网关认） | 0.5 天 |
+| **S2** | 前台完成 login + 保活 60 秒 | 拿到 `04` 成功包，且连续 6 轮保活有回包 | 1 天 |
+| **S3** | 套 `NEPacketTunnelProvider`，锁屏保活 | 后台 10 分钟不掉线（日志显示心跳连续） | 3 天 |
+| **S4** | `NEHotspotConfiguration` 自动连 `JLU.PC` | 点一下即完成关联（需要 entitlement） | 2 天 |
+
+**S1 不过就别往下做**——说明网关不认这台设备（MAC 没登记，或无线侧协议不同，见 U9b）。
+
+### 17.5 发行方式（决定工期与成败）
+
+| 方式 | 可行性 | 说明 |
+|---|---|---|
+| **侧载**（个人/小范围） | ✅ 现实 | 免费账号 7 天有效期、付费账号 1 年；Network Extension 权限在开发者账号下即可自签使用 |
+| **TestFlight** | ⚠️ 需审核 | 需解释 Network Extension 用途；个人测试一般能过 |
+| **App Store** | ❌ 高风险 | "用 VPN 扩展跑校园网认证"极易被拒；不建议作为 v1 目标 |
+
+**建议**：先做侧载版本，能跑通再谈发行。
+
+### 17.6 与 macOS 版的关系
+
+- 两者共享 `JLUGateCore`，协议改动一次生效两端；
+- iOS 不做共享/路由 helper（那是 macOS 的能力）；
+- iOS 的价值单一且明确：**让 iPhone 能上 `JLU.PC`**，这是目前没有任何客户端能做的事。
+
+---
+
 ## 附录 A · 抓包补充命令
 
 ```bash

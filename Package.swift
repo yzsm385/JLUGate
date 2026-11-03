@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "JLUGate",
-    platforms: [.macOS("26.0")],
+    platforms: [.macOS("26.0"), .iOS("26.0")],
     products: [
         .library(name: "JLUGateCore", targets: ["JLUGateCore"]),
         .library(name: "JLUGateNet", targets: ["JLUGateNet"]),
