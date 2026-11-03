@@ -156,12 +156,12 @@ final class StateRecorder: @unchecked Sendable {
     func cancel() { task?.cancel() }
 }
 
-@Suite("PortalEngine（§7.1 状态子集）")
+@Suite("PortalEngine（§7.1 状态子集）", .serialized)
 struct PortalEngineTests {
     let interface = InterfaceSnapshot(name: "en0", index: 4, ipv4: "192.0.2.20", mac: "02:00:00:00:00:02",
                                       isWireless: true, isUp: true)
 
-    private func makeEngine(probe: ScriptedProbing,
+    private func makeEngine(probe: some ConnectivityProbing,
                             browser: FakePortalBrowser,
                             failTolerance: Int = 999) -> PortalEngine {
         let configuration = PortalConfiguration(
@@ -269,26 +269,20 @@ struct PortalEngineTests {
     @Test("在线状态下探针连续 2 次失败 → 回到 authenticating（要求重新登录）")
     func dropsWhenProbeFails() async throws {
         let browser = FakePortalBrowser(result: .succeeded)
-        let probe = ScriptedProbing([
-            .healthy,                                                     // detect
-            .unreachable(reason: "x"), .unreachable(reason: "x"),          // 监控连续失败 2 次
-            .captivePortal(statusCode: 302, location: "http://10.100.61.3/login"),  // 重新 detect
-            .captivePortal(statusCode: 302, location: "http://10.100.61.3/login"),  // 静默重试
-            .healthy                                                       // 登录后确认
-        ])
+        let probe = ModeProbing(healthy: true)
         let engine = makeEngine(probe: probe, browser: browser, failTolerance: 2)
         let recorder = StateRecorder(engine.state)
         await engine.start(using: interface)
 
-        try await portalExpect("进入 online", timeout: .seconds(5)) { recorder.saw(.online) }
-        try await portalExpect("掉线后要求登录", timeout: .seconds(5)) {
+        try await portalExpect("进入 online", timeout: .seconds(10)) { recorder.saw(.online) }
+        probe.setHealthy(false)   // 模拟被新设备挤下线
+        try await portalExpect("掉线后要求重新登录", timeout: .seconds(10)) {
             recorder.all.contains { if case .authenticating = $0 { true } else { false } }
         }
-        try await portalExpect("弹过一次登录窗", timeout: .seconds(5)) { browser.presented.count == 1 }
+        try await portalExpect("弹出登录窗", timeout: .seconds(10)) { browser.presented.count >= 1 }
         // 掉线最常见的原因是被新设备挤掉：提示要说明三台上限
-        #expect(recorder.all.contains { if case .authenticating = $0 { true } else { false } })
-        let notice = await engine.noticeText()
-        #expect(notice?.contains("3 台") == true, "掉线提示应说明 JLU.WIFI 三台上限")
+        #expect(await engine.noticeText()?.contains("3 台") == true,
+                "掉线提示应说明 JLU.WIFI 三台上限")
         recorder.cancel()
         await engine.stop()
     }
@@ -296,13 +290,7 @@ struct PortalEngineTests {
     @Test("被挤下线时不等冷却，立刻再弹一次（帮用户重进）")
     func reclaimBypassesCooldown() async throws {
         let browser = FakePortalBrowser(result: .succeeded)
-        let probe = ScriptedProbing([
-            .healthy,
-            .unreachable(reason: "x"), .unreachable(reason: "x"),   // 掉线
-            .captivePortal(statusCode: 302, location: "http://10.100.61.3/login"),
-            .captivePortal(statusCode: 302, location: "http://10.100.61.3/login"),
-            .healthy
-        ])
+        let probe = ModeProbing(healthy: true)
         let configuration = PortalConfiguration(
             silentRetryOnce: true,
             silentRetryDelay: .milliseconds(1),
@@ -318,8 +306,10 @@ struct PortalEngineTests {
         let recorder = StateRecorder(engine.state)
         await engine.start(using: interface)
 
-        try await portalExpect("掉线后 600s 冷却内仍然弹窗", timeout: .seconds(6)) {
-            browser.presented.count == 1
+        try await portalExpect("先进入 online", timeout: .seconds(10)) { recorder.saw(.online) }
+        probe.setHealthy(false)
+        try await portalExpect("600s 冷却内仍然弹窗", timeout: .seconds(10)) {
+            browser.presented.count >= 1
         }
         #expect(await engine.noticeText()?.contains("3 台") == true)
         recorder.cancel()

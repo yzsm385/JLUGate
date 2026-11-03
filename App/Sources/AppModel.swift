@@ -33,12 +33,17 @@ final class AppModel {
     @ObservationIgnored private let connectivityProbe = ConnectivityProbe()
     /// 只观测不认证的在线状态（用户已有会话、但我们还没配账号）
     var observingExistingSession = false
+    var networkSnapshot: NetworkSnapshot?
+    var pingResults: [PingSummary] = []
+    var speedResults: [SpeedResult] = []
+    var diagnosticsBusy = false
 
     @ObservationIgnored private var coordinator: AuthCoordinator?
     @ObservationIgnored private var coordinatorTask: Task<Void, Never>?
     @ObservationIgnored private let portalBrowser = WKPortalBrowser()
     @ObservationIgnored private let interfacesProvider = SystemInterfaceProvider()
     @ObservationIgnored private var wizardWindow: NSWindow?
+    @ObservationIgnored private var networkDetailWindow: NSWindow?
     @ObservationIgnored private let activityKeeper = ActivityKeeper()
     @ObservationIgnored private let pathMonitor = PathMonitor()
     @ObservationIgnored private var pathTask: Task<Void, Never>?
@@ -88,6 +93,12 @@ final class AppModel {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(800))
                 self.connect()
+            }
+        }
+        if DevOverrides.openNetworkDetailOnLaunch {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(700))
+                self.presentNetworkDetail()
             }
         }
         if DevOverrides.autostart {
@@ -515,6 +526,90 @@ final class AppModel {
     func finishWizard() {
         showWizard = false
         refreshDiagnostics()
+    }
+
+    // MARK: 网络详情
+
+    func presentNetworkDetail() {
+        if let networkDetailWindow {
+            networkDetailWindow.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            refreshNetworkDetail()
+            return
+        }
+        let controller = NSHostingController(rootView: NetworkDetailView().environment(self))
+        let window = NSWindow(contentViewController: controller)
+        window.title = "JLU Gate · 网络详情"
+        window.setContentSize(NSSize(width: 640, height: 620))
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.styleMask = [.titled, .closable]
+        networkDetailWindow = window
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        refreshNetworkDetail()
+    }
+
+    func closeNetworkDetail() {
+        networkDetailWindow?.orderOut(nil)
+        networkDetailWindow = nil
+    }
+
+    func refreshNetworkDetail() {
+        networkSnapshot = NetworkInspector().snapshot()
+        refreshDiagnostics()
+    }
+
+    func runPing() {
+        guard !diagnosticsBusy else { return }
+        diagnosticsBusy = true
+        let snapshot = networkSnapshot ?? NetworkInspector().snapshot()
+        let interface = interfaces.first(where: \.isUsableForAuthentication) ?? interfaces.first
+        Task { @MainActor in
+            let service = PingService()
+            var results: [PingSummary] = []
+            for target in PingTarget.defaults(snapshot: snapshot) {
+                let pair = await service.compare(target, interface: interface)
+                results.append(pair.direct)
+                results.append(PingSummary(host: "经默认出口 " + pair.viaDefault.host,
+                                           latencies: pair.viaDefault.latencies,
+                                           attempted: pair.viaDefault.attempted))
+            }
+            pingResults = results
+            diagnosticsBusy = false
+            FileLogger.shared.log("网络详情：Ping 完成 \(results.count) 项")
+        }
+    }
+
+    func runSpeedTest() {
+        guard !diagnosticsBusy else { return }
+        diagnosticsBusy = true
+        let interface = interfaces.first(where: \.isUsableForAuthentication) ?? interfaces.first
+        Task { @MainActor in
+            let results = await SpeedTestService().compare(interface: interface)
+            speedResults = results
+            diagnosticsBusy = false
+            FileLogger.shared.log("网络详情：测速完成 \(results.count) 项")
+        }
+    }
+
+    func copyNetworkDetail() {
+        guard let snapshot = networkSnapshot else { return }
+        var lines: [String] = ["JLU Gate 网络详情", ""]
+        for row in snapshot.interfaces {
+            lines.append("\(row.name) ifindex=\(row.index) ipv4=\(row.ipv4 ?? "-")/\(row.mask ?? "-") mac=\(row.mac ?? "-") 无线=\(row.isWireless) USB=\(row.isUSB)")
+        }
+        for tunnel in snapshot.tunnels {
+            lines.append("隧道 \(tunnel.name) ipv4=\(tunnel.ipv4 ?? "-") up=\(tunnel.isUp)")
+        }
+        lines.append("默认出口：\(snapshot.defaultRoute?.interface ?? "-")")
+        lines.append("认证出口：\(snapshot.campusRoute?.interface ?? "-")")
+        lines.append("系统 DNS：\(snapshot.dnsServers.joined(separator: ", "))")
+        for summary in pingResults { lines.append(summary.description) }
+        for result in speedResults { lines.append(result.description) }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
+        recentLog.insert("已复制网络详情", at: 0)
     }
 
     // MARK: 诊断

@@ -219,6 +219,13 @@ struct MenuContent: View {
             Spacer()
 
             Button {
+                model.presentNetworkDetail()
+            } label: {
+                Label("网络详情", systemImage: "network")
+            }
+            .buttonStyle(.plain)
+
+            Button {
                 model.copyDiagnostics()
             } label: {
                 Label("复制诊断", systemImage: "doc.on.clipboard")

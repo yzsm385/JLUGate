@@ -26,6 +26,8 @@ enum DevOverrides {
         var portal: String?
         /// `"scripted"` 时用脚本化浏览器代替 WKWebView（仅用于无人值守自检）
         var browser: String?
+        /// 自检时自动打开「网络详情」窗口
+        var openNetDetail: Bool?
     }
 
     private static let fileConfig: FileConfig? = {
@@ -67,6 +69,12 @@ enum DevOverrides {
             return nil
         }
         return URL(string: raw)
+    }
+
+    /// 自检时自动打开「网络详情」窗口。
+    static var openNetworkDetailOnLaunch: Bool {
+        guard isEnabled else { return false }
+        return fileConfig?.openNetDetail ?? false
     }
 
     /// 自检是否用脚本化浏览器代替真实的 WKWebView 窗口。

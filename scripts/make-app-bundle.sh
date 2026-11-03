@@ -14,6 +14,7 @@ for arg in "$@"; do
         --dev)   DEV=1 ;;
         --dev-portal) DEV=2 ;;
         --dev-autostart) DEV=3 ;;
+        --dev-net-detail) DEV=4 ;;
     esac
 done
 
@@ -70,6 +71,11 @@ fi
 if [ "$DEV" = "3" ]; then
     echo "==> dev harness: autostart only (real network)"
     echo '{ "autostart": true }' > "$APP/Contents/Resources/dev-config.json"
+fi
+
+if [ "$DEV" = "4" ]; then
+    echo "==> dev harness: open network detail on launch"
+    echo '{ "openNetDetail": true }' > "$APP/Contents/Resources/dev-config.json"
 fi
 
 if [ "$DEV" = "2" ]; then

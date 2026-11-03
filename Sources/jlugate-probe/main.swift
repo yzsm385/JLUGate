@@ -337,7 +337,8 @@ func runSpeedCheck(_ options: Options) -> Int32 {
             print("❌ 测速失败（端点不可达；可换 --speed-url 指定 HTTP 测速地址）")
         }
         for result in results {
-            print("  " + result.description)
+            print("  " + result.description
+                  + String(format: "  [%d 字节 / %.2f 秒, %@]", result.bytes, result.seconds, result.endpoint))
         }
         semaphore.signal()
     }

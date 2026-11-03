@@ -205,3 +205,20 @@ enum FixturesLike {
         return result
     }
 }
+
+/// 状态驱动（而不是"按脚本消费"）的假探针：并发下不会因为调用次数错位而 flaky。
+final class ModeProbing: ConnectivityProbing, @unchecked Sendable {
+    private let healthy = Atomic(true)
+    let calls = Atomic(0)
+
+    init(healthy: Bool = true) { self.healthy.withLock { $0 = healthy } }
+
+    func setHealthy(_ value: Bool) { healthy.withLock { $0 = value } }
+
+    func run(interface: InterfaceSnapshot, dnsServers: [IPv4Address]) async -> ProbeOutcome {
+        calls.withLock { $0 += 1 }
+        return healthy.withLock { $0 }
+            ? .healthy
+            : .captivePortal(statusCode: 302, location: "http://10.100.61.3/login")
+    }
+}

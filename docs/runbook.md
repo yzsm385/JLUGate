@@ -165,6 +165,27 @@ open "dist/JLU Gate.app"
 登录成功后**不要退出 App**，直接关掉 Wi-Fi 再打开：`PortalEngine` 会先静默试一次
 （复用 Cookie），通了就不弹窗；只有静默失败才再弹一次（5 分钟内不重复打扰）。
 
+### 6.3.1 网络详情 / Ping / 测速（不用终端也能看）
+
+菜单 →「网络详情…」打开的窗口里有：
+
+| 区块 | 内容 |
+|---|---|
+| VPN / TUN | 列出 utun 接口与地址；默认出口、认证流量出口是不是被虚拟网卡接管 |
+| 网口 | 每个口的名字/ifindex/IPv4/掩码/MAC/链路本地，并标注「无线 / USB / 默认出口 / 认证流量」 |
+| 路由与 DNS | 默认路由、系统 DNS；出现 `198.18.x.x` 会警告"DNS 被代理劫持" |
+| Ping | 网关与公网各测 4 次 TCP 握手延迟，并对比"经默认出口（含 VPN）"的额外延迟 |
+| 测速 | 分别用「网口直连」和「当前默认出口（含 VPN）」下载 10s，给出 Mbps 与 MB/s |
+| 这些字段是什么意思 | MAC / IPv4 / 掩码 / 网关 / DNS / 链路本地 / 路由 / TUN / 测速 / Ping 的白话解释 |
+
+命令行等价物（排查时更好贴给别人）：
+
+```bash
+./jlugate-probe --net-detail   # 网口/路由/DNS/VPN + 字段解释
+./jlugate-probe --ping         # 直连 vs 默认出口的延迟对比
+./jlugate-probe --speed        # 直连 vs VPN 的下载速度对比
+```
+
 ### 6.4 没有校园网时怎么验证 App 真的能跑
 
 `make app-bundle` 产出的 `dist/JLU Gate.app` 可以直接运行。想在没有校园网的机器上

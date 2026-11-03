@@ -203,15 +203,22 @@ public struct SpeedEndpoint: Sendable, Equatable {
         self.path = path
     }
 
-    /// 默认用 Cloudflare 的测速端点；国内网络若不通会自动尝试第二个。
+    /// 只用**纯 HTTP、且真的会吐大文件**的端点（我们不引 TLS 依赖）：
+    /// CacheFly / ThinkBroadband 是经典的 HTTP 测速文件；
+    /// 国内网络通常阿里云镜像更快，作为第三个候选。
     public static let defaults: [SpeedEndpoint] = [
-        SpeedEndpoint(label: "Cloudflare", host: "speed.cloudflare.com",
-                      path: "/__down?bytes=10000000"),
-        SpeedEndpoint(label: "CacheFly", host: "cachefly.cachefly.net", path: "/10mb.test"),
+        SpeedEndpoint(label: "清华镜像", host: "mirrors.tuna.tsinghua.edu.cn",
+                      path: "/ubuntu-releases/22.04/ubuntu-22.04.5-desktop-amd64.iso"),
+        SpeedEndpoint(label: "中科大镜像", host: "mirrors.ustc.edu.cn",
+                      path: "/ubuntu-releases/22.04/ubuntu-22.04.5-desktop-amd64.iso"),
+        SpeedEndpoint(label: "网易镜像", host: "mirrors.163.com",
+                      path: "/ubuntu-releases/22.04/ubuntu-22.04.5-desktop-amd64.iso"),
+        SpeedEndpoint(label: "ThinkBroadband", host: "ipv4.download.thinkbroadband.com",
+                      path: "/5MB.zip"),
     ]
 }
 
-public struct SpeedResult: Sendable, Equatable {
+public struct SpeedResult: Sendable, Equatable, Hashable {
     public let label: String
     public let endpoint: String
     public let boundInterface: String?
@@ -232,16 +239,67 @@ public struct SpeedTestService: Sendable {
     public init() {}
 
     /// 下载 `maxBytes` 字节并计算速度。`interface == nil` = 走系统默认路由（VPN/TUN）。
+    ///
+    /// 优先用 `/usr/bin/curl` 量带宽：它能正确走 HTTPS、跟随跳转、处理拥塞窗口；
+    /// 手写 recv 循环在这类测速上会低估一个数量级（实测 0.2 Mbps vs 真实 20 Mbps）。
     public func download(endpoint: SpeedEndpoint, interface: InterfaceSnapshot?,
-                         maxBytes: Int = 6_000_000,
-                         timeout: Duration = .seconds(15)) async -> SpeedResult? {
+                         maxBytes: Int = 3_000_000,
+                         timeout: Duration = .seconds(10)) async -> SpeedResult? {
+        // curl 失败（例如直连被网关限制）就如实返回 nil，让 UI 说"不可用"，
+        // 不用手写 recv 循环兜底：实测它会低估一个数量级，反而误导用户。
+        return Self.measureWithCurl(endpoint: endpoint, interface: interface,
+                                    maxBytes: maxBytes, timeout: timeout)
+    }
+
+    static func measureWithCurl(endpoint: SpeedEndpoint, interface: InterfaceSnapshot?,
+                                maxBytes: Int, timeout: Duration) -> SpeedResult? {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/curl") else { return nil }
+        let url = "http://\(endpoint.host)\(endpoint.path)"
+        // 注意：不要加 --max-filesize——它会让 curl 直接拒绝下载（exit 63、size=0）。
+        // 用 --max-time 限时，按"这段时间下载了多少字节"算速度。
+        _ = maxBytes
+        var arguments = ["-s", "-o", "/dev/null",
+                         "--max-time", "\(timeout.components.seconds)",
+                         "-w", "%{size_download} %{time_total}",
+                         url]
+        if let interface {
+            arguments.insert(contentsOf: ["--interface", interface.name], at: 0)
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return nil
+        }
+        let output = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        let parts = output.split(separator: " ")
+        guard parts.count == 2,
+              let bytes = Double(parts[0]), let seconds = Double(parts[1]),
+              bytes >= 64 * 1024, seconds > 0 else { return nil }
+        return SpeedResult(label: endpoint.label,
+                           endpoint: "\(endpoint.host)\(endpoint.path)",
+                           boundInterface: interface?.name,
+                           bytes: Int(bytes), seconds: seconds)
+    }
+
+    /// 没有 curl 时的兜底（纯 BSD socket，只支持 HTTP）。
+    func downloadWithBSD(endpoint: SpeedEndpoint, interface: InterfaceSnapshot?,
+                         maxBytes: Int, timeout: Duration) async -> SpeedResult? {
         let addresses = await Self.resolve(endpoint.host, interface: interface)
         guard let address = addresses.first else { return nil }
         let started = ContinuousClock.now
         let bytes = Self.httpDownload(ip: address, host: endpoint.host, path: endpoint.path,
                                       maxBytes: maxBytes, timeout: timeout)
         let elapsed = ContinuousClock.now - started
-        guard bytes > 0 else { return nil }
+        // 太小（<64 KB）基本是错误页/重定向页，别当作测速结果
+        guard bytes >= 64 * 1024 else { return nil }
         let seconds = Double(elapsed.components.seconds)
             + Double(elapsed.components.attoseconds) / 1_000_000_000_000_000
         return SpeedResult(label: endpoint.label,
@@ -254,12 +312,12 @@ public struct SpeedTestService: Sendable {
     public func compare(interface: InterfaceSnapshot?,
                         endpoints: [SpeedEndpoint] = SpeedEndpoint.defaults) async -> [SpeedResult] {
         var results: [SpeedResult] = []
-        for endpoint in endpoints {
+        for endpoint in endpoints.prefix(2) {
             if let direct = await download(endpoint: endpoint, interface: interface) {
                 results.append(direct)
             }
         }
-        for endpoint in endpoints {
+        for endpoint in endpoints.prefix(2) {
             if let vpn = await download(endpoint: endpoint, interface: nil) {
                 results.append(vpn)
             }
@@ -287,7 +345,7 @@ public struct SpeedTestService: Sendable {
     }
 
     static func httpDownload(ip: IPv4Address, host: String, path: String,
-                             maxBytes: Int, timeout: Duration) -> Int {
+                             maxBytes: Int, timeout: Duration, redirectsLeft: Int = 2) -> Int {
         let fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
         guard fd >= 0 else { return 0 }
         defer { Darwin.close(fd) }
@@ -314,31 +372,74 @@ public struct SpeedTestService: Sendable {
             guard soError == 0 else { return 0 }
         }
 
-        let request = "GET \(path) HTTP/1.1\r\nHost: \(host)\r\nUser-Agent: JLUGate\r\nConnection: close\r\n\r\n"
+        let request = "GET \(path) HTTP/1.1\r\nHost: \(host)\r\nUser-Agent: JLUGate-Speedtest\r\n"
+            + "Accept: */*\r\nConnection: close\r\n\r\n"
         let payload = Array(request.utf8)
         _ = payload.withUnsafeBytes { Darwin.send(fd, $0.baseAddress, $0.count, 0) }
 
         var buffer = [UInt8](repeating: 0, count: 64 * 1024)
-        var total = 0
+        var headerBytes: [UInt8] = []
         var headerDone = false
-        let deadline = Date().addingTimeInterval(Double(timeout.components.seconds))
-        while total < maxBytes, Date() < deadline {
+        var total = 0
+        // 用单调时钟做截止：这台机器上 Date() 会被系统对时跳变，用它当 deadline 会永远跑不完
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+
+        while ContinuousClock.now < deadline {
             var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
             guard poll(&descriptor, 1, 1500) > 0 else { break }
             let read = recv(fd, &buffer, buffer.count, 0)
-            guard read > 0 else { break }
-            let chunk = Array(buffer[0..<read])
-            if !headerDone {
-                // 跳过 HTTP 头，只统计正文
-                if let range = Self.headerEnd(in: chunk) {
-                    headerDone = true
-                    total += chunk.count - range
-                }
-                continue
+            if read < 0 {
+                // 非阻塞 socket：EAGAIN 不是结束，只是这一轮没数据
+                if errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR { continue }
+                break
             }
+            if read == 0 { break }   // 对端关闭
+            var chunk = Array(buffer[0..<read])
+
+            if !headerDone {
+                headerBytes.append(contentsOf: chunk)
+                guard headerBytes.count <= 32 * 1024 else { return 0 }
+                guard let headerEnd = Self.headerEnd(in: headerBytes) else { continue }
+                headerDone = true
+                let header = String(decoding: headerBytes[0..<headerEnd], as: UTF8.self)
+                if let redirect = Self.redirectTarget(header: header, host: host, redirectsLeft: redirectsLeft) {
+                    return httpDownload(ip: redirect.ip, host: redirect.host, path: redirect.path,
+                                        maxBytes: maxBytes, timeout: timeout,
+                                        redirectsLeft: redirectsLeft - 1)
+                }
+                chunk = Array(headerBytes[headerEnd...])
+                headerBytes = []
+            }
+
             total += chunk.count
+            if total >= maxBytes { break }
         }
-        return headerDone ? total : 0
+        return headerDone ? min(total, maxBytes) : 0
+    }
+
+    /// 3xx + Location → 解析出下一跳（只支持字面 IP 或同域名的 http 地址）。
+    static func redirectTarget(header: String, host: String,
+                               redirectsLeft: Int) -> (ip: IPv4Address, host: String, path: String)? {
+        guard redirectsLeft > 0 else { return nil }
+        let lines = header.split(separator: "\r\n").map(String.init)
+        guard let statusLine = lines.first else { return nil }
+        let parts = statusLine.split(separator: " ")
+        guard parts.count >= 2, let code = Int(parts[1]), (300..<400).contains(code) else { return nil }
+        guard let locationLine = lines.first(where: { $0.lowercased().hasPrefix("location:") }) else { return nil }
+        let value = locationLine.dropFirst("location:".count).trimmingCharacters(in: .whitespaces)
+        // 只接受 http:// 形式（我们只做纯 HTTP 测速）
+        var rest = value
+        if let schemeRange = rest.range(of: "://") {
+            guard rest[..<schemeRange.lowerBound].lowercased() == "http" else { return nil }
+            rest = String(rest[schemeRange.upperBound...])
+        }
+        guard let slash = rest.firstIndex(of: "/") else { return nil }
+        var newHost = String(rest[..<slash])
+        let path = String(rest[slash...])
+        if let colon = newHost.firstIndex(of: ":") { newHost = String(newHost[..<colon]) }
+        guard let ip = IPv4Address(newHost) else { return nil }
+        _ = host
+        return (ip, newHost, path)
     }
 
     /// 找到 `\r\n\r\n` 之后的正文起点。
