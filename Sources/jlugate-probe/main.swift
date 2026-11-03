@@ -95,6 +95,7 @@ func printHelp() {
       jlugate-probe --self-test [--seconds 8] [--keepalive 1]   # 对 127.0.0.1 模拟网关跑全流程
       jlugate-probe --interfaces                                # 列出物理网卡（只读）
       jlugate-probe --route-check [--server 10.100.61.3]        # 路由出口 / ConfigMethod（只读）
+      jlugate-probe --detect                                    # 判定当前网络走哪条链路（会发 1 个 challenge）
       jlugate-probe --dump-login --account X --password Y       # 离线打印 342 字节登录包
       jlugate-probe --login --account X --password Y [--mac ..] # 真机认证（只能在环境 B 执行）
 
@@ -180,6 +181,69 @@ func runDumpLogin(_ options: Options) {
     } catch {
         print("编码失败：\(error)")
     }
+}
+
+// MARK: - 链路判定（真机）
+
+/// 只做判定、**不认证**：对候选口各发 1 个 challenge（3s 超时、不重试），再跑 204 探针。
+/// 结果就是 `AuthCoordinator` 在 `auto` 下会做的选择。
+func runDetect(_ options: Options) -> Int32 {
+    print("⚠️ 该命令会向 \(options.server):\(options.serverPort) 各发 1 个 challenge（不认证），只应在环境 B 上跑。")
+    let provider = SystemInterfaceProvider()
+    let detector = DefaultLinkDetector()
+    let server = IPv4Endpoint(host: IPv4Address(options.server) ?? PacketLayout.defaultServer,
+                              port: UInt16(options.serverPort))
+
+    let candidates = provider.physicalInterfaces()
+    guard !candidates.isEmpty else {
+        print("没有物理接口")
+        return 2
+    }
+    print("候选接口：\(candidates.map(\.name).joined(separator: ", "))")
+
+    let semaphore = DispatchSemaphore(value: 0)
+    let verdict = ResultBox2()
+    Task.detached {
+        for item in candidates {
+            let reachable = await detector.probeDrcom(interface: item, server: server,
+                                                      localPort: UInt16(options.localPort),
+                                                      timeout: .seconds(3))
+            print("  \(item.name)（\(item.ipv4 ?? "无 IPv4")）Dr.Com challenge：\(reachable ? "有回执 ✅" : "无回执")")
+            if reachable {
+                verdict.link = item.isWireless ? .jluPC : .wired
+                semaphore.signal()
+                return
+            }
+        }
+        let outcome = await detector.probeConnectivity(interface: candidates[0],
+                                                       dnsServers: [IPv4Address("10.10.10.10")!])
+        switch outcome {
+        case .healthy:
+            print("  204 探针：已在线（无需认证）")
+            verdict.alreadyOnline = true
+        case .captivePortal(let code, let location):
+            print("  204 探针：被拦截（HTTP \(code) \(location ?? "")）→ 应走 JLU.WIFI 网页认证")
+            verdict.link = .jluWiFi
+        case .unreachable(let reason):
+            print("  204 探针：不通（\(reason)）")
+        }
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 30)
+
+    if verdict.alreadyOnline {
+        print("结论：当前已在线上，不需要认证。")
+    } else if let link = verdict.link {
+        print("结论：应走【\(link.displayName)】。")
+    } else {
+        print("结论：当前网络不是校园网（两个探针都不通）。")
+    }
+    return 0
+}
+
+final class ResultBox2: @unchecked Sendable {
+    var link: AccessLink?
+    var alreadyOnline = false
 }
 
 // MARK: - 自测（对模拟网关）
@@ -393,6 +457,8 @@ case "interfaces":
     runInterfaces()
 case "route-check":
     runRouteCheck(options)
+case "detect":
+    exit(runDetect(options))
 case "dump-login":
     runDumpLogin(options)
 case "login":

@@ -13,7 +13,7 @@ macOS 26 的校园网认证客户端（Dr.Com UDP + 菜单栏常驻 + Liquid Gla
 ## 快速开始
 
 ```bash
-make test        # 52 条单元测试（编码器黄金向量 + 状态机 + 通道）
+make test        # 74 条单元测试（编码器黄金向量 + 状态机 + 通道 + 探针/选路）
 make self-test   # 对 127.0.0.1 的模拟网关跑 challenge→login→保活 全流程
 make dump-login  # 离线打印 342 字节登录包，人工核对偏移
 ```
@@ -23,6 +23,7 @@ make dump-login  # 离线打印 342 字节登录包，人工核对偏移
 ```bash
 swift run jlugate-probe --interfaces     # 网卡 / MAC / IPv4
 swift run jlugate-probe --route-check    # 10.100.61.3 的出口是不是被 TUN 接管、ConfigMethod 是否 Manual
+swift run jlugate-probe --detect         # 只判定走哪条链路（发 1 个 challenge，不认证；真机用）
 ```
 
 ## 真机（只能在有线 Mac 上做）

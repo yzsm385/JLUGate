@@ -41,6 +41,13 @@ public enum DrcomError: Error, Sendable, Equatable {
     /// 同一 MAC 被另一台设备占用。
     case macInUse(reason: String)
 
+    // MARK: 链路选择
+
+    /// 探针判定当前网络不是校园网（challenge 无回执、204 探针也不通）。
+    case notCampusNetwork(detail: String)
+    /// 该链路当前版本还没实现（例如 `JLU.WIFI` 的网页登录）。
+    case unsupportedLink(String)
+
     // MARK: 传输
 
     case timeout(stage: String)
@@ -85,6 +92,10 @@ public enum DrcomError: Error, Sendable, Equatable {
             return reason
         case .macInUse(let reason):
             return reason
+        case .notCampusNetwork(let detail):
+            return "当前网络不是校园网（\(detail)）"
+        case .unsupportedLink(let detail):
+            return "该接入方式尚未支持：\(detail)"
         case .timeout(let stage):
             return "等待服务器回应超时（\(stage)）"
         case .channelFailure(let detail):
@@ -102,8 +113,10 @@ public enum DrcomError: Error, Sendable, Equatable {
              .localPortInUse, .macMismatch, .cancelled, .rejected:
             return false
         case .malformed, .fieldTooLong, .interfaceHasNoIPv4, .adapterUnplugged,
-             .gatewayUnreachable, .timeout, .channelFailure:
+             .gatewayUnreachable, .timeout, .channelFailure, .notCampusNetwork:
             return true
+        case .unsupportedLink:
+            return false
         }
     }
 
@@ -111,7 +124,7 @@ public enum DrcomError: Error, Sendable, Equatable {
     public var requiresUserAction: Bool {
         switch self {
         case .accountInUse, .macInUse, .macMismatch, .dhcpAssigned,
-             .staticConfigMismatch, .capturedByTunnel, .localPortInUse:
+             .staticConfigMismatch, .capturedByTunnel, .localPortInUse, .unsupportedLink:
             return true
         default:
             return false

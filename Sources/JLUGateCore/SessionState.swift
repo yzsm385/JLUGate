@@ -47,6 +47,9 @@ public enum AuthState: Sendable, Equatable {
         case (.idle, .discovering),
              (.idle, .challenging):
             return true
+        // 链路协调器的"探针已 204，本来就在线"：没走认证直接进 online。
+        case (.idle, .online):
+            return true
         case (.discovering, .challenging),
              (.discovering, .reconnecting):
             return true

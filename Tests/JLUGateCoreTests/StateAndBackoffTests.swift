@@ -73,7 +73,10 @@ struct SessionStateTests {
 
     @Test("非法转移必须被拒绝")
     func illegalTransitions() {
-        #expect(AuthState.idle.canTransition(to: .online) == false)
+        // 注意：`idle → online` 是合法的 —— 协调器探针看到 204 时"本来就在线"，
+        // 不走认证直接置 online（见 AuthCoordinator.alreadyOnline）。
+        #expect(AuthState.idle.canTransition(to: .online) == true)
+        #expect(AuthState.challenging.canTransition(to: .authenticating))
         #expect(AuthState.challenging.canTransition(to: .online) == false)
         #expect(AuthState.online.canTransition(to: .authenticating) == false)
         #expect(AuthState.authenticating.canTransition(to: .discovering) == false)

@@ -14,7 +14,7 @@
 |---|---|
 | 342 字节登录包能否复现抓包 | ✅ 逐字节相同（含摘要 A） |
 | 保活 A / B 能否复现抓包 | ✅ 逐字节相同（A 的 16 字节 = 登录摘要 A，已解） |
-| 单元测试 | ✅ `swift test` 52 条全绿（Core 40 + Net 12） |
+| 单元测试 | ✅ `swift test` 74 条全绿（Core 45 + Net 29） |
 | 离线全流程（模拟网关） | ✅ `swift run jlugate-probe --self-test` 通过 |
 | 真实认证 | ⛔ **未执行**，必须拿到环境 B 上跑（见 §6） |
 | UI | ✅ 源码完成并通过编译校验；`.app` 需在装了 XcodeGen 的机器上生成（见 §5） |
@@ -27,6 +27,7 @@
 Sources/
 ├── JLUGateCore/            # 纯协议，无 I/O，可在任何平台编译
 │   ├── Bytes.swift         # 带边界检查的偏移读写器（越界抛 .malformed）
+│   ├── DNSPacket.swift     # 自带 DNS 的 A 记录查询/解析（含压缩指针）
 │   ├── MD5.swift           # RFC 1321 自实现（不用 CryptoKit）
 │   ├── Addresses.swift     # IPv4Address / MACAddress
 │   ├── PacketLayout.swift  # 唯一允许出现魔法偏移的地方
@@ -41,6 +42,8 @@ Sources/
 │   ├── NWChannel.swift         # NWParameters.udp + requiredInterface + requiredLocalEndpoint
 │   ├── InterfaceResolver.swift # getifaddrs + route get + ipconfig getsummary
 │   ├── PathMonitor.swift       # NWPathMonitor → PathEvent
+│   ├── ConnectivityProbe.swift # 自带 DNS 的 204 探针（BSD 传输实现）
+│   ├── AuthCoordinator.swift   # AccessLink / AuthProvider / 选链路 / teardown
 │   └── DrcomEngine.swift       # actor + epoch 状态机 + 保活 + 退避
 ├── jlugate-probe/          # --self-test / --interfaces / --route-check / --dump-login / --login
 App/                        # MenuBarExtra + Liquid Glass（SwiftUI）
@@ -65,7 +68,7 @@ swift run jlugate-probe --self-test
 
 # 3) 全量
 swift test
-#    → 52 tests passed
+#    → 74 tests passed
 ```
 
 > **本机注意**：这个工作区跑在受限沙箱里，SwiftPM 需要把缓存与临时目录指到工作区内、
@@ -114,6 +117,31 @@ c2s  38 ff<digest>000000Drco…
 
 > 建议把上表合并回 `CHECKLIST.md` / `protocol-findings.md`；本轮没有直接改那两份文档，
 > 以免与人工维护的原文冲突。
+
+---
+
+## 4.5 本轮新增：探针 + 链路协调器（离线可测）
+
+| 组件 | 行为 | 测试 |
+|---|---|---|
+| `DNSPacket`（Core） | 只查 A 记录；处理名字压缩指针；rcode≠0、越界一律抛错 | 5 条 |
+| `ConnectivityProbe`（Net） | 目标 `generate_204`，学校 DNS 不通时回落内置字面 IP；204=健康、200/30x=门户、连不上=异常 | 7 条 |
+| `AuthCoordinator`（Net） | `auto` 下：challenge 有回执→有线/JLU.PC；否则 204 被拦→JLU.WIFI；204 已通→直接 online；都不通→`failed(.notCampusNetwork)` | 10 条 |
+| `DrcomAuthProvider` | 把 `DrcomEngine` 包成 `AuthProvider`（`AsyncStream<AuthState>`） | 间接覆盖 |
+
+三个刻意的设计点：
+
+1. **探测只发 1 个 challenge、3s 超时、不重试**（PLAN §5.4.4），并且 `autoDetect = false` 时就完全不碰网关。
+2. **切换链路先 teardown**：`stop()` 一定 `await provider.stop()`，避免"Portal 已登录、UDP 还在保活"的双活。
+3. **用户显式指定链路时不做探测**：即使 challenge 没回执也照用（用户可能知道得比探针多），失败原因由引擎逐条报。
+
+新增两个错误分类（原 CHECKLIST §8 列表之外，理由都写进 `userMessage`）：
+
+- `notCampusNetwork(detail:)` —— 两个探针都不通时给的一句话；
+- `unsupportedLink(_:)` —— 选到了还没实现的链路（如 `JLU.WIFI`），**不进重试**。
+
+> App 层目前仍直连 `DrcomEngine`：协调器选完链路后还要能拿到保活流量统计，等 Portal 落地时
+> 再统一改成"协调器 + 双 provider"，避免现在为了统一而把 UI 事件流砍掉一半。
 
 ---
 
@@ -175,10 +203,10 @@ sudo tcpdump -i en7 -n -s 0 -X "udp port 61440" -w ~/Desktop/jlugate.pcap
 
 | 项 | 位置 | 原因 / 前置 |
 |---|---|---|
-| `ConnectivityProbe`（自带 DNS 的 204 探针） | PLAN §8.2 | 需要真网络才可验证；Dr.Com 链路本身靠保活判活，先用保活 |
+| ~~`ConnectivityProbe`（自带 DNS 的 204 探针）~~ | PLAN §8.2 | ✅ 已实现并在离线单测覆盖（判定矩阵 7 条） |
+| ~~`AuthCoordinator` 多链路切换~~ | PLAN §4 | ✅ 已实现（选链路/teardown/状态透传，10 条单测）；App 仍直连引擎，见下 |
 | `JLUGateRouteHelper`（root LaunchDaemon） | PLAN §6.6 / M2.5 | 需要签名与 `SMAppService.daemon`，属 M2.5 |
-| `PortalEngine` / `PortalDetector` / `WKWebView` 登录窗 | PLAN §5.4 / M4.5 | `JLU.WIFI` 链路，需 U10（HAR） |
-| `AuthCoordinator` 多链路切换 | PLAN §4 | 等 Portal 落地后统一 |
+| `PortalEngine` / `PortalDetector` / `WKWebView` 登录窗 | PLAN §5.4 / M4.5 | `JLU.WIFI` 链路，需 U10（HAR）；当前协调器选中 `.jluWiFi` 后会得到一个明确的 `unsupportedLink` 失败 |
 | 链路选择的 "challenge 探测 +4 分" | PLAN §6.3 | 需要真网关；当前按 MAC + 有线 + IPv4 打分，探测留到 M3 |
 | 界面本地化（String Catalog） | — | 当前为中文硬编码 |
 
