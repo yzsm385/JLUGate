@@ -158,7 +158,26 @@ struct MenuContent: View {
                 .glassEffect(.clear, in: .rect(cornerRadius: 12))
             }
 
-            if model.canOpenPortalLogin {
+            if model.portalLimitNotice != nil, !model.state.isOnline {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("JLU.WIFI 同时最多 \(JLUWiFiLimits.maxDevices) 台设备", systemImage: "exclamationmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Text(JLUWiFiLimits.reclaimNotice)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button {
+                        model.reclaimPortal()
+                    } label: {
+                        Label("重新抢回在线", systemImage: "arrow.uturn.backward.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.glass)
+                }
+                .padding(10)
+                .glassEffect(.clear, in: .rect(cornerRadius: 12))
+            } else if model.canOpenPortalLogin {
                 Button {
                     model.openPortalLogin()
                 } label: {

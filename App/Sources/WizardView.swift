@@ -95,9 +95,23 @@ struct WizardView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            TextField("学号 / 账号", text: $account)
+            TextField("学校邮箱前缀（不是整个邮箱）", text: $account)
                 .textFieldStyle(.roundedBorder)
                 .textContentType(.username)
+
+            // 账号就是邮箱 @mails.jlu.edu.cn 前面那一段；跟着输入实时给出判断
+            if !account.isEmpty {
+                let analysis = AccountFormat.analyze(account)
+                Label(analysis.hint, systemImage: analysis.isLikelyValid ? "checkmark.circle" : "questionmark.circle")
+                    .font(.caption2)
+                    .foregroundStyle(analysis.isLikelyValid ? Color.secondary : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(AccountFormat.guidance)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             SecureField("密码", text: $password)
                 .textFieldStyle(.roundedBorder)
@@ -247,10 +261,16 @@ struct WizardView: View {
         errorText = nil
         switch step {
         case .credentials:
-            guard !account.trimmingCharacters(in: .whitespaces).isEmpty else {
-                errorText = "请填写学号 / 账号"
+            let normalized = AccountFormat.normalize(account)
+            guard !normalized.isEmpty else {
+                errorText = "请填写账号（学校邮箱 @\(AccountFormat.mailDomain) 前面的那一段）"
                 return
             }
+            if AccountFormat.analyze(normalized).kind == .unrecognized {
+                errorText = AccountFormat.analyze(normalized).hint
+                return
+            }
+            account = normalized
             guard !password.isEmpty else {
                 errorText = "请填写密码"
                 return

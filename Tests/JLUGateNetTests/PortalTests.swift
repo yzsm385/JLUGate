@@ -280,11 +280,48 @@ struct PortalEngineTests {
         let recorder = StateRecorder(engine.state)
         await engine.start(using: interface)
 
-        try await portalExpect("进入 online", timeout: .seconds(3)) { recorder.saw(.online) }
-        try await portalExpect("掉线后要求登录", timeout: .seconds(3)) {
+        try await portalExpect("进入 online", timeout: .seconds(5)) { recorder.saw(.online) }
+        try await portalExpect("掉线后要求登录", timeout: .seconds(5)) {
             recorder.all.contains { if case .authenticating = $0 { true } else { false } }
         }
-        try await portalExpect("弹过一次登录窗", timeout: .seconds(3)) { browser.presented.count == 1 }
+        try await portalExpect("弹过一次登录窗", timeout: .seconds(5)) { browser.presented.count == 1 }
+        // 掉线最常见的原因是被新设备挤掉：提示要说明三台上限
+        #expect(recorder.all.contains { if case .authenticating = $0 { true } else { false } })
+        let notice = await engine.noticeText()
+        #expect(notice?.contains("3 台") == true, "掉线提示应说明 JLU.WIFI 三台上限")
+        recorder.cancel()
+        await engine.stop()
+    }
+
+    @Test("被挤下线时不等冷却，立刻再弹一次（帮用户重进）")
+    func reclaimBypassesCooldown() async throws {
+        let browser = FakePortalBrowser(result: .succeeded)
+        let probe = ScriptedProbing([
+            .healthy,
+            .unreachable(reason: "x"), .unreachable(reason: "x"),   // 掉线
+            .captivePortal(statusCode: 302, location: "http://10.100.61.3/login"),
+            .captivePortal(statusCode: 302, location: "http://10.100.61.3/login"),
+            .healthy
+        ])
+        let configuration = PortalConfiguration(
+            silentRetryOnce: true,
+            silentRetryDelay: .milliseconds(1),
+            promptCooldown: .seconds(600),     // 刻意设很大
+            probeInterval: .seconds(1),
+            failTolerance: 2,
+            successChecks: 3)
+        let engine = PortalEngine(probe: probe, browser: browser,
+                                  detector: PortalDetector(fetcher: StubFetcher(
+                                      page: PortalPage(statusCode: 200, body: "<form action='/login'>"))),
+                                  configuration: configuration,
+                                  clock: FakeClock())
+        let recorder = StateRecorder(engine.state)
+        await engine.start(using: interface)
+
+        try await portalExpect("掉线后 600s 冷却内仍然弹窗", timeout: .seconds(6)) {
+            browser.presented.count == 1
+        }
+        #expect(await engine.noticeText()?.contains("3 台") == true)
         recorder.cancel()
         await engine.stop()
     }

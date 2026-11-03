@@ -70,7 +70,10 @@ public actor PortalEngine: AuthProvider {
     private var task: Task<Void, Never>?
     private var authState: AuthState = .idle
     private var currentEntry: URL?
+    /// 最近一次"被挤下线"的提示（供菜单显示）。
+    private var lastNotice: String?
     private var lastPromptAt: ContinuousClock.Instant?
+    private var currentInterface: InterfaceSnapshot?
 
     public init(probe: any ConnectivityProbing = ConnectivityProbe(),
                 browser: any PortalBrowser,
@@ -90,6 +93,7 @@ public actor PortalEngine: AuthProvider {
 
     public func start(using snapshot: InterfaceSnapshot) async {
         await stop()
+        currentInterface = snapshot
         let epoch = nextEpoch()
         task = Task { [weak self] in
             await self?.run(epoch: epoch, interface: snapshot)
@@ -125,6 +129,31 @@ public actor PortalEngine: AuthProvider {
     public func pendingEntry() -> URL? { currentEntry }
 
     public func currentState() -> AuthState { authState }
+
+    /// 菜单里要显示的说明（被踢原因 / 重进代价）。
+    public func noticeText() -> String? { lastNotice }
+
+    /// 用户点"重新抢回在线"：立刻走一次登录（会踢掉队列第二台，UI 需先提示）。
+    public func reclaim() async {
+        guard let url = currentEntry else {
+            emit(.note("还没有拿到门户地址，请先等待一次探测（或到设置里填入口 URL）"))
+            return
+        }
+        lastNotice = JLUWiFiLimits.reclaimNotice
+        emit(.note(JLUWiFiLimits.reclaimNotice))
+        let result = await presentLogin(url: url)
+        switch result {
+        case .succeeded:
+            if let interface = currentInterface,
+               await waitForOnline(epoch: epoch, interface: interface) {
+                markOnline()
+            }
+        case .cancelled:
+            emit(.note("已取消抢回"))
+        case .failed(let reason):
+            setState(.failed(.rejected(reason: reason)))
+        }
+    }
 
     public func events() -> AsyncStream<Event> {
         AsyncStream { continuation in
@@ -239,7 +268,12 @@ public actor PortalEngine: AuthProvider {
             failures += 1
             if failures >= configuration.failTolerance {
                 setState(previous: .online, next: .authenticating)
-                emit(.note("204 探针连续 \(failures) 次失败，需要重新登录"))
+                // JLU.WIFI 只有 3 个名额：掉线最常见的原因是被新设备挤掉。
+                // 既然要帮用户重进，就把弹窗冷却清零（否则要等 5 分钟才弹）。
+                lastNotice = JLUWiFiLimits.kickNotice
+                lastPromptAt = nil
+                emit(.note(JLUWiFiLimits.kickNotice))
+                emit(.note("204 探针连续 \(failures) 次失败，准备重新登录"))
                 return
             }
         }
@@ -316,6 +350,8 @@ public actor PortalEngine: AuthProvider {
 /// 让协调器能把"打开登录页"转发给 Portal 链路。
 public protocol PortalLoginControlling: Sendable {
     func requestLogin() async
+    /// 被挤下线后主动抢回（会踢掉队列第二台，UI 需先告知用户）。
+    func reclaim() async
     func pendingEntry() async -> URL?
 }
 

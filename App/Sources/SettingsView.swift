@@ -33,7 +33,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("账号") {
-                TextField("学号 / 账号", text: $draft.account)
+                TextField("学校邮箱前缀（如 zhangcyy2122 / zhangshanwu）", text: $draft.account)
                 SecureField("密码（存 Keychain）", text: $draft.password)
             }
 

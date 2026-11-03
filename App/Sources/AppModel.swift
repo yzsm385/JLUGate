@@ -297,6 +297,22 @@ final class AppModel {
         connect()
     }
 
+    /// JLU.WIFI 被挤下线时给用户的说明（三台上限 + 重进代价）。
+    var portalLimitNotice: String? {
+        guard link == .jluWiFi || (link == nil && config.link == "jluWiFi") else { return nil }
+        guard !state.isOnline else { return nil }
+        return JLUWiFiLimits.reclaimNotice
+    }
+
+    /// 菜单里的"重新抢回在线"（会踢掉队列第二台）。
+    func reclaimPortal() {
+        guard let coordinator else {
+            presentWizard()
+            return
+        }
+        Task { await coordinator.reclaimPortal() }
+    }
+
     /// 菜单里的"打开 Portal 登录页"。
     func openPortalLogin() {
         guard let coordinator else {

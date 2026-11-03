@@ -457,6 +457,15 @@ public actor AuthCoordinator {
         await portal.requestLogin()
     }
 
+    /// 菜单里的"重新抢回在线"。
+    public func reclaimPortal() async {
+        guard let portal = provider as? any PortalLoginControlling else {
+            emit(.note("当前链路不是网页认证"))
+            return
+        }
+        await portal.reclaim()
+    }
+
     public func portalEntry() async -> URL? {
         guard let portal = provider as? any PortalLoginControlling else { return nil }
         return await portal.pendingEntry()
