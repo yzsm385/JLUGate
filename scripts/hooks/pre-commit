@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# 通用版提交前检查（可分发）：不内置任何真实身份信息。
+# 安装：./scripts/install-hooks.sh
+set -uo pipefail
+fail=0
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+
+bad=$(printf '%s\n' "$staged" | grep -Ei '(^|/)local/|(^|/)PRIVATE\.md$|\.pcap$|\.pcapng$|\.har$' || true)
+if [ -n "$bad" ]; then
+  echo "❌ 拒绝提交：以下路径属于私密/抓包文件"
+  printf '%s\n' "$bad" | sed 's/^/   /'
+  fail=1
+fi
+
+if [ -x ./scripts/privacy-scan.sh ]; then
+  ./scripts/privacy-scan.sh || fail=1
+fi
+
+exit "$fail"

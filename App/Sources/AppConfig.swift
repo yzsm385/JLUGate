@@ -1,0 +1,102 @@
+import Foundation
+
+/// 配置 schema（对齐 PLAN 附录 C，`schemaVersion = 3`）。
+///
+/// 放在 `~/Library/Application Support/JLUGate/config.json`，**不含密码**
+/// （密码在 Keychain，见 `CredentialStore`）。
+struct AppConfig: Codable, Sendable {
+    struct NetworkProfile: Codable, Sendable {
+        var ip: String?
+        var mask: String?
+        var gateway: String?
+        var dns: [String] = []
+        /// 学校平台登记的 MAC（不是"当前接口 MAC"）。
+        var registeredMAC: String?
+        var interfaceHint: String?
+        var configuredAt: String?
+    }
+
+    struct RouteGuard: Codable, Sendable {
+        var mode = "auto"
+        var helperAuthorized: Bool?
+        var remindOnLaunch = true
+    }
+
+    struct Portal: Codable, Sendable {
+        var entryURL: String?
+        var autoFill = true
+        var silentRetryOnce = true
+        var promptCooldownSeconds = 300
+    }
+
+    struct KeepAlive: Codable, Sendable {
+        var interval = 10.0
+        var jitter = 0.1
+        var missTolerance = 3
+    }
+
+    struct Probe: Codable, Sendable {
+        var interval = 30.0
+        var timeout = 3.0
+        var failTolerance = 2
+    }
+
+    struct BackoffSettings: Codable, Sendable {
+        var base = 2.0
+        var cap = 60.0
+        var jitter = 3.0
+        var maxAttempts = 8
+    }
+
+    var schemaVersion = 3
+    var account = ""
+    var link = "auto"
+    var server = "10.100.61.3"
+    var serverPort = 61440
+    var localPort = 61440
+    var channel = "nw"
+    var interfaceLock: String?
+    var accounts: [String: NetworkProfile] = [:]
+    var autoDetect = true
+    var routeGuard = RouteGuard()
+    var portal = Portal()
+    var keepAlive = KeepAlive()
+    var probe = Probe()
+    var backoff = BackoffSettings()
+    var launchAtLogin = true
+    var logLevel = "info"
+
+    var currentProfile: NetworkProfile? {
+        get { accounts[account] }
+        set { accounts[account] = newValue }
+    }
+}
+
+/// 极简 JSON 落盘（不引入第三方）。写盘失败只记日志，不打断用户操作。
+struct ConfigStore {
+    static var directory: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("JLUGate", isDirectory: true)
+    }
+
+    static var fileURL: URL { directory.appendingPathComponent("config.json") }
+
+    static func load() -> AppConfig {
+        guard let data = try? Data(contentsOf: fileURL),
+              let config = try? JSONDecoder().decode(AppConfig.self, from: data) else {
+            return AppConfig()
+        }
+        return config
+    }
+
+    static func save(_ config: AppConfig) {
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(config).write(to: fileURL, options: .atomic)
+        } catch {
+            NSLog("JLUGate: 配置写入失败 \(error)")
+        }
+    }
+}

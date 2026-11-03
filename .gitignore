@@ -1,0 +1,21 @@
+.build/
+.swiftpm/
+DerivedData/
+*.xcuserstate
+__pycache__/
+.DS_Store
+
+# 任何抓包一律不进仓库（含 IP/MAC/账号摘要）
+*.pcap
+*.pcapng
+*.har
+docs/captures/*
+!docs/captures/README.md
+
+# 本地产物
+dist/
+*.app
+
+# ⛔ 本地私密档案：真实凭据、原始抓包、未脱敏样本
+local/
+**/PRIVATE.md

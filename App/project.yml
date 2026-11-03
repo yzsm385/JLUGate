@@ -1,0 +1,38 @@
+# XcodeGen 描述：`brew install xcodegen && cd App && xcodegen generate`
+# 生成 JLUGate.xcodeproj，引用上一层目录的本地 Swift Package。
+name: JLUGate
+options:
+  bundleIdPrefix: dev.jlugate
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+
+packages:
+  JLUGate:
+    path: ..
+
+targets:
+  JLUGate:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources
+    dependencies:
+      - package: JLUGate
+        product: JLUGateCore
+      - package: JLUGate
+        product: JLUGateNet
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.jlugate.app
+        PRODUCT_NAME: JLUGate
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "26.0"
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_CFBundleDisplayName: "JLU Gate"
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
