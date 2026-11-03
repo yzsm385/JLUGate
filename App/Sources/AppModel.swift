@@ -36,9 +36,22 @@ final class AppModel {
         case detail
         case status
         case portal
+        case portalLogin
     }
 
-    var panel: Panel = .main
+    private(set) var panel: Panel = .main
+
+    /// 切面板统一延后一跳：按钮动作里立即改布局尺寸会落在 AppKit 的 display cycle 内。
+    func show(_ next: Panel) {
+        Task { @MainActor in
+            self.panel = next
+            FileLogger.shared.log("面板 -> \(next)")
+        }
+    }
+    /// 正在等待用户完成的网页认证（面板内渲染）
+    private(set) var pendingPortalLoginURL: URL?
+    @ObservationIgnored private var portalLoginContinuation:
+        CheckedContinuation<PortalLoginResult, Never>?
 
     @ObservationIgnored private var shouldAutoConnectOnLaunch = false
     @ObservationIgnored private var watchTask: Task<Void, Never>?
@@ -74,7 +87,7 @@ final class AppModel {
 
     @ObservationIgnored private var coordinator: AuthCoordinator?
     @ObservationIgnored private var coordinatorTask: Task<Void, Never>?
-    @ObservationIgnored private let portalBrowser = WKPortalBrowser()
+    @ObservationIgnored private lazy var portalBrowser = WKPortalBrowser(model: self)
     @ObservationIgnored private let interfacesProvider = SystemInterfaceProvider()
     @ObservationIgnored private let activityKeeper = ActivityKeeper()
     @ObservationIgnored private let pathMonitor = PathMonitor()
@@ -186,8 +199,8 @@ final class AppModel {
 
     /// 首次启动 / 换账号时的向导窗口（PLAN §9.1）。
     func presentWizard() {
-        panel = .wizard
         showWizard = true
+        show(.wizard)
         FileLogger.shared.log("面板：向导")
         // 面板可能在用户点开时才出现，这里不主动激活窗口
     }
@@ -321,6 +334,8 @@ final class AppModel {
             ("detail", AnyView(NetworkDetailView().environment(self))),
             ("status", AnyView(ConnectionStatusView().environment(self))),
             ("portal", AnyView(PortalViewerView(url: portalViewerURL).environment(self))),
+            ("portalLogin", AnyView(PortalLoginPanel(url: URL(string: "https://login.jlu.edu.cn")!)
+                .environment(self))),
         ]
         for (name, view) in probes {
             let host = NSHostingView(rootView: view)
@@ -659,12 +674,29 @@ final class AppModel {
 
     /// 点「完成」或「登录」之后立刻弹出来，显示进度与结果——不把错误藏在菜单栏里。
     func presentConnectionStatus() {
-        panel = .status
-        FileLogger.shared.log("面板：连接状态")
+        show(.status)
     }
 
     func closeConnectionStatus() {
         panel = .main
+    }
+
+    // MARK: 网页认证（面板内）
+
+    /// 由 `PanelPortalBrowser` 调用：切到登录面板并把续体挂起来。
+    func presentPortalLogin(_ url: URL, continuation: CheckedContinuation<PortalLoginResult, Never>) {
+        portalLoginContinuation = continuation
+        pendingPortalLoginURL = url
+        show(.portalLogin)
+    }
+
+    func finishPortalLogin(_ result: PortalLoginResult) {
+        let continuation = portalLoginContinuation
+        portalLoginContinuation = nil
+        pendingPortalLoginURL = nil
+        if panel == .portalLogin { panel = .main }
+        FileLogger.shared.log("网页认证面板：用户选择 \(result)")
+        continuation?.resume(returning: result)
     }
 
     // MARK: 校园网门户（App 内查看，不自动弹）
@@ -675,8 +707,7 @@ final class AppModel {
     }
 
     func presentPortalViewer() {
-        panel = .portal
-        FileLogger.shared.log("面板：校园网门户")
+        show(.portal)
     }
 
     func closePortalViewer() {
@@ -705,8 +736,7 @@ final class AppModel {
     // MARK: 设置面板
 
     func presentSettings() {
-        panel = .settings
-        FileLogger.shared.log("面板：设置")
+        show(.settings)
     }
 
     func closeSettings() {
@@ -813,8 +843,7 @@ final class AppModel {
     // MARK: 网络详情
 
     func presentNetworkDetail() {
-        panel = .detail
-        FileLogger.shared.log("面板：网络详情")
+        show(.detail)
         Task { @MainActor in refreshNetworkDetail() }
     }
 

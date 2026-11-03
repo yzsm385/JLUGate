@@ -21,6 +21,14 @@ struct MenuContent: View {
                 embedded { ConnectionStatusView() }
             case .portal:
                 embedded { PortalViewerView(url: model.portalViewerURL) }
+            case .portalLogin:
+                embedded {
+                    if let url = model.pendingPortalLoginURL {
+                        PortalLoginPanel(url: url)
+                    } else {
+                        Text("没有待完成的网页认证").font(.caption)
+                    }
+                }
             }
         }
     }
@@ -30,7 +38,7 @@ struct MenuContent: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
                 Button {
-                    model.panel = .main
+                    model.show(.main)
                 } label: {
                     Label("返回", systemImage: "chevron.left")
                         .labelStyle(.titleAndIcon)
