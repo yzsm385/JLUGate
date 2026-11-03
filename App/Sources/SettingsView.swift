@@ -208,7 +208,10 @@ struct SettingsView: View {
         let config = model.config
         let profile = config.currentProfile
         draft.account = config.account
-        draft.password = model.password
+        // 内存里没有也去本机凭据里取一次，别让用户重输
+        draft.password = model.password.isEmpty
+            ? (CredentialStore.password(for: config.account) ?? "")
+            : model.password
         draft.link = config.link
         draft.channel = config.channel
         draft.server = config.server
@@ -268,7 +271,8 @@ struct SettingsView: View {
         config.accounts[draft.account] = profile
 
         model.config = config
-        model.password = draft.password
+        // 密码框留空表示"沿用已保存的密码"，不要用空值覆盖
+        if !draft.password.isEmpty { model.password = draft.password }
         model.persist(); model.refreshDiagnostics()
         if !hadProfileForAccount, config.link != "jluWiFi", (draft.ip.isEmpty || draft.mask.isEmpty) {
             // 新账号但地址没填全：只提示，不再弹一次"输入账号密码"（刚在设置里填过）

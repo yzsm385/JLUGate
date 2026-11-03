@@ -310,7 +310,10 @@ struct WizardView: View {
     private func load() {
         let current = model.config
         account = current.account
-        password = ""
+        // 已经保存过的密码直接带出来：用户输过一次就不该再输第二次
+        password = model.password.isEmpty
+            ? (CredentialStore.password(for: current.account) ?? "")
+            : model.password
         link = current.link
         hasSavedProfile = current.currentProfile.map {
             !(($0.ip ?? "").isEmpty || ($0.mask ?? "").isEmpty)
@@ -363,6 +366,10 @@ struct WizardView: View {
                 return
             }
             account = normalized
+            let stored = CredentialStore.password(for: account) ?? ""
+            if password.isEmpty, !stored.isEmpty {
+                password = stored          // 本机存过：直接复用，不逼用户再输
+            }
             guard !password.isEmpty else {
                 errorText = "请填写密码"
                 return

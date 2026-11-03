@@ -345,6 +345,10 @@ final class AppModel {
                 config.link = "wired"
             }
         }
+        // 密码框为空但本机存过 → 直接复用，不再弹"输入账号密码"
+        if password.isEmpty {
+            password = CredentialStore.password(for: config.account) ?? ""
+        }
         guard !config.account.trimmingCharacters(in: .whitespaces).isEmpty, !password.isEmpty else {
             recentLog.insert("还没有账号或密码：请先在设置里填一次（之后会自动记住）", at: 0)
             presentWizard()
