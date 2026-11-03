@@ -55,7 +55,7 @@ struct AppConfig: Codable, Sendable {
     var server = "10.100.61.3"
     var serverPort = 61440
     var localPort = 61440
-    var channel = "nw"
+    var channel = "bsd"
     var interfaceLock: String?
     var accounts: [String: NetworkProfile] = [:]
     var autoDetect = true

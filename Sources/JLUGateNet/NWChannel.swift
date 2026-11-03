@@ -114,29 +114,40 @@ public final class NWChannel: DatagramChannel, @unchecked Sendable {
         guard let connection = currentConnection() else {
             throw DrcomError.channelFailure("通道未打开")
         }
-        return try await withThrowingTaskGroup(of: Data.self) { group in
-            group.addTask {
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Data, Error>) in
-                    let box = OneShotContinuation(continuation)
-                    connection.receiveMessage { data, _, _, error in
-                        if let error {
-                            box.resume(throwing: DrcomError.channelFailure("recv 失败：\(error.localizedDescription)"))
-                        } else if let data, !data.isEmpty {
-                            box.resume(returning: data)
-                        } else {
-                            box.resume(throwing: DrcomError.timeout(stage: "receive"))
-                        }
-                    }
+
+        // 两个任务赛跑：先收到数据 → 原样保留连接；先超时 → 才取消连接（丢弃旧 fd）。
+        // 之前的写法在**收到数据后也 cancel()**，等于握手的第一个应答就把连接废掉，
+        // 后面发登录包必然失败（真机上表现为"握手中"然后断开/闪退）。
+        enum Outcome: Sendable {
+            case data(Data)
+            case timedOut
+        }
+
+        // 不用 TaskGroup：receieveMessage 的续体不能取消，放在 group 里会一直等它，
+        // 反而让超时失效。这里用"先到者先 resume"的盒子，超时用独立计时任务。
+        let outcome = await withCheckedContinuation { (continuation: CheckedContinuation<Outcome, Never>) in
+            let box = OneShotBox(continuation)
+            let timer = Task {
+                try? await Task.sleep(for: timeout)
+                box.resume(.timedOut)
+            }
+            box.attach(timer: timer)
+            connection.receiveMessage { data, _, _, error in
+                if error == nil, let data, !data.isEmpty {
+                    box.resume(.data(data))
+                } else {
+                    box.resume(.timedOut)
                 }
             }
-            group.addTask {
-                try await Task.sleep(for: timeout)
-                throw DrcomError.timeout(stage: "receive")
-            }
-            let result = try await group.next()!
-            group.cancelAll()
-            connection.cancel() // 超时后丢弃这个连接，旧 fd 一律不复用（PLAN §8.3 第 4 条）
-            return result
+        }
+
+        switch outcome {
+        case .data(let data):
+            return data                      // 连接继续可用
+        case .timedOut:
+            connection.cancel()              // 超时才丢弃这条连接
+            state.withLock { $0 = nil }
+            throw DrcomError.timeout(stage: "receive")
         }
     }
 
@@ -182,6 +193,37 @@ public final class NWChannel: DatagramChannel, @unchecked Sendable {
             _ = try await group.next()
             group.cancelAll()
         }
+    }
+}
+
+/// 允许"只 resume 一次"的续体盒子（NW 的回调可能重复/迟到）。
+/// 收包的容错版本：超时与数据走同一条续体（见 `receive`）。
+private final class OneShotBox<Outcome: Sendable>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Outcome, Never>?
+    private var timer: Task<Void, Never>?
+
+    init(_ continuation: CheckedContinuation<Outcome, Never>) {
+        self.continuation = continuation
+    }
+
+    func attach(timer: Task<Void, Never>) {
+        lock.lock()
+        let alreadyDone = continuation == nil
+        if !alreadyDone { self.timer = timer }
+        lock.unlock()
+        if alreadyDone { timer.cancel() }
+    }
+
+    func resume(_ value: Outcome) {
+        lock.lock()
+        let continuation = self.continuation
+        let timer = self.timer
+        self.continuation = nil
+        self.timer = nil
+        lock.unlock()
+        timer?.cancel()                 // 收到数据就别再等超时了
+        continuation?.resume(returning: value)
     }
 }
 

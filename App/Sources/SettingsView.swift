@@ -14,7 +14,7 @@ struct SettingsView: View {
         var account = ""
         var password = ""
         var link = "auto"
-        var channel = "nw"
+        var channel = "bsd"
         var server = "10.100.61.3"
         var serverPort = "61440"
         var localPort = "61440"
