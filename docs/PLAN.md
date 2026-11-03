@@ -183,7 +183,7 @@
 2. 认证协议只有**两种**（Dr.Com / Portal），但要按**三条链路**做 UI 与配置；架构上用 `AuthProvider` 抽象隔开，不允许把 Portal 硬塞进 Dr.Com 状态机（§5.4）。
 3. 菜单栏常驻、无 Dock 图标、开机自启、首次启动引导；**纯 SwiftUI + Liquid Glass**，最低 **macOS 26.0**（用户要求）。
 4. **在 TUN 模式代理全程开启的条件下**正常工作，且**断线后无人值守自动恢复**（用户明确要求）。实现路径是三层：路由已放行 → 直连；被 TUN 接管 → 最小特权 helper 加 `-ifscope` 的 `/32` 路由；helper 被拒 → 给用户可复制命令（§6.5）。**不允许静默失败，也不允许"让用户关代理"**。
-5. 可签名的 `.app` + `.dmg`，Developer ID 签名 + 公证，Universal（arm64 + x86_64）。
+5. 可签名的 `.app`（Universal，arm64 + x86_64），Developer ID 签名，**够少数人直接双击打开即可**；不做公开发行、不做 DMG 站点、不做自动更新（决策 D-002）。
 6. 协议层可离线测试：`swift test` 在断网机器全绿。
 7. **产物可搬运**：所有验证工具（`jlugate-probe`、`jlugate-daemon`）都是自包含 CLI（universal），拷到另一台 Mac 双击/终端即可跑，不依赖 Xcode 或本机构建目录。
 
@@ -938,7 +938,19 @@ settings:
 
 ---
 
-## 10. 分发（用户已确认要对外分发）
+## 10. 分发（**小范围自用，不做公开发行**）
+
+> 决策 D-002（2026-11-03）：**只给自己和少数几个人用，不做公开分发**。
+> 因此取消：App Store、公开下载页、自动更新、Homebrew、公开 DMG 站点。
+> 保留：Developer ID 签名（让少数人能直接双击打开），以及**不做**过度包装。
+
+| 方式 | 对象 | 做法 |
+|---|---|---|
+| 自用 | 自己 | Xcode 直接 Run，或 ad-hoc 签名 |
+| 少数朋友（≤5 人） | 熟人 | Developer ID 签名的 `.app` 压缩包直发；必要时公证一次，省得对方被 Gatekeeper 拦 |
+| iOS | 自己 / 少数人 | **侧载**：Xcode 直装、或付费账号的 1 年描述文件；不上 TestFlight/App Store |
+
+**不做**：App Store 上架、TestFlight 公测、自动更新框架（Sparkle）、公开下载站、CI 发布流水线。
 
 | 步骤 | 命令 / 说明 |
 |---|---|
@@ -1072,9 +1084,9 @@ swift test --filter PortalTests                                                #
 
 > 若用户暂无 `JLU.WIFI` 可用，M4.5 只交付"离线可验证 + 实机待验"，并在 README 标注。**不要因为没实机就省略 mock 测试。**
 
-### M5 · 打包与分发（1–2 天）
+### M5 · 打包（0.5–1 天；**只做自用/小范围，不发行**，决策 D-002）
 
-验收：`spctl -a -vvv -t exec JLUGate.app` → accepted；`stapler validate` 通过；在一台没装过开发环境的 Mac 上拖入 `/Applications` 双击可用；`lipo -info` 显示两架构。
+验收：`spctl -a -vvv -t exec JLUGate.app` → accepted（签名有效即可）；拷到另一台 Mac 双击能开；`lipo -info` 显示两架构。**不要求**：公证、DMG、下载页、自动更新。
 
 ### M6 · 长稳（1 天，可并行，**环境 B**）
 
@@ -1479,13 +1491,15 @@ relay 读 ClientHello → 域名
 
 ### 17.5 发行方式（决定工期与成败）
 
-| 方式 | 可行性 | 说明 |
-|---|---|---|
-| **侧载**（个人/小范围） | ✅ 现实 | 免费账号 7 天有效期、付费账号 1 年；Network Extension 权限在开发者账号下即可自签使用 |
-| **TestFlight** | ⚠️ 需审核 | 需解释 Network Extension 用途；个人测试一般能过 |
-| **App Store** | ❌ 高风险 | "用 VPN 扩展跑校园网认证"极易被拒；不建议作为 v1 目标 |
+**决策 D-002 已定：只侧载，不发行。**
 
-**建议**：先做侧载版本，能跑通再谈发行。
+| 方式 | 采用 | 说明 |
+|---|---|---|
+| **Xcode 直装** | ✅ | 自己用最省事；免费账号 7 天有效、付费账号 1 年 |
+| **付费账号侧载** | ✅ | `networkextension` 权限随描述文件下发，不需要 Apple 额外审批 |
+| TestFlight / App Store | ❌ | 不铺开发行，直接排除 |
+
+**影响**：iOS 端省掉了"向 Apple 解释 VPN 扩展用途"的全部风险，S3 只受技术可行性约束。
 
 ### 17.6 与 macOS 版的关系
 
