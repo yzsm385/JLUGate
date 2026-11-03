@@ -22,7 +22,7 @@ struct PortalViewerView: View {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(PortalAssets.disableCaptiveAssistantCommand, forType: .string)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
                 .help(PortalAssets.disableCaptiveAssistantCommand)
             }
             .padding(12)

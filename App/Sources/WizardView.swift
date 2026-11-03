@@ -33,26 +33,24 @@ struct WizardView: View {
     @State private var isSuggestionTrustworthy = false
 
     var body: some View {
-        @Namespace var glassNamespace
 
         VStack(alignment: .leading, spacing: 16) {
             header
 
-            GlassEffectContainer(spacing: 14) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Group {
-                        switch step {
-                        case .credentials: credentialsStep
-                        case .link: linkStep
-                        case .network: networkStep
-                        }
+            // 向导是**独立窗口**：不用 GlassEffectContainer / glassEffectID（真机上会在
+            // AppKit 显示周期抛异常崩溃），卡片改普通材质。
+            VStack(alignment: .leading, spacing: 14) {
+                Group {
+                    switch step {
+                    case .credentials: credentialsStep
+                    case .link: linkStep
+                    case .network: networkStep
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .padding(18)
-                .jluGlassCard(cornerRadius: 18)
-                .glassEffectID("wizard-card", in: glassNamespace)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .padding(18)
+            .jluGlassCard(cornerRadius: 18)
 
             if let errorText {
                 Label(errorText, systemImage: "exclamationmark.triangle.fill")
@@ -263,13 +261,13 @@ struct WizardView: View {
 
             HStack(spacing: 10) {
                 Button("用系统当前读数填入") { fillFromSystem() }
-                    .buttonStyle(.glassProminent)
+                    .buttonStyle(.borderedProminent)
                 if hasSavedProfile {
                     Button("载入上次保存的参数") { loadSavedProfile() }
-                        .buttonStyle(.glass)
+                        .buttonStyle(.bordered)
                 }
                 Button("清空这几格") { clearFields() }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
             }
             if let note = suggestionNote {
                 Text(note).font(.caption2).foregroundStyle(isSuggestionTrustworthy ? Color.secondary : Color.orange)
@@ -290,11 +288,11 @@ struct WizardView: View {
         HStack(spacing: 10) {
             if step != .credentials {
                 Button("上一步") { goBack() }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
             }
             Spacer()
             Button(isLastStep ? "完成" : "下一步") { advance() }
-                .buttonStyle(.glassProminent)
+                .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
         }
     }

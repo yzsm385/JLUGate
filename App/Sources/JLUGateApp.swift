@@ -17,6 +17,7 @@ struct JLUGateApp: App {
         MenuBarExtra {
             MenuContent()
                 .environment(model)
+                .environment(\.glassAllowed, true)   // 只有菜单栏面板用液态玻璃
         } label: {
             Image(systemName: model.state.isOnline
                   ? "bolt.horizontal.circle.fill"

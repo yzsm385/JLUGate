@@ -50,19 +50,19 @@ struct ConnectionStatusView: View {
                 } label: {
                     Label("重试", systemImage: "arrow.clockwise")
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
 
                 Button {
                     model.presentNetworkDetail()
                 } label: {
                     Label("网络详情", systemImage: "network")
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
 
                 Spacer()
 
                 Button("关闭") { model.closeConnectionStatus() }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
             }
         }
         .padding(18)

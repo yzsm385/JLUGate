@@ -104,7 +104,7 @@ struct SettingsView: View {
                 }
 
                 Button("按登记 MAC 自动选一次") { model.autoSelectInterface() }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
             }
 
             Section("链路探测") {
@@ -137,7 +137,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Button("保存") { save() }
-                            .buttonStyle(.glassProminent)
+                            .buttonStyle(.borderedProminent)
                         if saved {
                             Label("已保存", systemImage: "checkmark.circle")
                                 .font(.caption)
@@ -145,7 +145,7 @@ struct SettingsView: View {
                         }
                         Spacer()
                         Button("关闭") { model.closeSettings() }
-                            .buttonStyle(.glass)
+                            .buttonStyle(.bordered)
                     }
                     HStack(spacing: 8) {
                         Button("用系统当前读数填入") {
@@ -175,7 +175,7 @@ struct SettingsView: View {
                         Button("重置本机配置…") { model.resetLocalConfiguration() }
                             .foregroundStyle(.red)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
                 }
             }
         }

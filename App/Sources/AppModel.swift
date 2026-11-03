@@ -176,7 +176,7 @@ final class AppModel {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let controller = NSHostingController(rootView: WizardView().environment(self))
+        let controller = NSHostingController(rootView: WizardView().environment(self).plainWindowChrome())
         let window = NSWindow(contentViewController: controller)
         window.title = "JLU Gate · 初始设置"
         window.setContentSize(NSSize(width: 540, height: 480))
@@ -642,7 +642,7 @@ final class AppModel {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let controller = NSHostingController(rootView: ConnectionStatusView().environment(self))
+        let controller = NSHostingController(rootView: ConnectionStatusView().environment(self).plainWindowChrome())
         let window = NSWindow(contentViewController: controller)
         window.title = "JLU Gate · 连接状态"
         window.setContentSize(NSSize(width: 440, height: 260))
@@ -673,7 +673,7 @@ final class AppModel {
             return
         }
         let controller = NSHostingController(
-            rootView: PortalViewerView(url: portalViewerURL).environment(self))
+            rootView: PortalViewerView(url: portalViewerURL).environment(self).plainWindowChrome())
         let window = NSWindow(contentViewController: controller)
         window.title = "JLU Gate · 校园网门户"
         window.setContentSize(NSSize(width: 760, height: 620))
@@ -715,7 +715,7 @@ final class AppModel {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let controller = NSHostingController(rootView: SettingsView().environment(self))
+        let controller = NSHostingController(rootView: SettingsView().environment(self).plainWindowChrome())
         let window = NSWindow(contentViewController: controller)
         window.title = "JLU Gate 设置"
         window.setContentSize(NSSize(width: 580, height: 680))
@@ -839,7 +839,7 @@ final class AppModel {
             refreshNetworkDetail()
             return
         }
-        let controller = NSHostingController(rootView: NetworkDetailView().environment(self))
+        let controller = NSHostingController(rootView: NetworkDetailView().environment(self).plainWindowChrome())
         let window = NSWindow(contentViewController: controller)
         window.title = "JLU Gate · 网络详情"
         window.setContentSize(NSSize(width: 640, height: 620))

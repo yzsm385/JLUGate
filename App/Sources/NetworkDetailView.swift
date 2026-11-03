@@ -45,7 +45,7 @@ struct NetworkDetailView: View {
             }
             Spacer()
             Button("刷新") { model.refreshNetworkDetail() }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
         }
         .padding(16)
     }
@@ -226,7 +226,7 @@ struct NetworkDetailView: View {
             } label: {
                 Label(model.diagnosticsBusy ? "测量中…" : "测认证通道", systemImage: "waveform.path.ecg.rectangle")
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.bordered)
             .disabled(model.diagnosticsBusy)
         }
     }
@@ -248,7 +248,7 @@ struct NetworkDetailView: View {
             } label: {
                 Label(model.diagnosticsBusy ? "测量中…" : "开始 Ping", systemImage: "waveform.path.ecg")
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.bordered)
             .disabled(model.diagnosticsBusy)
         }
     }
@@ -275,7 +275,7 @@ struct NetworkDetailView: View {
             } label: {
                 Label(model.diagnosticsBusy ? "测速中…" : "开始测速", systemImage: "speedometer")
             }
-            .buttonStyle(.glass)
+            .buttonStyle(.bordered)
             .disabled(model.diagnosticsBusy)
         }
     }
@@ -300,10 +300,10 @@ struct NetworkDetailView: View {
     private var footer: some View {
         HStack {
             Button("复制全部") { model.copyNetworkDetail() }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
             Spacer()
             Button("关闭") { model.closeNetworkDetail() }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
         }
         .padding(12)
     }
