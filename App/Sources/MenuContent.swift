@@ -4,7 +4,6 @@ import JLUGateCore
 /// 菜单栏下拉内容（`.menuBarExtraStyle(.window)`），全部用系统 Liquid Glass，不自绘毛玻璃。
 struct MenuContent: View {
     @Environment(AppModel.self) private var model
-    @Namespace private var glassNamespace
 
     var body: some View {
         Group {
@@ -63,14 +62,9 @@ struct MenuContent: View {
         VStack(alignment: .leading, spacing: 12) {
             // 原生 Liquid Glass：状态卡与操作按钮放在同一个容器里，
             // 邻近元素会被系统合并成一块连续的玻璃（不是叠两层自绘材质）。
-            GlassEffectContainer(spacing: 10) {
-                VStack(alignment: .leading, spacing: 10) {
-                    statusCard
-                        .glassEffectID("status", in: glassNamespace)
-
-                    actionButtons
-                        .glassEffectID("actions", in: glassNamespace)
-                }
+            VStack(alignment: .leading, spacing: 10) {
+                statusCard
+                actionButtons
             }
 
             footer
@@ -159,7 +153,7 @@ struct MenuContent: View {
                         Label("填写账号密码（断线后自动重连）", systemImage: "person.badge.key")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
                 } else if model.state.isOnline || model.state.isBusy {
                     Button {
                         model.disconnect()
@@ -167,7 +161,7 @@ struct MenuContent: View {
                         Label("下线", systemImage: "stop.circle")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
                 } else {
                     Button {
                         model.connect()
@@ -175,7 +169,7 @@ struct MenuContent: View {
                         Label("登录", systemImage: "bolt.horizontal.circle")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
                     .disabled(model.config.account.isEmpty)
                 }
 
@@ -186,7 +180,7 @@ struct MenuContent: View {
                         Label("重试", systemImage: "arrow.clockwise")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
                 }
             }
 
@@ -243,7 +237,7 @@ struct MenuContent: View {
                         Label("重新抢回在线", systemImage: "arrow.uturn.backward.circle")
                             .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
                 }
                 .padding(10)
                 .jluGlassCard(cornerRadius: 12)
@@ -254,7 +248,7 @@ struct MenuContent: View {
                     Label("打开网页登录页", systemImage: "safari")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
             }
 
             if !model.isConfigured {
@@ -264,7 +258,7 @@ struct MenuContent: View {
                     Label("重新设置…", systemImage: "wand.and.stars")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glass)
+                .buttonStyle(.bordered)
             }
         }
     }
@@ -319,69 +313,36 @@ struct MenuContent: View {
     }
 
     private var footer: some View {
-        HStack {
-            Button {
-                model.presentSettings()
-            } label: {
-                Label("设置", systemImage: "gearshape")
+        // 380 宽放不下一行 7 个按钮：改成两行、等宽网格，图标在上文字在下
+        VStack(spacing: 6) {
+            HStack(spacing: 2) {
+                footerButton("设置", "gearshape") { model.presentSettings() }
+                footerButton("状态", "info.circle") { model.presentConnectionStatus() }
+                footerButton("详情", "network") { model.presentNetworkDetail() }
+                footerButton("诊断", "doc.on.clipboard") { model.copyDiagnostics() }
             }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Button {
-                model.presentConnectionStatus()
-            } label: {
-                Label("连接状态…", systemImage: "info.circle")
+            HStack(spacing: 2) {
+                footerButton("导出", "square.and.arrow.up") { model.exportDiagnostics() }
+                footerButton("参数卡", "qrcode") { model.exportConfigCard() }
+                footerButton("门户", "globe.asia.australia") { model.presentPortalViewer() }
+                footerButton("退出", "power") { NSApplication.shared.terminate(nil) }
             }
-            .buttonStyle(.plain)
-
-            if model.portalViewerURL != nil {
-                Button {
-                    model.presentPortalViewer()
-                } label: {
-                    Label("校园网门户", systemImage: "globe.asia.australia")
-                }
-                .buttonStyle(.plain)
-            }
-
-            Button {
-                model.presentNetworkDetail()
-            } label: {
-                Label("网络详情", systemImage: "network")
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.copyDiagnostics()
-            } label: {
-                Label("复制诊断", systemImage: "doc.on.clipboard")
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.exportDiagnostics()
-            } label: {
-                Label("导出", systemImage: "square.and.arrow.up")
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                model.exportConfigCard()
-            } label: {
-                Label("参数卡", systemImage: "qrcode")
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Button("退出") {
-                NSApplication.shared.terminate(nil)
-            }
-            .buttonStyle(.plain)
         }
-        .font(.caption)
+        .padding(.horizontal, 2)
+    }
+
+    private func footerButton(_ title: String, _ symbol: String,
+                              action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 2) {
+                Image(systemName: symbol).font(.system(size: 13))
+                Text(title).font(.system(size: 10))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
         .foregroundStyle(.secondary)
-        .padding(.horizontal, 4)
     }
 }

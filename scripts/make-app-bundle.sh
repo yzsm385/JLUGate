@@ -18,6 +18,7 @@ for arg in "$@"; do
         --dev-settings) DEV=5 ;;
         --dev-save-wired) DEV=6 ;;
         --dev-ui-probe) DEV=7 ;;
+        --dev-panel) DEV=8 ;;
     esac
 done
 
@@ -79,6 +80,12 @@ fi
 if [ "$DEV" = "4" ]; then
     echo "==> dev harness: open network detail on launch"
     echo '{ "openNetDetail": true }' > "$APP/Contents/Resources/dev-config.json"
+fi
+
+if [ "$DEV" = "8" ]; then
+    echo "==> dev harness: open panel on launch"
+    echo "{ \"openPanel\": true, \"startPanel\": \"${PANEL:-main}\" }" \
+        > "$APP/Contents/Resources/dev-config.json"
 fi
 
 if [ "$DEV" = "7" ]; then

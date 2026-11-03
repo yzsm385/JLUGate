@@ -33,6 +33,10 @@ enum DevOverrides {
         var saveWired: Bool?
         /// 自检：把每个面板视图都实例化并强制布局一次
         var uiProbe: Bool?
+        /// 自检：启动后直接打开面板（用于截图验证布局）
+        var openPanel: Bool?
+        /// 打开面板时先切到某个子页面：settings / wizard / detail / status / portal
+        var startPanel: String?
     }
 
     private static let fileConfig: FileConfig? = {
@@ -74,6 +78,16 @@ enum DevOverrides {
             return nil
         }
         return URL(string: raw)
+    }
+
+    static var openPanelOnLaunch: Bool {
+        guard isEnabled else { return false }
+        return fileConfig?.openPanel ?? false
+    }
+
+    static var startPanelName: String? {
+        guard isEnabled else { return nil }
+        return fileConfig?.startPanel
     }
 
     static var uiProbeOnLaunch: Bool {
