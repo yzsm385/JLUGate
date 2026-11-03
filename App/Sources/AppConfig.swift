@@ -88,6 +88,10 @@ struct ConfigStore {
         return config
     }
 
+    static func delete() {
+        try? FileManager.default.removeItem(at: fileURL)
+    }
+
     static func save(_ config: AppConfig) {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

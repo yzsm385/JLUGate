@@ -13,6 +13,7 @@ for arg in "$@"; do
         --debug) CONFIG="debug" ;;
         --dev)   DEV=1 ;;
         --dev-portal) DEV=2 ;;
+        --dev-autostart) DEV=3 ;;
     esac
 done
 
@@ -64,6 +65,11 @@ if [ "$DEV" = "1" ]; then
   "autostart": true
 }
 DEVJSON
+fi
+
+if [ "$DEV" = "3" ]; then
+    echo "==> dev harness: autostart only (real network)"
+    echo '{ "autostart": true }' > "$APP/Contents/Resources/dev-config.json"
 fi
 
 if [ "$DEV" = "2" ]; then

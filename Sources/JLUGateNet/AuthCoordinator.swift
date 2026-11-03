@@ -397,8 +397,13 @@ public actor AuthCoordinator {
     }
 
     private func pick(from candidates: [InterfaceSnapshot]) throws -> InterfaceSnapshot {
+        // 只考虑"真能用来认证"的口：有 IPv4、不是回环、不是虚拟口。
+        // 一个都没有时保留原始候选，好让引擎报出 interfaceHasNoIPv4 而不是静默失败。
+        let usable = candidates.filter(\.isUsableForAuthentication)
+        let pool = usable.isEmpty ? candidates : usable
+
         if let registered = configuration.registeredMAC {
-            let matched = candidates.filter { $0.macAddress?.matches(registered) == true }
+            let matched = pool.filter { $0.macAddress?.matches(registered) == true }
             guard !matched.isEmpty else {
                 throw DrcomError.macMismatch(expected: registered.description,
                                              actual: candidates.first?.mac ?? "无")
@@ -407,7 +412,7 @@ public actor AuthCoordinator {
                 (lhs.isWireless ? 1 : 0, lhs.index) < (rhs.isWireless ? 1 : 0, rhs.index)
             }.first!
         }
-        return candidates.sorted { lhs, rhs in
+        return pool.sorted { lhs, rhs in
             let lscore = (lhs.isWireless ? 0 : 2) + (lhs.ipv4 != nil ? 1 : 0)
             let rscore = (rhs.isWireless ? 0 : 2) + (rhs.ipv4 != nil ? 1 : 0)
             if lscore != rscore { return lscore > rscore }

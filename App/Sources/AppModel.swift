@@ -61,6 +61,7 @@ final class AppModel {
         }
         Notifier.requestAuthorizationIfNeeded()
 
+        FileLogger.shared.log("credential backend=\(CredentialStore.backend.rawValue)")
         if DevOverrides.isEnabled {
             let devState = "dev server=\(DevOverrides.server?.description ?? "-"):\(DevOverrides.port ?? 0)"
                 + " autostart=\(DevOverrides.autostart)"
@@ -146,7 +147,11 @@ final class AppModel {
         if DevOverrides.isEnabled {
             if config.account.isEmpty { config.account = "20230001" }
             if password.isEmpty { password = "test-pass-2024" }
-            config.link = DevOverrides.portalBase != nil ? "jluWiFi" : "wired"
+            if DevOverrides.portalBase != nil {
+                config.link = "jluWiFi"
+            } else if DevOverrides.server != nil {
+                config.link = "wired"
+            }
         }
         guard !config.account.isEmpty, !password.isEmpty else {
             state = .failed(.malformed("还没填账号或密码"))
@@ -352,6 +357,21 @@ final class AppModel {
         }
         recentLog.insert("已导出网络参数卡（文本在剪贴板，二维码已保存）", at: 0)
         FileLogger.shared.log("导出网络参数卡：账号 \(config.account)")
+    }
+
+    /// 把本机配置恢复成出厂状态（清空 config.json、账号档案与保存的密码），然后重新走向导。
+    /// 用在"配置被写坏 / 换了账号想重来"的场景。
+    func resetLocalConfiguration() {
+        disconnect()
+        ConfigStore.delete()
+        if !config.account.isEmpty { CredentialStore.delete(account: config.account) }
+        config = AppConfig()
+        password = ""
+        showWizard = true
+        routeGuarantee = nil
+        recentLog.insert("已重置本机配置，请重新填写", at: 0)
+        FileLogger.shared.log("配置已重置")
+        presentWizard()
     }
 
     func finishWizard() {

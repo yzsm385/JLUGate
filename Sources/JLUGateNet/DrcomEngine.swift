@@ -280,15 +280,18 @@ public actor DrcomEngine {
 
     /// 选口：MAC 命中 +8 → 有线 +2 → 有默认网关 +1（challenge 探测 +4 留待 M2.5，见 progress.md）。
     private func chooseInterface(from candidates: [InterfaceSnapshot]) throws -> InterfaceSnapshot {
+        let usable = candidates.filter(\.isUsableForAuthentication)
+        let pool = usable.isEmpty ? candidates : usable
+
         if let registered = configuration.registeredMAC {
-            let matched = candidates.filter { $0.macAddress?.matches(registered) == true }
+            let matched = pool.filter { $0.macAddress?.matches(registered) == true }
             guard !matched.isEmpty else {
                 let actual = candidates.first?.mac ?? "无"
                 throw DrcomError.macMismatch(expected: registered.description, actual: actual)
             }
             return matched.sorted(by: scoreSort).first!
         }
-        return candidates.sorted(by: scoreSort).first!
+        return pool.sorted(by: scoreSort).first!
     }
 
     private func scoreSort(_ lhs: InterfaceSnapshot, _ rhs: InterfaceSnapshot) -> Bool {

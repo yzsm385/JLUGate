@@ -26,6 +26,7 @@ struct Options {
     var gatewayPort = 61441
     var gatewayPath = "Tools/mock-gateway/mock_gateway.py"
     var portalPort = 18080
+    var dnsServers: [String] = []
     var portalPath = "Tools/mock-portal/portal_server.py"
 }
 
@@ -58,6 +59,7 @@ func parseOptions(_ arguments: [String]) -> Options {
         case "--salt": options.salt = value()
         case "--gateway-port": options.gatewayPort = Int(value()) ?? options.gatewayPort
         case "--portal-port": options.portalPort = Int(value()) ?? options.portalPort
+        case "--dns": options.dnsServers = value().split(separator: ",").map(String.init)
         default:
             if key.hasPrefix("--") { options.command = String(key.dropFirst(2)) }
         }
@@ -100,6 +102,7 @@ func printHelp() {
       jlugate-probe --interfaces                                # 列出物理网卡（只读）
       jlugate-probe --route-check [--server 10.100.61.3]        # 路由出口 / ConfigMethod（只读）
       jlugate-probe --detect                                    # 判定当前网络走哪条链路（会发 1 个 challenge）
+      jlugate-probe --portal-check                              # 只看网页认证链路的在线判定（不发任何认证）
       jlugate-probe --dump-login --account X --password Y       # 离线打印 342 字节登录包
       jlugate-probe --login --account X --password Y [--mac ..] # 真机认证（只能在环境 B 执行）
 
@@ -219,8 +222,10 @@ func runDetect(_ options: Options) -> Int32 {
                 return
             }
         }
-        let outcome = await detector.probeConnectivity(interface: candidates[0],
-                                                       dnsServers: [IPv4Address("10.10.10.10")!])
+        let dns: [IPv4Address] = options.dnsServers.compactMap(IPv4Address.init)
+        let outcome = await detector.probeConnectivity(
+            interface: candidates.first(where: { $0.ipv4 != nil }) ?? candidates[0],
+            dnsServers: dns.isEmpty ? ConnectivityProbe.fallbackDNSServers : dns)
         switch outcome {
         case .healthy:
             print("  204 探针：已在线（无需认证）")
@@ -248,6 +253,77 @@ func runDetect(_ options: Options) -> Int32 {
 final class ResultBox2: @unchecked Sendable {
     var link: AccessLink?
     var alreadyOnline = false
+}
+
+// MARK: - 网页认证链路在线判定（真机，只读）
+
+/// 不弹窗的浏览器替身：本命令只验证"探针/在线判定"，不涉及登录。
+final class SilentPortalBrowser: PortalBrowser, @unchecked Sendable {
+    func presentLogin(url: URL) async -> PortalLoginResult {
+        print("  需要人工登录：\(url.absoluteString)")
+        return .cancelled
+    }
+    func clearCookies() async {}
+}
+
+func runPortalCheck(_ options: Options) -> Int32 {
+    let provider = SystemInterfaceProvider()
+    guard let interface = provider.physicalInterfaces().first(where: { $0.isUsableForAuthentication }) else {
+        print("没有可用于认证的物理接口（有线/Wi-Fi 都要有 IPv4）")
+        return 2
+    }
+    let dns: [IPv4Address] = options.dnsServers.compactMap(IPv4Address.init)
+    let dnsServers = dns.isEmpty ? ConnectivityProbe.fallbackDNSServers : dns
+    print("接口：\(interface.name)（\(interface.ipv4 ?? "-")）  DNS：\(dnsServers.map(\.description))")
+
+    let configuration = PortalConfiguration(
+        silentRetryOnce: true,
+        silentRetryDelay: .milliseconds(300),
+        promptCooldown: .seconds(300),
+        probeInterval: .seconds(3),
+        failTolerance: 2,
+        dnsServers: dnsServers,
+        successChecks: 2)
+    let engine = PortalEngine(probe: ConnectivityProbe(),
+                              browser: SilentPortalBrowser(),
+                              detector: PortalDetector(),
+                              configuration: configuration)
+
+    let semaphore = DispatchSemaphore(value: 0)
+    let box = PortalStateBox()
+    Task.detached {
+        let stream = await engine.events()
+        let collector = Task {
+            for await event in stream {
+                switch event {
+                case .state(let state):
+                    box.states.append(state.phase)
+                    print("状态 → \(state.phase)")
+                case .entry(let url): print("入口 → \(url.absoluteString)")
+                case .note(let message): print("日志：\(message)")
+                case .online: box.online = true
+                case .needsUser: print("需要人工登录")
+                }
+            }
+        }
+        await engine.start(using: interface)
+        try? await Task.sleep(for: .seconds(8))
+        await engine.stop()
+        collector.cancel()
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 20)
+
+    if box.online || box.states.contains("online") {
+        print("✅ 当前链路已在线（204 通过），不需要网页登录")
+        return 0
+    }
+    if box.states.contains("authenticating") {
+        print("⚠️ 当前链路需要网页登录（App 里点「登录」会弹 WKWebView）")
+        return 0
+    }
+    print("❌ 在线判定失败；状态序列：\(box.states.joined(separator: " → "))")
+    return 1
 }
 
 // MARK: - 自测（对模拟网关）
@@ -659,6 +735,8 @@ case "route-check":
     runRouteCheck(options)
 case "detect":
     exit(runDetect(options))
+case "portal-check":
+    exit(runPortalCheck(options))
 case "dump-login":
     runDumpLogin(options)
 case "login":

@@ -104,6 +104,7 @@ struct SettingsView: View {
                     Button("保存") { save() }
                         .buttonStyle(.glass)
                     Button("重新检测") { model.refreshDiagnostics() }
+                    Button("重置本机配置…") { model.resetLocalConfiguration() }
                     Button("从剪贴板导入参数卡") {
                         if model.importConfigCardFromClipboard() {
                             load()

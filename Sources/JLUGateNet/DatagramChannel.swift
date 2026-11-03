@@ -83,6 +83,16 @@ public struct InterfaceSnapshot: Sendable, Equatable {
     public var macAddress: MACAddress? {
         mac.flatMap(MACAddress.init)
     }
+
+    /// 回环（127/8）永远不能用来做校园网认证。
+    public var isLoopback: Bool {
+        ipv4?.hasPrefix("127.") == true
+    }
+
+    /// 可以用于认证的候选：有 IPv4、不是回环、不是虚拟口。
+    public var isUsableForAuthentication: Bool {
+        ipv4 != nil && !isLoopback && !VirtualInterfaceNames.isVirtual(name)
+    }
 }
 
 public struct RouteInfo: Sendable, Equatable {
@@ -97,14 +107,21 @@ public struct RouteInfo: Sendable, Equatable {
     }
 
     /// 出口是不是虚拟/隧道接口（`utun`、`tun`、`ppp`、`ipsec`）。
+    ///
+    /// `lo0` 不算隧道：它是回环，选了它的问题已经在"选口"阶段被排除（`isUsableForAuthentication`）。
     public var isTunnel: Bool {
-        guard let interface else { return false }
+        guard let interface, !interface.hasPrefix("lo") else { return false }
         return VirtualInterfaceNames.isVirtual(interface)
     }
 }
 
 public enum VirtualInterfaceNames {
-    private static let prefixes = ["utun", "tun", "tap", "ppp", "ipsec", "gif", "stf", "bridge", "awdl", "llw", "ap"]
+    /// `lo`（回环）与 `anpi`（Apple 内部接口）必须排除：
+    /// 它们不是无线、又有 IPv4，打分时会把真正的 Wi-Fi/有线挤掉。
+    private static let prefixes = [
+        "utun", "tun", "tap", "ppp", "ipsec", "gif", "stf", "bridge", "awdl", "llw", "ap",
+        "lo", "anpi", "ipsec",
+    ]
 
     public static func isVirtual(_ name: String) -> Bool {
         prefixes.contains { name.hasPrefix($0) }

@@ -57,6 +57,9 @@ enum DiagnosticsReport {
             lines.append(logTail)
         }
 
+        lines.append("== 凭据存储 ==")
+        lines.append(CredentialStore.backendDescription)
+
         lines.append("== 端口占用 ==")
         switch BSDChannel.diagnosePort(PacketLayout.localPort) {
         case .officialClient(let process, let pid):

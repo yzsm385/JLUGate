@@ -102,11 +102,21 @@ public struct ConnectivityProbe: Sendable {
         self.timeout = timeout
     }
 
+    /// 学校 DNS 不可用时按顺序回退的公共 DNS（仍然由我们自己发 UDP 查询，不用系统解析器）。
+    public static let fallbackDNSServers: [IPv4Address] = [
+        IPv4Address("1.1.1.1")!, IPv4Address("8.8.8.8")!,
+    ]
+
     public func run(interface: InterfaceSnapshot, dnsServers: [IPv4Address]) async -> ProbeOutcome {
         var failures: [String] = []
+        // 档案里的学校 DNS 优先；全部失败再用公共 DNS（很多校园 Wi-Fi 不允许访问内网 DNS）
+        var serverChain = dnsServers
+        if serverChain.isEmpty {
+            serverChain = Self.fallbackDNSServers
+        }
         for target in targets {
             var addresses: [IPv4Address] = []
-            for server in dnsServers {
+            for server in serverChain {
                 if let resolved = try? await transport.resolve(host: target.host, server: server,
                                                                interface: interface, timeout: timeout),
                    !resolved.isEmpty {

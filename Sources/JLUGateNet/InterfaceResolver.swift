@@ -10,7 +10,7 @@ public struct SystemInterfaceProvider: InterfaceProvider {
 
     public func physicalInterfaces() -> [InterfaceSnapshot] {
         Self.allInterfaces()
-            .filter { !VirtualInterfaceNames.isVirtual($0.name) && $0.isUp }
+            .filter { !VirtualInterfaceNames.isVirtual($0.name) && $0.isUp && !$0.isLoopback }
             .map { snapshot in
                 guard snapshot.mac == nil || snapshot.mac == Self.placeholderMAC else { return snapshot }
                 guard let mac = Self.ethernetAddress(from: "/sbin/ifconfig", interface: snapshot.name) else {
