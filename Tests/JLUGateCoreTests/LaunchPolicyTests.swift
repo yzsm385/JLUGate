@@ -16,13 +16,13 @@ struct LaunchPolicyTests {
                                                autoConnectEnabled: true))
     }
 
-    @Test("从来没连过 → 不自动连（但也不弹向导，让用户自己点登录）")
-    func neverConnectedDoesNotAutoStart() {
+    @Test("从来没连成功过也照样自动连（否则第一次失败后就永远不自动连了）")
+    func neverConnectedStillAutoConnects() {
         #expect(LaunchPolicy.shouldAutoConnect(hasAccount: true, hasPassword: true,
                                                linkRequiresStaticAddresses: false,
                                                profileIsComplete: true,
                                                everConnected: false,
-                                               autoConnectEnabled: true) == false)
+                                               autoConnectEnabled: true))
     }
 
     @Test("用户关掉自动连接 → 不自动连")

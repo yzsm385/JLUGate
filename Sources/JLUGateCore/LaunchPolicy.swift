@@ -17,13 +17,17 @@ public enum LaunchPolicy {
     }
 
     /// 是否应该静默自动连接（用户没点任何东西）。
+    ///
+    /// `everConnected` 只作为**记录**保留：账号密码与地址齐全、且用户开着"启动时自动连接"就尝试。
+    /// 之前要求"必须成功连过一次"，导致只要第一次没连成功，之后重启永远不自动连——用户会以为程序坏了。
     public static func shouldAutoConnect(hasAccount: Bool,
                                          hasPassword: Bool,
                                          linkRequiresStaticAddresses: Bool,
                                          profileIsComplete: Bool,
-                                         everConnected: Bool,
+                                         everConnected: Bool,   // 保留参数，不再作为门槛
                                          autoConnectEnabled: Bool) -> Bool {
-        guard autoConnectEnabled, everConnected else { return false }
+        _ = everConnected
+        guard autoConnectEnabled else { return false }
         guard hasAccount, hasPassword else { return false }
         if linkRequiresStaticAddresses && !profileIsComplete { return false }
         return true

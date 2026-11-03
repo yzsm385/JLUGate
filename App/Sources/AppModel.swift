@@ -986,10 +986,19 @@ final class AppModel {
                     if case .macInUse = error { return true }
                     return false
                 }()
-                if isAccountConflict, wasEverOnlineRecently, await probeReachable() {
+                // 认证被拒 ≠ 网络不可用：只要真实探测通过，就按"已连接"处理，
+                // 否则用户会看到"能上网却显示未连接"，而且下次启动也不会自动连。
+                let offlineReason: Bool = {
+                    if case .notCampusNetwork = error { return true }
+                    if case .adapterUnplugged = error { return true }
+                    if case .interfaceHasNoIPv4 = error { return true }
+                    return false
+                }()
+                if !offlineReason, await probeReachable() {
                     state = .online
-                    recentLog.insert("服务器回报账号已在别处登录，但网络实际可用：保持已连接", at: 0)
-                    FileLogger.shared.log("accountInUse but probe healthy: keep online")
+                    markSuccessfulLogin()
+                    recentLog.insert("认证没有明确成功，但网络实际可用：按已连接处理（服务器原话：\(error.userMessage)）", at: 0)
+                    FileLogger.shared.log("probe healthy after failure -> online; server said: \(error.userMessage)")
                 }
             }
         case .link(let next):
