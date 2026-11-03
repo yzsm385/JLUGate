@@ -15,6 +15,9 @@ public struct EngineConfiguration: Sendable {
     /// 严格模式：MAC 与登记值不一致就报错（默认关闭——**应由服务器裁定**，
     /// 客户端预检只作为提示，不能把用户卡在门外）。
     public var strictMACCheck: Bool = false
+    /// 保活收不到应答时，用一次真实网络探测来判定"到底断没断"。
+    /// 有些网关不回保活应答但会话仍然有效——只看应答会把在线误判成离线。
+    public var livenessCheck: (@Sendable (InterfaceSnapshot) async -> Bool)?
     /// 系统给网卡用了私有/随机 MAC 时，允许认证报文里填"登记的 MAC"。
     /// 只影响报文内容，不改网卡本身（UDP 认证服务器只比对报文里的 MAC）。
     public var useRegisteredMACForAuth: Bool = false
@@ -44,7 +47,8 @@ public struct EngineConfiguration: Sendable {
                 loginTimeout: Duration = .seconds(5),
                 keepAliveInterval: Duration = .seconds(10),
                 missTolerance: Int = 3,
-                wakeDelay: Duration = .seconds(2)) {
+                wakeDelay: Duration = .seconds(2),
+                livenessCheck: (@Sendable (InterfaceSnapshot) async -> Bool)? = nil) {
         self.account = account
         self.password = password
         self.hostname = hostname
@@ -62,6 +66,7 @@ public struct EngineConfiguration: Sendable {
         self.loginTimeout = loginTimeout
         self.keepAliveInterval = keepAliveInterval
         self.missTolerance = missTolerance
+        self.livenessCheck = livenessCheck
         self.wakeDelay = wakeDelay
     }
 }
@@ -411,6 +416,9 @@ public actor DrcomEngine {
             emit(.log("登录被服务器拒绝：\"\(reason)\"（原始帧前 32 字节=\(Hex.string(incoming.payload, limit: 32))）"))
             throw DrcomError.classifyRejection(reason)
         default:
+            // 把"服务器到底回了什么"记下来：这是判定登录成功/失败的关键证据
+            emit(.log("登录后收到未识别的报文（可能是成功/失败的变体）："
+                      + "\(incoming.payload.count) 字节，前 24 字节=\(Hex.string(incoming.payload, limit: 24))"))
             throw DrcomError.timeout(stage: "login")
         }
     }
@@ -477,6 +485,14 @@ public actor DrcomEngine {
             } catch {
                 misses += 1
                 emit(.log("保活 \(kind.rawValue) 无应答（第 \(misses) 次）"))
+                // 先用真实探测确认网络是否真断：网关不回保活应答 ≠ 会话失效
+                if misses >= 2, let liveness = configuration.livenessCheck,
+                   await liveness(context.interface) {
+                    emit(.log("保活无应答但网络实际可达：继续视为在线"))
+                    misses = 0
+                    try? await clock.sleep(for: configuration.keepAliveInterval)
+                    continue
+                }
                 if misses >= configuration.missTolerance {
                     throw DrcomError.gatewayUnreachable(host: configuration.server.description)
                 }

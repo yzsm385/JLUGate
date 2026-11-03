@@ -134,6 +134,7 @@ final class AppModel {
         }
         Notifier.requestAuthorizationIfNeeded()
 
+        FileLogger.shared.log("启动 JLU Gate \(BuildInfo.display)")
         FileLogger.shared.log("credential backend=\(CredentialStore.backend.rawValue)")
         if DevOverrides.isEnabled {
             let devState = "dev server=\(DevOverrides.server?.description ?? "-"):\(DevOverrides.port ?? 0)"
@@ -320,6 +321,12 @@ final class AppModel {
         let interfaceProvider: any InterfaceProvider = devServer != nil
             ? DevLoopbackProvider()
             : interfacesProvider
+        let livenessCheck: @Sendable (InterfaceSnapshot) async -> Bool = { interface in
+            let outcome = await ConnectivityProbe().run(interface: interface,
+                                                       dnsServers: ConnectivityProbe.fallbackDNSServers)
+            if case .healthy = outcome { return true }
+            return false
+        }
         let engineConfiguration = EngineConfiguration(
             account: config.account,
             password: password,
@@ -333,7 +340,8 @@ final class AppModel {
             serverPort: serverPort,
             localPort: UInt16(config.localPort),
             keepAliveInterval: .seconds(config.keepAlive.interval),
-            missTolerance: config.keepAlive.missTolerance)
+            missTolerance: config.keepAlive.missTolerance,
+            livenessCheck: livenessCheck)
 
         // dev 模式用 BSD：NWPath 不会把 loopback 交出来，`requiredInterface` 建不起来
         let channelFactory: any ChannelFactory = (devServer != nil || config.channel == "bsd")

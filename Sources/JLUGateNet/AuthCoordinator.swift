@@ -245,6 +245,8 @@ public actor AuthCoordinator {
         /// 探针用的学校 DNS（**不要**用系统 DNS）。
         public var dnsServers: [IPv4Address]
         public var probeTimeout: Duration
+        /// 保活收不到应答时，用它确认网络是否真的通（透传给 DrcomEngine）。
+        public var livenessCheck: (@Sendable (InterfaceSnapshot) async -> Bool)?
 
         public init(preference: LinkPreference = .auto,
                     autoDetect: Bool = true,
@@ -254,7 +256,8 @@ public actor AuthCoordinator {
                     registeredMAC: MACAddress? = nil,
                     interfaceLock: String? = nil,
                     dnsServers: [IPv4Address] = [],
-                    probeTimeout: Duration = .seconds(3)) {
+                    probeTimeout: Duration = .seconds(3),
+                    livenessCheck: (@Sendable (InterfaceSnapshot) async -> Bool)? = nil) {
             self.preference = preference
             self.autoDetect = autoDetect
             self.server = server
@@ -263,6 +266,7 @@ public actor AuthCoordinator {
             self.interfaceLock = interfaceLock
             self.dnsServers = dnsServers
             self.probeTimeout = probeTimeout
+            self.livenessCheck = livenessCheck
         }
     }
 

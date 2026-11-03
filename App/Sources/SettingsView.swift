@@ -266,9 +266,10 @@ struct SettingsView: View {
         model.config = config
         model.password = draft.password
         model.persist()
-        if !hadProfileForAccount, config.link != "jluWiFi" {
-            // 新账号没有档案：走一次向导把地址填全，别让用户猜为什么认证失败
-            model.presentWizard()
+        if !hadProfileForAccount, config.link != "jluWiFi", (draft.ip.isEmpty || draft.mask.isEmpty) {
+            // 新账号但地址没填全：只提示，不再弹一次"输入账号密码"（刚在设置里填过）
+            model.recentLog.insert("有线/JLU.PC 还需要 IP、掩码等静态参数：可以点「用系统当前读数填入」", at: 0)
+            FileLogger.shared.log("保存配置：地址不完整，等待用户补全")
         }
         if !draft.password.isEmpty, !DevOverrides.isEnabled {
             try? CredentialStore.save(password: draft.password, account: draft.account)

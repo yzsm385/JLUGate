@@ -118,3 +118,17 @@ enum ConfigCard {
                                                       height: scaled.extent.height))
     }
 }
+
+
+/// 版本与构建号：用于确认"现在跑的是哪一版"（排障时最常被问的问题）。
+enum BuildInfo {
+    static var version: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+    }
+
+    static var build: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "dev"
+    }
+
+    static var display: String { "v\(version) (\(build))" }
+}
