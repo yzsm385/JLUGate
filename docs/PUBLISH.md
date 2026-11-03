@@ -8,7 +8,7 @@
 
 ```bash
 ./scripts/privacy-scan.sh          # 必须输出 ✅
-make test                          # 必须 105 条全绿
+make test                          # 必须 119 条全绿
 git status --ignored --short | grep local   # 应能看到 !! local/
 ```
 
