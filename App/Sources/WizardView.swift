@@ -50,7 +50,7 @@ struct WizardView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(18)
-                .glassEffect(.regular, in: .rect(cornerRadius: 18))
+                .jluGlassCard(cornerRadius: 18)
                 .glassEffectID("wizard-card", in: glassNamespace)
             }
 

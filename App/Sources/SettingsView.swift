@@ -29,6 +29,7 @@ struct SettingsView: View {
         var portalEntry = ""
         var helperAuthorized = false
         var useRegisteredMACForAuth = false
+        var compatibilityMode = false
     }
 
     var body: some View {
@@ -61,6 +62,7 @@ struct SettingsView: View {
                         set: { draft.dns = $0 }))
                     LabeledAddressField(title: "登记 MAC", kind: .mac, text: $draft.registeredMAC)
                 }
+                Toggle("兼容模式：关闭液态玻璃（虚拟机/老显卡上更稳，重启生效）", isOn: $draft.compatibilityMode)
                 Toggle("系统用了私有/随机 MAC 时，用登记的 MAC 认证（高级）", isOn: $draft.useRegisteredMACForAuth)
                 Text("只影响认证报文里的 MAC 字段，不改网卡本身。优选方案仍是到系统设置里把「私有地址」关掉。")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -223,6 +225,7 @@ struct SettingsView: View {
         draft.portalEntry = config.portal.entryURL ?? ""
         draft.helperAuthorized = config.routeGuard.helperAuthorized == true
         draft.useRegisteredMACForAuth = config.useRegisteredMACForAuth
+        draft.compatibilityMode = config.compatibilityMode
     }
 
     private var routeGuardText: String {
@@ -250,6 +253,7 @@ struct SettingsView: View {
         config.portal.entryURL = draft.portalEntry.isEmpty ? nil : draft.portalEntry
         config.routeGuard.helperAuthorized = draft.helperAuthorized
         config.useRegisteredMACForAuth = draft.useRegisteredMACForAuth
+        config.compatibilityMode = draft.compatibilityMode
 
         let profile = AppConfig.NetworkProfile(
             ip: draft.ip.isEmpty ? nil : draft.ip,

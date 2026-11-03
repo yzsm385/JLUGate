@@ -75,6 +75,7 @@ final class AppModel {
     init() {
         let loaded = ConfigStore.load()
         config = loaded
+        AppearanceCompat.apply(configFlag: loaded.compatibilityMode)
         // 上一次启动闪退过：进安全模式，不自动连、不读密码，先让用户能把配置改回来
         let safeMode = LaunchGuard.beginLaunch()
         isSafeMode = safeMode
@@ -438,7 +439,6 @@ final class AppModel {
             dnsServers: (profile?.dns ?? []).compactMap(IPv4Address.init),
             probeTimeout: .seconds(config.probe.timeout))
 
-        presentConnectionStatus()
         let coordinator = AuthCoordinator(configuration: coordinatorConfiguration,
                                           interfaces: interfaceProvider,
                                           detector: DefaultLinkDetector(),
@@ -623,9 +623,10 @@ final class AppModel {
     }
 
     func finishWizard() {
+        // 只关向导 + 刷新诊断。**不在这里创建新窗口**：
+        // 之前在同一个动作里关窗口又开窗口，真机上会闪退（AppKit 重入）。
         showWizard = false
         refreshDiagnostics()
-        presentConnectionStatus()   // 点完成立刻有反馈
     }
 
     // MARK: 连接结果窗（点完成/登录后立刻给反馈）

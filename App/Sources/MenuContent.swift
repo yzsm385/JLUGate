@@ -40,8 +40,7 @@ struct MenuContent: View {
         }
         .padding(16)
         .frame(width: 320, alignment: .leading)
-        .glassEffect(.regular.tint(model.statusColor.opacity(0.5)).interactive(),
-                     in: .rect(cornerRadius: 18))
+        .jluGlassStatus(cornerRadius: 18, tint: model.statusColor)
     }
 
     // MARK: 状态卡
@@ -173,7 +172,7 @@ struct MenuContent: View {
                     .font(.caption2)
                 }
                 .padding(10)
-                .glassEffect(.clear, in: .rect(cornerRadius: 12))
+                .jluGlassCard(cornerRadius: 12)
             }
 
             if model.portalLimitNotice != nil, !model.state.isOnline {
@@ -194,7 +193,7 @@ struct MenuContent: View {
                     .buttonStyle(.glass)
                 }
                 .padding(10)
-                .glassEffect(.clear, in: .rect(cornerRadius: 12))
+                .jluGlassCard(cornerRadius: 12)
             } else if model.canOpenPortalLogin {
                 Button {
                     model.openPortalLogin()
@@ -276,6 +275,13 @@ struct MenuContent: View {
             .buttonStyle(.plain)
 
             Spacer()
+
+            Button {
+                model.presentConnectionStatus()
+            } label: {
+                Label("连接状态…", systemImage: "info.circle")
+            }
+            .buttonStyle(.plain)
 
             if model.portalViewerURL != nil {
                 Button {

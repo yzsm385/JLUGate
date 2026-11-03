@@ -32,7 +32,8 @@ struct ConnectionStatusView: View {
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.clear, in: .rect(cornerRadius: 12))
+                .background(Color(nsColor: .textBackgroundColor).opacity(0.5),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
 
             if !model.recentLog.isEmpty {

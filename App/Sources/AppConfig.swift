@@ -71,6 +71,8 @@ struct AppConfig: Codable, Sendable {
     var declaredProxyMode = "unknown"
     /// 系统使用私有/随机 MAC 时，认证报文改用登记的 MAC。
     var useRegisteredMACForAuth = false
+    /// 兼容模式：绕开液态玻璃渲染（虚拟机/老显卡上更稳），重启生效。
+    var compatibilityMode = false
     /// 上次成功认证成功的时间；非空 = 这台机器上"记住且连过"。
     var lastSuccessfulLogin: String?
     var logLevel = "info"

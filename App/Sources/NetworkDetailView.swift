@@ -317,7 +317,7 @@ struct NetworkDetailView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .glassEffect(.regular, in: .rect(cornerRadius: 14))
+        .jluGlassCard()
     }
 
     private func explanation(for row: NetworkSnapshot.InterfaceRow) -> InterfaceExplanation {
