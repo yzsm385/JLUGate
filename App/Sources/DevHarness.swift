@@ -39,6 +39,8 @@ enum DevOverrides {
         var startPanel: String?
         /// 自检：启动后自动跑一次网络体检（用于截图验证）
         var runInspect: Bool?
+        /// 自检：向导直接跳到"网络参数"这一步（用于截图验证输入框）
+        var wizardNetwork: Bool?
     }
 
     private static let fileConfig: FileConfig? = {
@@ -85,6 +87,11 @@ enum DevOverrides {
     static var openPanelOnLaunch: Bool {
         guard isEnabled else { return false }
         return fileConfig?.openPanel ?? false
+    }
+
+    static var wizardStartsAtNetwork: Bool {
+        guard isEnabled else { return false }
+        return fileConfig?.wizardNetwork ?? false
     }
 
     static var runInspectOnLaunch: Bool {

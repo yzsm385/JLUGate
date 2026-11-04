@@ -137,10 +137,15 @@ struct FakeInterfaceProvider: InterfaceProvider {
 enum RecordedGateway {
     static let session: FixturesLike.Session = FixturesLike.load()
 
-    static func challengeReply(salt: String = "49cb720f") -> Data {
+    static func challengeReply(salt: String = "49cb720f", serial: UInt16? = nil) -> Data {
         var bytes = session.reply(length: 76)!
         let saltBytes = FixturesLike.bytes(hex: salt)
         bytes.replaceSubrange(0x04..<0x08, with: saltBytes)
+        if let serial {
+            // challenge 应答的回显序号在 0x02..0x03（大端），与请求一致
+            bytes[0x02] = UInt8(serial >> 8)
+            bytes[0x03] = UInt8(serial & 0xFF)
+        }
         return Data(bytes)
     }
 

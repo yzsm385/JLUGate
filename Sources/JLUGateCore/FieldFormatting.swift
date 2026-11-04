@@ -44,6 +44,37 @@ public enum FieldFormatting {
         return result
     }
 
+    /// 边输入边补分隔符（单行输入框用）：满 3 位补点，最多 4 段。
+    /// 光标稳定：只在字符数增加时格式化，不改动中间已存在的内容。
+    public static func liveIPv4(_ raw: String) -> String {
+        let digits = raw.filter(\.isNumber).prefix(12)
+        var groups: [String] = []
+        var current = ""
+        for character in digits {
+            current.append(character)
+            if current.count == 3 { groups.append(current); current = "" }
+        }
+        if !current.isEmpty { groups.append(current) }
+        var result = groups.joined(separator: ".")
+        if !digits.isEmpty, digits.count % 3 == 0, groups.count < 4 { result += "." }
+        return result
+    }
+
+    /// MAC：每 2 位补冒号，最多 6 段。
+    public static func liveMAC(_ raw: String) -> String {
+        let hex = raw.filter(\.isHexDigit).lowercased().prefix(12)
+        var groups: [String] = []
+        var current = ""
+        for character in hex {
+            current.append(character)
+            if current.count == 2 { groups.append(current); current = "" }
+        }
+        if !current.isEmpty { groups.append(current) }
+        var result = groups.joined(separator: ":")
+        if !hex.isEmpty, hex.count % 2 == 0, groups.count < 6 { result += ":" }
+        return result
+    }
+
     /// 把一段 IPv4 文本拆成 4 个小段（给"四格输入"用，界面上只显示点号，不用手打）。
     public static func splitIPv4(_ text: String) -> [String] {
         var parts = text.split(separator: ".", omittingEmptySubsequences: false).map(String.init)

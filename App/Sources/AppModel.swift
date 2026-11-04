@@ -1269,14 +1269,11 @@ final class AppModel {
                 // 服务器说账号/密码不对：清掉保存的密码并请用户重新输入，
                 // 否则会拿着同一个错密码一直重试（真机上就这样"怎么点都失败"）。
                 if error.isCredentialRejection {
+                    // 注意：ldap auth error 不等于"密码错"——同一密码也可能因为
+                    // 账号在别处在线 / 服务器忙而偶发。所以**不清密码**，只提示 + 给重输入口。
                     credentialRejectedAt = Date()
-                    if !config.account.isEmpty {
-                        CredentialStore.delete(account: config.account)
-                    }
-                    password = ""
-                    recentLog.insert("服务器说账号或密码不对（服务器原文：\(error.userMessage)）。已清除保存的密码，请重新输入。", at: 0)
-                    FileLogger.shared.log("凭据被拒：已清除保存的密码，等待用户重新输入")
-                    presentWizard()
+                    recentLog.insert("服务器回了 ldap auth error（账号验证没过）。常见原因：账号在别的设备在线、服务器忙，或密码确实要重输。点「重新输入密码」可重来。", at: 0)
+                    FileLogger.shared.log("凭据被拒（保留已保存密码），已提示用户")
                 }
                 if case .officialClientRunning = error { portHeldByOfficialClient = true }
                 if case .localPortInUse = error { portHeldByOfficialClient = true }

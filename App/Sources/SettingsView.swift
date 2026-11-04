@@ -54,13 +54,14 @@ struct SettingsView: View {
 
             Section {
                 Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                    LabeledAddressField(title: "IP", kind: .ipv4, text: $draft.ip)
-                    LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $draft.mask)
-                    LabeledAddressField(title: "网关", kind: .ipv4, text: $draft.gateway)
+                    LabeledAddressField(title: "IP", kind: .ipv4, text: $draft.ip, onSubmit: focusNextField)
+                    LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $draft.mask, onSubmit: focusNextField)
+                    LabeledAddressField(title: "网关", kind: .ipv4, text: $draft.gateway, onSubmit: focusNextField)
                     LabeledAddressField(title: "DNS", kind: .ipv4, text: Binding(
                         get: { draft.dns.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? "" },
                         set: { draft.dns = $0 }))
-                    LabeledAddressField(title: "登记 MAC", kind: .mac, text: $draft.registeredMAC)
+                    LabeledAddressField(title: "登记 MAC", kind: .mac, text: $draft.registeredMAC,
+                                        onSubmit: save)
                 }
                 Toggle("兼容模式：关闭液态玻璃（虚拟机/老显卡上更稳，重启生效）", isOn: $draft.compatibilityMode)
                 Toggle("系统用了私有/随机 MAC 时，用登记的 MAC 认证（高级）", isOn: $draft.useRegisteredMACForAuth)
@@ -202,6 +203,10 @@ struct SettingsView: View {
             draft.registeredMAC = profile.registeredMAC ?? ""
             draft.password = CredentialStore.password(for: newValue) ?? ""
         }
+    }
+
+    private func focusNextField() {
+        NSApp.keyWindow?.selectNextKeyView(nil)
     }
 
     private func load() {

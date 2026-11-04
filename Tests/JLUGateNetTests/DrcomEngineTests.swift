@@ -148,7 +148,12 @@ struct DrcomEngineTests {
             configuration: makeConfiguration(),
             responder: { datagram in
                 switch datagram.count {
-                case 20: return [RecordedGateway.challengeReply()]
+                case 20:
+                    // 回显本次序号：重试时序号会变，假网关必须跟着回显，否则会被判成网关无应答
+                    // 序号在 0x02..0x03（大端）
+                    let serial = UInt16(datagram[datagram.startIndex + 2]) << 8
+                        | UInt16(datagram[datagram.startIndex + 3])
+                    return [RecordedGateway.challengeReply(serial: serial)]
                 case 342: return [RecordedGateway.loginFailure(reason: "ldap auth error")]
                 default: return []
                 }
@@ -162,6 +167,8 @@ struct DrcomEngineTests {
             return
         }
         #expect(error == .rejected(reason: "ldap auth error"), "实际错误：\(error)")
+        // ldap auth error 会先自动换 salt 重试两次（实测同一密码也会偶发），之后再交给用户
+        #expect(channel.sentFrames.filter { $0.count == 342 }.count <= 3)
 
         let loginCount = channel.sentFrames.filter { $0.count == 342 }.count
         try await Task.sleep(for: .milliseconds(120))
@@ -372,9 +379,12 @@ struct DrcomEngineTests {
         await engine.start()
         try await expectEventually("进入 online") { await engine.currentState() == .online }
         await engine.stop()
+        // stop() 是异步收尾：并发满载时可能晚一拍才写 idle，这里等到它稳定
+        try await expectEventually("停止后回到 idle", timeout: .seconds(2)) {
+            await engine.currentState() == .idle
+        }
         let sentAfterStop = channel.sentFrames.count
-        try await Task.sleep(for: .milliseconds(150))
-        #expect(await engine.currentState() == .idle)
+        try await Task.sleep(for: .milliseconds(300))
         #expect(channel.sentFrames.count == sentAfterStop, "stop 之后不许再发包")
         #expect(channel.isClosed)
     }

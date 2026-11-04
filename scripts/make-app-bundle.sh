@@ -84,7 +84,7 @@ fi
 
 if [ "$DEV" = "8" ]; then
     echo "==> dev harness: open panel on launch"
-    echo "{ \"openPanel\": true, \"startPanel\": \"${PANEL:-main}\", \"runInspect\": ${RUNINSPECT:-false} }" \
+    echo "{ \"openPanel\": true, \"startPanel\": \"${PANEL:-main}\", \"runInspect\": ${RUNINSPECT:-false}, \"wizardNetwork\": ${WIZNET:-false} }" \
         > "$APP/Contents/Resources/dev-config.json"
 fi
 

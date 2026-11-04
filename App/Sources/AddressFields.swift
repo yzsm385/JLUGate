@@ -1,109 +1,135 @@
 import SwiftUI
+import AppKit
 import JLUGateCore
 
-/// 最初那种**分段格子**：每段一个输入框，段间是分隔符。
+/// 地址输入：AppKit 原生 `NSTextField` + 输入格式化。
 ///
-/// 三个细节：
-/// 1. 分隔符用中点 `·` / 冒号 `:`，和数字同字体、同高度 → 永远在同一行中线上；
-/// 2. 整个控件左对齐，标签列固定宽度，所有行起始位置一致；
-/// 3. 自己改动只往下写，不回灌，所以退格删掉的内容不会被自动填回来。
+/// 为什么不用 SwiftUI 的 TextField：它每次把格式化后的字符串写回 binding，
+/// 光标就会被重置到末尾——表现为"改不了前面的数字、退格删不掉、只能整行清空"。
+/// AppKit 的 `NSTextField` 允许我们**自己控制光标位置**，这是唯一可靠的做法。
+///
+/// 行为：
+/// - 只能输入数字（MAC 为十六进制），分隔符自动补；
+/// - 只在"在末尾继续输入"时重排+补分隔符，光标始终跟在刚输入的字符后面；
+/// - 在中间插入/删除时不重排，因此任意位置都能改；
+/// - Enter → 交给外层（跳到下一项 / 下一步）。
 struct AddressField: View {
     enum Kind {
         case ipv4
         case mac
 
-        var count: Int { self == .ipv4 ? 4 : 6 }
-        var maxLength: Int { self == .ipv4 ? 3 : 2 }
-        var separator: String { self == .ipv4 ? "·" : ":" }
-        var segmentWidth: CGFloat { self == .ipv4 ? 46 : 34 }
+        var placeholder: String { self == .ipv4 ? "192.168.1.10" : "02:00:00:00:00:01" }
+        var groupSize: Int { self == .ipv4 ? 3 : 2 }
+        var maxGroups: Int { self == .ipv4 ? 4 : 6 }
+        var separator: Character { self == .ipv4 ? "." : ":" }
+        var isHex: Bool { self == .mac }
+
+        func isAllowed(_ character: Character) -> Bool {
+            isHex ? character.isHexDigit : character.isNumber
+        }
     }
 
     let kind: Kind
     @Binding var text: String
-
-    @State private var parts: [String]
-    @State private var lastEmitted = ""
-    @FocusState private var focused: Int?
-
-    init(kind: Kind, text: Binding<String>) {
-        self.kind = kind
-        _text = text
-        _parts = State(initialValue: AddressField.split(text.wrappedValue, kind: kind))
-    }
+    var onSubmit: (() -> Void)?
 
     var body: some View {
-        HStack(spacing: 3) {
-            ForEach(parts.indices, id: \.self) { index in
-                TextField("", text: binding(for: index))
-                    .labelsHidden()
-                    .textFieldStyle(.roundedBorder)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 13, design: .monospaced))
-                    .frame(width: kind.segmentWidth, height: 24)
-                    .focused($focused, equals: index)
-
-                if index < parts.count - 1 {
-                    Text(kind.separator)
-                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .frame(height: 24)      // 与输入框同高 → 中线对齐
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)   // 整块左对齐
-        .onAppear {
-            parts = Self.split(text, kind: kind)
-            lastEmitted = text
-        }
-        .onChange(of: text) { _, newValue in
-            guard newValue != lastEmitted else { return }   // 自己写的改动不回灌
-            parts = Self.split(newValue, kind: kind)
-            lastEmitted = newValue
-        }
-    }
-
-    private func binding(for index: Int) -> Binding<String> {
-        Binding(
-            get: { parts[index] },
-            set: { newValue in
-                let filtered = kind == .ipv4
-                    ? newValue.filter(\.isNumber)
-                    : newValue.filter(\.isHexDigit).lowercased()
-                parts[index] = String(filtered.prefix(kind.maxLength))
-                emit()
-                if parts[index].count == kind.maxLength, index + 1 < parts.count {
-                    focused = index + 1
-                }
-            })
-    }
-
-    private func emit() {
-        let joined = Self.join(parts, kind: kind)
-        lastEmitted = joined
-        text = joined
-    }
-
-    static func split(_ value: String, kind: Kind) -> [String] {
-        kind == .ipv4 ? FieldFormatting.splitIPv4(value) : FieldFormatting.splitMAC(value)
-    }
-
-    static func join(_ parts: [String], kind: Kind) -> String {
-        kind == .ipv4 ? FieldFormatting.joinIPv4(parts) : FieldFormatting.joinMAC(parts)
+        FormattedTextField(text: $text, kind: kind, onSubmit: onSubmit)
+            .frame(height: 22)
+            .frame(width: kind == .ipv4 ? 190 : 210)
     }
 }
 
-/// 一行"标签 + 分段输入"，标签列固定 72pt，所有行左对齐且起始位置一致。
+/// 一个行"标签 + 地址框"。
 struct LabeledAddressField: View {
     let title: String
     let kind: AddressField.Kind
     @Binding var text: String
+    var onSubmit: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             Text(title)
                 .frame(width: 72, alignment: .leading)
                 .foregroundStyle(.secondary)
-            AddressField(kind: kind, text: $text)
+            AddressField(kind: kind, text: $text, onSubmit: onSubmit)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+// MARK: - AppKit 实现
+
+private struct FormattedTextField: NSViewRepresentable {
+    @Binding var text: String
+    let kind: AddressField.Kind
+    let onSubmit: (() -> Void)?
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeNSView(context: Context) -> NSTextField {
+        let field = NSTextField()
+        field.delegate = context.coordinator
+        field.placeholderString = kind.placeholder
+        field.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
+        field.bezelStyle = .roundedBezel
+        field.isBordered = true
+        field.focusRingType = .default
+        field.stringValue = text
+        field.target = context.coordinator
+        field.action = #selector(Coordinator.handleEnter(_:))
+        // 让 Enter 直接走 action，而不是插入换行
+        field.cell?.sendsActionOnEndEditing = false
+        return field
+    }
+
+    func updateNSView(_ field: NSTextField, context: Context) {
+        context.coordinator.parent = self
+        // 只有"外部改动"（载入配置 / 清空）才回灌；用户自己输入的由 AppKit 维护
+        if field.currentEditor() == nil, field.stringValue != text {
+            field.stringValue = text
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: FormattedTextField
+
+        init(parent: FormattedTextField) {
+            self.parent = parent
+        }
+
+        @objc func handleEnter(_ sender: NSTextField) {
+            parent.onSubmit?()
+        }
+
+        func control(_ control: NSControl, textView: NSTextView,
+                     doCommandBy selector: Selector) -> Bool {
+            if selector == #selector(NSResponder.insertNewline(_:)) {
+                parent.onSubmit?()
+                return true        // 吞掉回车，不把它插进文本
+            }
+            return false
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let field = notification.object as? NSTextField,
+                  let editor = field.currentEditor() as? NSTextView else { return }
+
+            let selection = editor.selectedRange()
+            let typed = editor.string
+            let kind: AddressEditing.Kind = parent.kind == .ipv4 ? .ipv4 : .mac
+
+            // 规则在 Core 里单测过：末尾输入才重排，中间编辑光标不动
+            let edited = AddressEditing.apply(typed: typed,
+                                              selectedLocation: selection.location,
+                                              kind: kind)
+            if edited.text != typed {
+                field.stringValue = edited.text
+                editor.string = edited.text
+                editor.setSelectedRange(NSRange(location: edited.caret, length: 0))
+            }
+            parent.text = edited.text
         }
     }
 }

@@ -67,6 +67,17 @@ struct WizardView: View {
         .onAppear {
             Task { @MainActor in
                 load()
+                if DevOverrides.wizardStartsAtNetwork {
+                    account = "20230001"
+                    password = "test-pass-2024"
+                    link = "wired"
+                    ip = "203.0.113.11"
+                    mask = "255.255.255.0"
+                    gateway = "203.0.113.1"
+                    dns = "10.10.10.10"
+                    mac = "02:00:00:00:00:01"
+                    step = .network
+                }
                 FileLogger.shared.log("wizard: 打开，step=\(step) link=\(link) account=\(account.isEmpty ? "-" : account)")
             }
         }
@@ -241,9 +252,9 @@ struct WizardView: View {
 
             // 分隔符由界面画出来：IP 四格、MAC 六格，填满自动跳下一格
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                LabeledAddressField(title: "IP", kind: .ipv4, text: $ip)
-                LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $mask)
-                LabeledAddressField(title: "网关", kind: .ipv4, text: $gateway)
+                LabeledAddressField(title: "IP", kind: .ipv4, text: $ip, onSubmit: focusNextField)
+                LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $mask, onSubmit: focusNextField)
+                LabeledAddressField(title: "网关", kind: .ipv4, text: $gateway, onSubmit: focusNextField)
                 GridRow {
                     Text("DNS").frame(width: 72, alignment: .leading).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 6) {
@@ -252,7 +263,7 @@ struct WizardView: View {
                             set: { dns = FieldFormatting.ipv4ListInput($0) }))
                     }
                 }
-                LabeledAddressField(title: "登记 MAC", kind: .mac, text: $mac)
+                LabeledAddressField(title: "登记 MAC", kind: .mac, text: $mac, onSubmit: finish)
             }
 
             Label("这些值只能从学校通知单照抄。下面是系统当前读数，仅供核对——**不要照抄 DHCP 分到的地址**。",
@@ -346,6 +357,11 @@ struct WizardView: View {
             .macForAuthentication
             ?? model.interfaceCandidates.first(where: { $0.ipv4 != nil })?.macForAuthentication
             ?? suggestion.mac ?? ""
+    }
+
+    /// Enter：把焦点交给下一个可输入的控件（macOS 的 key view 链）
+    private func focusNextField() {
+        NSApp.keyWindow?.selectNextKeyView(nil)
     }
 
     private func clearFields() {

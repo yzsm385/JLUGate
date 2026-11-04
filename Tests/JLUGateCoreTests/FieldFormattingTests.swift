@@ -59,3 +59,27 @@ struct FieldFormattingTests {
     }
 }
 
+
+@Suite("单行输入实时补分隔符（光标稳定版）")
+struct LiveFieldFormattingTests {
+    @Test("IPv4：满 3 位补点，最多 4 段")
+    func ipv4() {
+        #expect(FieldFormatting.liveIPv4("192") == "192.")
+        #expect(FieldFormatting.liveIPv4("192168") == "192.168.")
+        #expect(FieldFormatting.liveIPv4("19216810110") == "192.168.101.10")
+        #expect(FieldFormatting.liveIPv4("1.2.3.4") == "123.4", "分隔符由输入决定，粘进来的会被规整")
+    }
+
+    @Test("MAC：每 2 位补冒号")
+    func mac() {
+        #expect(FieldFormatting.liveMAC("02") == "02:")
+        #expect(FieldFormatting.liveMAC("0200") == "02:00:")
+        #expect(FieldFormatting.liveMAC("020000000001") == "02:00:00:00:00:01")
+    }
+
+    @Test("超长输入被截断，不会越界")
+    func limits() {
+        #expect(FieldFormatting.liveIPv4("19216810110155") == "192.168.101.101", "第 5 段会被丢掉")
+        #expect(FieldFormatting.liveMAC("0200000000012345") == "02:00:00:00:00:01")
+    }
+}

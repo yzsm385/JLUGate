@@ -194,11 +194,13 @@ public actor DrcomEngine {
 
     private func runLoop(epoch: UInt64) async {
         var attempt = 0
+        var credentialRetries = 0
         while isCurrent(epoch) && !Task.isCancelled {
             do {
                 let context = try await discover(epoch: epoch)
                 let ticket = try await authenticate(context: context, epoch: epoch)
                 attempt = 0
+                credentialRetries = 0
                 try await stayOnline(context: context, ticket: ticket, epoch: epoch)
             } catch let error as DrcomError {
                 await teardown()
@@ -213,6 +215,15 @@ public actor DrcomEngine {
                 if error.awaitsPathChange {
                     setState(.failed(error))
                     return
+                }
+
+                // ldap auth error：实测同一密码也会偶发（账号在别处在线 / 服务器忙），
+                // 换一个新 salt 重试两次；仍失败才交给用户。
+                if error.isCredentialRejection, credentialRetries < 2 {
+                    credentialRetries += 1
+                    emit(.log("服务器回 ldap auth error：换新 salt 重试第 \(credentialRetries) 次"))
+                    try? await clock.sleep(for: .seconds(2))
+                    continue
                 }
 
                 // 账号冲突 / MAC / DHCP / TUN / 服务器明确拒绝：一律停下等用户
@@ -365,6 +376,7 @@ public actor DrcomEngine {
             salt = reply.salt
             serverSessionID = reply.sessionID
             emit(.log("收到 challenge 应答：salt=\(Hex.string(salt)) 会话=\(String(format: "0x%04x", reply.sessionID))"))
+            emit(.log("challenge 应答原文（前 48 字节）=\(Hex.string(incoming.payload, limit: 48))"))
         } catch let error as DrcomError where error == .cancelled {
             throw error
         } catch {
@@ -390,6 +402,7 @@ public actor DrcomEngine {
                 ?? MACAddress(bytes: [0, 0, 0, 0, 0, 0])!)
         let login = try codec.makeLogin(loginContext)
         let digest = DrcomCodec.digestA(password: configuration.password, salt: salt)
+        emit(.log("登录包原文=\(Hex.string(login))"))
         emit(.log("发送登录包：\(login.count) 字节，摘要A=\(Hex.string(digest, limit: 8))…，"
                   + "账号=\(configuration.account)，接口 MAC=\(loginContext.mac)"))
         try await channel.send(login)
