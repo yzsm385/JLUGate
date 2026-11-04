@@ -24,7 +24,7 @@ struct InspectPanel: View {
 
                 ForEach(model.reachability.filter { !$0.isCampus }) { reachRow($0) }
                 if model.reachability.contains(where: \.isCampus) {
-                    Text("校内系统（只在校园网内可访问）")
+                    Text("校内系统（教务/通知仅校内；邮箱校内外都能开）")
                         .font(.system(size: 10)).foregroundStyle(.tertiary)
                         .padding(.top, 2)
                     ForEach(model.reachability.filter(\.isCampus)) { reachRow($0) }
@@ -149,6 +149,11 @@ struct InspectPanel: View {
             Image(systemName: result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(result.ok ? Color.green : Color.orange)
             Text(result.host).font(.caption2.monospaced())
+            if !result.accessNote.isEmpty {
+                Text(result.accessNote)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+            }
             Spacer()
             Text(result.display).font(.caption2).foregroundStyle(.secondary)
             if let ms = result.milliseconds {

@@ -32,6 +32,12 @@ public struct SiteResult: Sendable, Equatable, Identifiable {
     /// 只在校园网内才能访问（邮箱在校外也能开，不算）
     public let isCampusOnly: Bool
 
+    /// 访问范围说明（界面用）：邮箱不是校内独有。
+    public var accessNote: String {
+        guard isCampus else { return "" }
+        return isCampusOnly ? "仅校内网" : "校内外都能开"
+    }
+
     public var id: String { host }
     public var ok: Bool { stage == .ok }
 
@@ -148,8 +154,10 @@ public enum ReachabilityDiagnosisEngine {
         let campusOnly = sites.filter(\.isCampusOnly)
         let publicSites = sites.filter { !$0.isCampus }
         if !campusOnly.isEmpty, campusOnly.allSatisfy({ !$0.ok }), publicSites.contains(where: \.ok) {
+            // 邮箱在校外也能开，不能算"仅校内"；这里只点名真正的校内独有系统
+            let names = campusOnly.map(\.host).joined(separator: "、")
             return .init(verdict: .campusUnreachable,
-                         summary: "公网站点能上，但教务/通知/邮箱全不通——这些系统只对校内网开放。",
+                         summary: "公网站点能上，但校内系统（\(names)）不通——它们只对校内网开放；邮箱校内外都能开，不算证据。",
                          action: "如果在校外，用学校 WebVPN 再访问；在校内则先确认认证是否成功（有线/JLU.PC）。")
         }
 

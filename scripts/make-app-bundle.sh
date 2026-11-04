@@ -51,7 +51,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key>      <string>dev.jlugate.app</string>
     <key>CFBundleExecutable</key>      <string>JLUGate</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.3</string>
+    <key>CFBundleShortVersionString</key><string>0.1.4</string>
     <key>CFBundleVersion</key>         <string>BUILD_STAMP</string>
     <key>LSMinimumSystemVersion</key>  <string>26.0</string>
     <key>LSUIElement</key>             <true/>
