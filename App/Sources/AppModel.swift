@@ -371,7 +371,12 @@ final class AppModel {
             ip: profile?.ip, mask: profile?.mask,
             gateway: profile?.gateway, mac: profile?.registeredMAC)
         let hasAccount = !loaded.account.trimmingCharacters(in: .whitespaces).isEmpty
-        let hasPassword = !password.isEmpty
+        // 启动时内存里不再预加载密码，但"已验证的保存密码"仍然算有凭据，
+        // 否则双击打开 App 也不会自动连（这才是"每次都要手动点"的原因之一）。
+        let savedVerifiedPassword = hasAccount
+            && CredentialStore.verifiedAt(account: loaded.account) != nil
+            && !(CredentialStore.password(for: loaded.account) ?? "").isEmpty
+        let hasPassword = !password.isEmpty || savedVerifiedPassword
 
         // 记住过账号密码、并且成功连过 → 启动直接连，不打扰
         showWizard = LaunchPolicy.shouldShowWizard(
@@ -474,7 +479,7 @@ final class AppModel {
         launchConnectTask = Task { @MainActor [weak self] in
             guard let self else { return }
             for attempt in 1...5 {
-                let delay: Duration = attempt == 1 ? .milliseconds(1500) : .seconds(2)
+                let delay: Duration = attempt == 1 ? .seconds(1) : .seconds(2)
                 try? await Task.sleep(for: delay)
                 if Task.isCancelled { return }
                 if self.state.isOnline || self.state.isBusy { return }
