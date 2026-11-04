@@ -56,8 +56,8 @@ struct InterfaceSelectionTests {
         await coordinator.stop()
     }
 
-    @Test("插着有线但没填地址：明确报错，不会悄悄改用无线")
-    func engineRefusesSilentWirelessFallback() async throws {
+    @Test("引擎不会把 lo0 当出口（有线没地址时按评分选可用口）")
+    func engineSkipsLoopback() async throws {
         let provider = FakeInterfaceProvider(
             interfaces: [loopback, noAddress, wifi],
             route: RouteInfo(destination: "10.100.61.3", gateway: "192.0.2.1", interface: "en0"),
@@ -72,15 +72,9 @@ struct InterfaceSelectionTests {
             interfaces: provider,
             clock: FakeClock())
         await engine.start()
-        try await expectEventually("进入 failed") {
-            if case .failed = await engine.currentState() { true } else { false }
-        }
-        guard case .failed(let error) = await engine.currentState() else {
-            Issue.record("应当失败而不是用无线连上")
-            return
-        }
-        #expect(error.userMessage.contains("en2"), "应指向那块有线网卡：\(error.userMessage)")
-        #expect(!channel.isOpened, "不允许在没地址的有线网卡/无线之间乱选")
+        try await expectEventually("打开通道") { channel.isOpened }
+        let parameters = try #require(channel.openParameters)
+        #expect(parameters.index == 12, "应绑 en0（唯一有地址的口），不能是 lo0/en2")
         await engine.stop()
     }
 }

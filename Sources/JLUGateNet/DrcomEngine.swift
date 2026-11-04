@@ -324,26 +324,7 @@ public actor DrcomEngine {
     }
 
     /// 选口：MAC 命中 +8 → 有线 +2 → 有默认网关 +1（challenge 探测 +4 留待 M2.5，见 progress.md）。
-    private func chooseInterface(from candidates: [InterfaceSnapshot],
-                                 allowReentry: Bool = true) throws -> InterfaceSnapshot {
-        // 自动模式**必须先看有线**：插着网线却没地址，不能悄悄改用 Wi‑Fi——
-        // 用户会以为程序"自己跑去连无线"，实际是拿错了网卡。
-        let wiredUp = candidates.filter { !$0.isWireless && $0.isUp && !$0.isLoopback
-            && !VirtualInterfaceNames.isVirtual($0.name) }
-        if allowReentry, configuration.preferWired,
-           configuration.interfaceLock == nil, !wiredUp.isEmpty {
-            let usableWired = wiredUp.filter(\.isUsableForAuthentication)
-            guard !usableWired.isEmpty else {
-                let name = wiredUp.first!.name
-                emit(.log("自动：检测到有线 \(name) 但没有 IPv4 —— 需要填静态参数或改用 DHCP，"
-                          + "不会改用无线"))
-                throw DrcomError.interfaceHasNoIPv4(interface: name)
-            }
-            emit(.log("自动：优先有线（\(usableWired.map(\.name).joined(separator: "、"))）"))
-            return try chooseInterface(from: usableWired,
-                                       allowReentry: false)
-        }
-
+    private func chooseInterface(from candidates: [InterfaceSnapshot]) throws -> InterfaceSnapshot {
         let usable = candidates.filter(\.isUsableForAuthentication)
         let pool = usable.isEmpty ? candidates : usable
         // 一个网卡都没有：这是拔线/没地址，绝不能对着空数组 first!（会直接崩）
