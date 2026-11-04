@@ -24,6 +24,8 @@ public struct EngineConfiguration: Sendable {
     /// 档案里登记的静态 IP / 掩码。与接口实际值不符时报"IP 已漂移"，
     /// 而不是发一串注定失败的认证包（PLAN §6.3）。
     public var expectedIP: IPv4Address?
+    /// 排障开关：打印完整登录报文（默认关；报文里含账号与 MAC）
+    public var verboseAuthLogging: Bool = false
     public var expectedMask: String?
 
     public var challengeSubtype: UInt8
@@ -38,6 +40,7 @@ public struct EngineConfiguration: Sendable {
                 registeredMAC: MACAddress? = nil, interfaceLock: String? = nil,
                 expectedIP: IPv4Address? = nil, expectedMask: String? = nil,
                 useRegisteredMACForAuth: Bool = false,
+                verboseAuthLogging: Bool = false,
                 strictMACCheck: Bool = false,
                 server: IPv4Address = PacketLayout.defaultServer,
                 serverPort: UInt16 = PacketLayout.serverPort,
@@ -57,6 +60,7 @@ public struct EngineConfiguration: Sendable {
         self.expectedIP = expectedIP
         self.expectedMask = expectedMask
         self.useRegisteredMACForAuth = useRegisteredMACForAuth
+        self.verboseAuthLogging = verboseAuthLogging
         self.strictMACCheck = strictMACCheck
         self.server = server
         self.serverPort = serverPort
@@ -414,9 +418,13 @@ public actor DrcomEngine {
                 ?? MACAddress(bytes: [0, 0, 0, 0, 0, 0])!)
         let login = try codec.makeLogin(loginContext, variant: variant)
         let digest = DrcomCodec.digestA(password: configuration.password, salt: salt)
-        emit(.log("登录包原文=\(Hex.string(login))"))
+        // 报文里有账号与 MAC：默认不落盘；仅调试模式打印，且账号已抹掉
+        if configuration.verboseAuthLogging {
+            let hex = Redact.scrubAccount(in: Hex.string(login), account: configuration.account)
+            emit(.log("登录包原文=\(hex)"))
+        }
         emit(.log("发送登录包：\(login.count) 字节，摘要A=\(Hex.string(digest, limit: 8))…，"
-                  + "账号=\(configuration.account)，接口 MAC=\(loginContext.mac)"))
+                  + "账号=\(Redact.account(configuration.account))，接口 MAC=\(Redact.mac("\(loginContext.mac)"))"))
         try await channel.send(login)
 
         let incoming = try await receive(matching: { frame in

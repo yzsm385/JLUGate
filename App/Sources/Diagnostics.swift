@@ -41,13 +41,16 @@ enum DiagnosticsReport {
 
         lines.append("")
         lines.append("== 配置（脱敏） ==")
-        lines.append("账号：\(config.account.isEmpty ? "-" : config.account)")
+        lines.append("账号：\(config.account.isEmpty ? "-" : Redact.account(config.account))")
+        if !config.studentID.isEmpty {
+            lines.append("学号：\(Redact.studentID(config.studentID))")
+        }
         lines.append("链路：\(config.link)  通道：\(config.channel)")
         lines.append("服务器：\(config.server):\(config.serverPort)  本地端口：\(config.localPort)")
         if let profile = config.currentProfile {
             lines.append("静态 IP：\(profile.ip ?? "-")  掩码：\(profile.mask ?? "-")")
             lines.append("网关：\(profile.gateway ?? "-")  DNS：\(profile.dns.joined(separator: ","))")
-            lines.append("登记 MAC：\(profile.registeredMAC ?? "-")")
+            lines.append("登记 MAC：\(profile.registeredMAC.map(Redact.mac) ?? "-")")
         }
         lines.append("")
         let logTail = FileLogger.shared.tail(120)

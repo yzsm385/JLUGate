@@ -36,11 +36,55 @@ final class AppModel {
         case detail
         case status
         case inspect
+        case sites
         case portal
         case portalLogin
     }
 
     private(set) var panel: Panel = .main
+
+    /// 站点合集里"复制账号"用
+    var account: String { config.account }
+
+    // MARK: 我的学院（学号识别）
+
+    var studentID: String { config.studentID }
+
+    /// 当前认出来的学院：手动选的优先，其次按学号前缀学习结果
+    var myCollege: College? {
+        if !config.myCollegeHost.isEmpty,
+           let manual = CollegeDirectory.college(forHost: config.myCollegeHost) {
+            return manual
+        }
+        return CollegeResolver.resolve(studentID: config.studentID,
+                                       learned: config.collegePrefixMap)
+    }
+
+    func updateStudentID(_ text: String) {
+        config.studentID = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        ConfigStore.save(config)
+    }
+
+    /// 选定学院：写入手动值，同时把学号前缀学下来
+    func setMyCollege(_ college: College) {
+        config.myCollegeHost = college.host
+        if !config.studentID.isEmpty {
+            CollegeResolver.learn(studentID: config.studentID, college: college,
+                                  into: &config.collegePrefixMap)
+        }
+        ConfigStore.save(config)
+        FileLogger.shared.log("我的学院：设为 \(college.name)（\(college.host)）")
+    }
+
+    func clearMyCollege() {
+        config.myCollegeHost = ""
+        ConfigStore.save(config)
+    }
+
+    /// 站点合集里"复制密码"用：只读本机保存的那份，绝不落日志。
+    func storedPasswordForPrefill() -> String? {
+        CredentialStore.password(for: config.account)
+    }
 
     /// 切面板统一延后一跳：按钮动作里立即改布局尺寸会落在 AppKit 的 display cycle 内。
     func show(_ next: Panel) {
@@ -526,6 +570,7 @@ final class AppModel {
             ("settings", AnyView(SettingsView().environment(self))),
             ("detail", AnyView(NetworkDetailView().environment(self))),
             ("status", AnyView(ConnectionStatusView().environment(self))),
+            ("sites", AnyView(SitesPanel().environment(self))),
             ("portal", AnyView(PortalViewerView(url: portalViewerURL).environment(self))),
             ("portalLogin", AnyView(PortalLoginPanel(url: URL(string: "https://login.jlu.edu.cn")!)
                 .environment(self))),
@@ -645,6 +690,7 @@ final class AppModel {
             expectedIP: devServer != nil ? nil : profile?.ip.flatMap(IPv4Address.init),
             expectedMask: devServer != nil ? nil : profile?.mask,
             useRegisteredMACForAuth: config.useRegisteredMACForAuth,
+            verboseAuthLogging: config.verboseAuthLogging,
             server: server,
             serverPort: serverPort,
             localPort: UInt16(config.localPort),

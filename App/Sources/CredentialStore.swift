@@ -1,4 +1,5 @@
 import Foundation
+import JLUGateCore
 import Security
 
 /// 凭据存储：**正式签名版**用 Keychain，**ad-hoc/未签名版**用 0600 文件。
@@ -154,13 +155,9 @@ enum CredentialStore {
         var dictionary = loadFile()
         dictionary[account] = password
         do {
-            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(),
-                                                    withIntermediateDirectories: true,
-                                                    attributes: [.posixPermissions: 0o700])
+            FilePrivacy.secureDirectory(fileURL.deletingLastPathComponent())
             let data = try JSONEncoder().encode(dictionary)
-            try data.write(to: fileURL, options: [.atomic])
-            try FileManager.default.setAttributes([.posixPermissions: 0o600],
-                                                  ofItemAtPath: fileURL.path)
+            try FilePrivacy.write(data, to: fileURL)
         } catch {
             throw StoreError.fileWriteFailed(error.localizedDescription)
         }

@@ -1,4 +1,5 @@
 import Foundation
+import JLUGateCore
 
 /// 配置 schema（对齐 PLAN 附录 C，`schemaVersion = 3`）。
 ///
@@ -51,6 +52,12 @@ struct AppConfig: Codable, Sendable {
 
     var schemaVersion = 3
     var account = ""
+    /// 学号（只用于"认出你的学院"，可留空）
+    var studentID = ""
+    /// 学号前缀 → 学院官网 host（本机学习，不上传）
+    var collegePrefixMap: [String: String] = [:]
+    /// 手动选定的学院官网 host（学号认不出时的兜底）
+    var myCollegeHost = ""
     var link = "auto"
     var server = "10.100.61.3"
     var serverPort = 61440
@@ -59,6 +66,8 @@ struct AppConfig: Codable, Sendable {
     var interfaceLock: String?
     var accounts: [String: NetworkProfile] = [:]
     var autoDetect = true
+    /// 只有排障时才打印完整登录报文（默认关：报文里有账号与 MAC）
+    var verboseAuthLogging = false
     var routeGuard = RouteGuard()
     var portal = Portal()
     var keepAlive = KeepAlive()
@@ -110,10 +119,11 @@ struct ConfigStore {
 
     static func save(_ config: AppConfig) {
         do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            FilePrivacy.secureDirectory(directory)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-            try encoder.encode(config).write(to: fileURL, options: .atomic)
+            // 配置里有账号/学号：按 0600 写，且不留 0644 的窗口期
+            try FilePrivacy.write(encoder.encode(config), to: fileURL)
         } catch {
             NSLog("JLUGate: 配置写入失败 \(error)")
         }

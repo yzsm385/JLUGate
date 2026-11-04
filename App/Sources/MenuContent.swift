@@ -20,6 +20,8 @@ struct MenuContent: View {
                 embedded { ConnectionStatusView() }
             case .inspect:
                 embedded { InspectPanel() }
+            case .sites:
+                embedded { SitesPanel() }
             case .portal:
                 embedded { PortalViewerView(url: model.portalViewerURL) }
             case .portalLogin:
@@ -343,6 +345,7 @@ struct MenuContent: View {
         VStack(spacing: 6) {
             HStack(spacing: 2) {
                 footerButton("设置", "gearshape") { model.presentSettings() }
+                footerButton("站点", "link") { model.show(.sites) }
                 footerButton("状态", "info.circle") { model.presentConnectionStatus() }
                 footerButton("详情", "network") { model.presentNetworkDetail() }
                 footerButton("体检", "stethoscope") { model.show(.inspect) }

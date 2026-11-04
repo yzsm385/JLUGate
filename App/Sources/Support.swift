@@ -103,7 +103,7 @@ final class FileLogger: @unchecked Sendable {
 
     private static func prepare(_ directory: URL) -> Bool {
         do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            FilePrivacy.secureDirectory(directory)
             let probe = directory.appendingPathComponent(".write-test")
             try Data("ok".utf8).write(to: probe)
             try? FileManager.default.removeItem(at: probe)
@@ -120,15 +120,16 @@ final class FileLogger: @unchecked Sendable {
         queue.async { [self] in
             let line = "\(formatter.string(from: Date())) \(message)\n"
             do {
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                FilePrivacy.secureDirectory(directory)
                 rotateIfNeeded()
                 if let handle = try? FileHandle(forWritingTo: fileURL) {
                     defer { try? handle.close() }
                     try handle.seekToEnd()
                     try handle.write(contentsOf: Data(line.utf8))
                 } else {
-                    try Data(line.utf8).write(to: fileURL)
+                    try FilePrivacy.write(Data(line.utf8), to: fileURL)
                 }
+                FilePrivacy.secureFile(fileURL)
             } catch {
                 NSLog("JLUGate: 写日志失败 \(error.localizedDescription)")
             }
