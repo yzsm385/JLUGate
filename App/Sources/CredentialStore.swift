@@ -64,8 +64,29 @@ enum CredentialStore {
         }
     }
 
+    // MARK: 密码"是否被服务器验证过"
+
+    /// 只有**成功登录过**的密码才算已验证。未验证的密码不允许在启动时静默复用——
+    /// 否则一次输错会被永久记住，用户点多少次重试都是同一个错密码。
+    private static func verifiedKey(_ account: String) -> String { "credentialVerified.\(account)" }
+
+    static func markVerified(account: String) {
+        guard !account.isEmpty else { return }
+        UserDefaults.standard.set(Date(), forKey: verifiedKey(account))
+    }
+
+    static func markUnverified(account: String) {
+        guard !account.isEmpty else { return }
+        UserDefaults.standard.removeObject(forKey: verifiedKey(account))
+    }
+
+    static func verifiedAt(account: String) -> Date? {
+        UserDefaults.standard.object(forKey: verifiedKey(account)) as? Date
+    }
+
     static func delete(account: String) {
         guard !account.isEmpty else { return }
+        markUnverified(account: account)
         switch backend {
         case .keychain: deleteFromKeychain(account: account)
         case .file: deleteFromFile(account: account)

@@ -29,6 +29,8 @@ struct WizardView: View {
     @State private var mac = ""
     @State private var errorText: String?
     @State private var hasSavedProfile = false
+    @State private var hasSavedPassword = false
+    @State private var savedPasswordVerified = false
     @State private var suggestionNote: String?
     @State private var isSuggestionTrustworthy = false
 
@@ -134,6 +136,30 @@ struct WizardView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if hasSavedPassword, password.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label(savedPasswordVerified
+                          ? "本机保存过密码（上次成功登录过）"
+                          : "本机保存过密码，但**未验证**（上次没登录成功）",
+                          systemImage: savedPasswordVerified ? "checkmark.seal" : "exclamationmark.triangle")
+                        .font(.caption2)
+                        .foregroundStyle(savedPasswordVerified ? Color.secondary : Color.orange)
+                    HStack(spacing: 8) {
+                        Button("使用已保存的密码") {
+                            if let stored = CredentialStore.password(for: account), !stored.isEmpty {
+                                password = stored
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        Button("重新输入") {
+                            hasSavedPassword = false      // 收起这块，直接输入新的
+                            password = ""
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
             }
 
             SecureField("密码", text: $password)
@@ -321,10 +347,12 @@ struct WizardView: View {
     private func load() {
         let current = model.config
         account = current.account
-        // 已经保存过的密码直接带出来：用户输过一次就不该再输第二次
-        password = model.password.isEmpty
-            ? (CredentialStore.password(for: current.account) ?? "")
-            : model.password
+        // 不把保存的密码静默填进输入框：用户看不出那是"旧的"，会以为是自己刚输的。
+        // 有保存的密码时给一个明确选择（用已保存 / 重新输入）。
+        let stored = current.account.isEmpty ? nil : CredentialStore.password(for: current.account)
+        hasSavedPassword = (stored?.isEmpty == false)
+        savedPasswordVerified = CredentialStore.verifiedAt(account: current.account) != nil
+        password = model.password
         link = current.link
         hasSavedProfile = current.currentProfile.map {
             !(($0.ip ?? "").isEmpty || ($0.mask ?? "").isEmpty)
@@ -382,12 +410,10 @@ struct WizardView: View {
                 return
             }
             account = normalized
-            let stored = CredentialStore.password(for: account) ?? ""
-            if password.isEmpty, !stored.isEmpty {
-                password = stored          // 本机存过：直接复用，不逼用户再输
-            }
             guard !password.isEmpty else {
-                errorText = "请填写密码"
+                errorText = hasSavedPassword
+                    ? "请选择：用已保存的密码，或重新输入一次"
+                    : "请填写密码"
                 return
             }
             // 换账号时载入该账号已经存过的地址，别让用户重填

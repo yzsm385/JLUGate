@@ -207,6 +207,15 @@ final class AppModel {
     var onlineViaOfficialClient = false
     /// 最近一次服务器拒绝凭据的时间（用于界面提示）
     var credentialRejectedAt: Date?
+
+    /// 本次登录用的是哪份密码（绝不记录密码本身）
+    enum PasswordSource: String, Sendable {
+        case typed = "本次输入"
+        case savedVerified = "已保存（曾成功登录）"
+        case savedUnverified = "已保存（未验证）"
+        case savedStale = "已保存（上次被服务器拒绝）"
+    }
+    var passwordSource: PasswordSource = .typed
     /// 最近一次真实探测成功 / 失败的时间（用于状态粘性）
     var lastHealthyProbeAt: Date?
     var lastFailedProbeAt: Date?
@@ -567,9 +576,20 @@ final class AppModel {
                 config.link = "wired"
             }
         }
-        // 密码框为空但本机存过 → 直接复用，不再弹"输入账号密码"
+        // 密码框为空但本机存过 → 复用；但要弄清这份密码是否被服务器验证过
         if password.isEmpty {
             password = CredentialStore.password(for: config.account) ?? ""
+            if !password.isEmpty {
+                if CredentialStore.verifiedAt(account: config.account) != nil {
+                    passwordSource = .savedVerified
+                } else {
+                    passwordSource = .savedUnverified
+                }
+                FileLogger.shared.log("使用保存的密码（来源：\(passwordSource.rawValue)）")
+            }
+        } else {
+            passwordSource = .typed
+            FileLogger.shared.log("使用本次输入的密码")
         }
         guard !config.account.trimmingCharacters(in: .whitespaces).isEmpty, !password.isEmpty else {
             recentLog.insert("还没有账号或密码：请先在设置里填一次（之后会自动记住）", at: 0)
@@ -1270,8 +1290,13 @@ final class AppModel {
                 // 否则会拿着同一个错密码一直重试（真机上就这样"怎么点都失败"）。
                 if error.isCredentialRejection {
                     // 注意：ldap auth error 不等于"密码错"——同一密码也可能因为
-                    // 账号在别处在线 / 服务器忙而偶发。所以**不清密码**，只提示 + 给重输入口。
+                    // 账号在别处在线 / 服务器忙而偶发。所以**不清密码**，只标记未验证 + 给重输入口。
                     credentialRejectedAt = Date()
+                    CredentialStore.markUnverified(account: config.account)
+                    if passwordSource != .typed { passwordSource = .savedStale }
+                    // 清空内存里的密码，让向导显示"用已保存 / 重新输入"的选择，
+                    // 而不是把一个看不出真假的旧密码填在点号里（这正是之前反复失败的原因之一）
+                    password = ""
                     recentLog.insert("服务器回了 ldap auth error（账号验证没过）。常见原因：账号在别的设备在线、服务器忙，或密码确实要重输。点「重新输入密码」可重来。", at: 0)
                     FileLogger.shared.log("凭据被拒（保留已保存密码），已提示用户")
                 }
@@ -1315,6 +1340,8 @@ final class AppModel {
         case .telemetry(let telemetry):
             switch telemetry {
             case .session(let account, let clientIP, let session):
+                CredentialStore.markVerified(account: account)
+                self.passwordSource = .savedVerified
                 self.clientIP = clientIP
                 sessionNumber = session
                 recentLog.insert("登录成功：\(account) @ \(clientIP ?? "-")", at: 0)
