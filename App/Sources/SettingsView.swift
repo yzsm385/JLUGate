@@ -52,9 +52,14 @@ struct SettingsView: View {
                     Text("JLU.WIFI").tag("jluWiFi")
                 }
                 Picker("通道实现", selection: $draft.channel) {
-                    Text("NW（生产）").tag("nw")
-                    Text("BSD（诊断/兜底）").tag("bsd")
+                    Text("BSD（默认，最接近官方客户端）").tag("bsd")
+                    Text("NW（系统网络框架）").tag("nw")
                 }
+                Text("BSD：原始 socket，能精确绑定源端口 61440 和网卡（IP_BOUND_IF）；"
+                     + "NW：走 Network.framework，受系统路径管理。两者发的是同样的 UDP 包，"
+                     + "默认用 BSD，遇到系统限制再换 NW。")
+                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section {
