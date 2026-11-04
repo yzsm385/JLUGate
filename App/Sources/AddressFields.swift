@@ -87,23 +87,27 @@ struct SegmentedAddressField: NSViewRepresentable {
         let container = SegmentedContainer(kind: kind, coordinator: context.coordinator)
         context.coordinator.container = container
         container.build()
+        context.coordinator.lastEmitted = text
         container.setSegments(Coordinator.split(text, kind: kind))
         return container
     }
 
     func updateNSView(_ container: SegmentedContainer, context: Context) {
         context.coordinator.parent = self
-        // 只处理"外部改动"（载入配置 / 清空）；用户输入由 AppKit 自己维护
-        let incoming = Coordinator.split(text, kind: kind)
-        if container.currentSegments() != incoming, !container.isEditing {
-            container.setSegments(incoming)
-        }
+        // 只处理**真正的外部改动**（载入配置 / 清空）。
+        // 关键：用 lastEmitted 比对，而不是和 SwiftUI 的当前值比对——
+        // 否则别处一刷新（比如在另一个框里打字），拿到的旧值会把这里正在输的内容清空。
+        guard text != context.coordinator.lastEmitted else { return }
+        context.coordinator.lastEmitted = text
+        container.setSegments(Coordinator.split(text, kind: kind))
     }
 
     @MainActor
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: SegmentedAddressField
         weak var container: SegmentedContainer?
+        /// 最后一次由本控件写出去的值（用来区分"外部改动"和"回灌"）
+        var lastEmitted = ""
 
         init(parent: SegmentedAddressField) { self.parent = parent }
 
@@ -253,6 +257,7 @@ final class SegmentedContainer: NSView {
         var parts = currentSegments()
         parts[index] = value
         let joined = parts.joined(separator: String(kind.separator))
+        coordinator.lastEmitted = joined
         coordinator.parent.text = joined
     }
 
