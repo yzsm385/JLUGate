@@ -432,6 +432,9 @@ final class AppModel {
 
         FileLogger.shared.log("启动 JLU Gate \(BuildInfo.display)")
         FileLogger.shared.log("credential backend=\(CredentialStore.backend.rawValue)")
+        FileLogger.shared.log("配置载入：账号=\(Redact.account(config.account)) 链路=\(config.link) "
+                              + "服务器=\(config.server):\(config.serverPort) "
+                              + "档案=\(config.accounts.count) 份")
         if DevOverrides.isEnabled {
             let devState = "dev server=\(DevOverrides.server?.description ?? "-"):\(DevOverrides.port ?? 0)"
                 + " autostart=\(DevOverrides.autostart)"
@@ -725,7 +728,7 @@ final class AppModel {
             password: password,
             hostname: SystemHostname.value,
             registeredMAC: profile?.registeredMAC.flatMap(MACAddress.init),
-            interfaceLock: devServer != nil ? "lo0" : config.interfaceLock,
+            interfaceLock: devServer != nil ? "lo0" : effectiveInterfaceLock,
             expectedIP: devServer != nil ? nil : profile?.ip.flatMap(IPv4Address.init),
             expectedMask: devServer != nil ? nil : profile?.mask,
             useRegisteredMACForAuth: config.useRegisteredMACForAuth,
@@ -782,7 +785,7 @@ final class AppModel {
             server: IPv4Endpoint(host: server, port: serverPort),
             localPort: UInt16(config.localPort),
             registeredMAC: profile?.registeredMAC.flatMap(MACAddress.init),
-            interfaceLock: config.interfaceLock,
+            interfaceLock: effectiveInterfaceLock,
             dnsServers: (profile?.dns ?? []).compactMap(IPv4Address.init),
             probeTimeout: .seconds(config.probe.timeout))
 
@@ -1147,6 +1150,33 @@ final class AppModel {
                                   locked: config.interfaceLock)
     }
 
+    /// 自动模式下的有效锁定：旧版本可能把锁留在无线网卡上，
+    /// 只要现在插着有线（且真的有线网卡在），就忽略这个旧锁定——否则"自动"永远是无线。
+    /// 当前"正在用"的网口：用户锁定（或自动认卡选中的）优先，其次到服务器的路由出口
+    var activeInterfaceName: String? {
+        config.interfaceLock ?? routeInterfaceName
+    }
+
+    /// 到认证服务器实际走哪块网口（refreshDiagnostics 时更新）
+    var routeInterfaceName: String?
+
+    /// 界面里显示的网口顺序：正在用的在前，其次有线优先
+    var orderedInterfaces: [InterfaceSnapshot] {
+        InterfaceOrdering.sorted(interfaces, active: activeInterfaceName)
+    }
+
+    var effectiveInterfaceLock: String? {
+        guard let lock = config.interfaceLock, config.link == "auto" else { return config.interfaceLock }
+        guard let locked = interfaces.first(where: { $0.name == lock }), locked.isWireless else { return lock }
+        let wiredUp = interfaces.filter {
+            !$0.isWireless && $0.isUp && !$0.isLoopback
+                && !VirtualInterfaceNames.isVirtual($0.name)
+        }
+        guard !wiredUp.isEmpty else { return lock }
+        FileLogger.shared.log("自动：忽略旧的无线锁定 \(lock)，改为优先有线（\(wiredUp.map(\.name).joined(separator: "、"))）")
+        return nil
+    }
+
     /// 自动认卡：命中登记 MAC 就锁定这块，避免"明明登记了还被判不匹配"。
     @discardableResult
     func autoSelectInterface() -> String? {
@@ -1373,6 +1403,7 @@ final class AppModel {
         }
         let route = interfacesProvider.route(to: server)
         if let route {
+            routeInterfaceName = route.interface
             routeSummary = "\(config.server) → \(route.interface ?? "?")（网关 \(route.gateway ?? "-")）"
                 + (route.isTunnel ? "  ⚠️ 被代理接管" : "")
         } else {

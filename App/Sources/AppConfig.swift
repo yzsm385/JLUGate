@@ -94,6 +94,56 @@ struct AppConfig: Codable, Sendable {
         get { accounts[account] }
         set { accounts[account] = newValue }
     }
+
+    // MARK: 向前兼容解码（关键）
+
+    /// 老版本 `config.json` 缺少新增字段时**不能整份丢弃**——那会把账号、服务器、
+    /// 静态 IP/网关/MAC 全部重置成默认值（0.2.0 起就踩过这个坑：更新后"突然连不上"）。
+    /// 每个字段都用 `decodeIfPresent`，缺失就落回默认值。
+    enum CodingKeys: String, CodingKey {
+        case schemaVersion, account, studentID, collegePrefixMap, myCollegeHost
+        case link, server, serverPort, localPort, channel, interfaceLock, accounts
+        case autoDetect, verboseAuthLogging, routeGuard, portal, keepAlive, probe
+        case backoff, launchAtLogin, autoConnect, declaredProxyMode
+        case useRegisteredMACForAuth, compatibilityMode
+        case ip2locationKey, maxmindAccount, maxmindLicense
+        case lastSuccessfulLogin, logLevel
+    }
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 3
+        account = try c.decodeIfPresent(String.self, forKey: .account) ?? ""
+        studentID = try c.decodeIfPresent(String.self, forKey: .studentID) ?? ""
+        collegePrefixMap = try c.decodeIfPresent([String: String].self, forKey: .collegePrefixMap) ?? [:]
+        myCollegeHost = try c.decodeIfPresent(String.self, forKey: .myCollegeHost) ?? ""
+        link = try c.decodeIfPresent(String.self, forKey: .link) ?? "auto"
+        server = try c.decodeIfPresent(String.self, forKey: .server) ?? "10.100.61.3"
+        serverPort = try c.decodeIfPresent(Int.self, forKey: .serverPort) ?? 61440
+        localPort = try c.decodeIfPresent(Int.self, forKey: .localPort) ?? 61440
+        channel = try c.decodeIfPresent(String.self, forKey: .channel) ?? "bsd"
+        interfaceLock = try c.decodeIfPresent(String.self, forKey: .interfaceLock)
+        accounts = try c.decodeIfPresent([String: NetworkProfile].self, forKey: .accounts) ?? [:]
+        autoDetect = try c.decodeIfPresent(Bool.self, forKey: .autoDetect) ?? true
+        verboseAuthLogging = try c.decodeIfPresent(Bool.self, forKey: .verboseAuthLogging) ?? false
+        routeGuard = try c.decodeIfPresent(RouteGuard.self, forKey: .routeGuard) ?? RouteGuard()
+        portal = try c.decodeIfPresent(Portal.self, forKey: .portal) ?? Portal()
+        keepAlive = try c.decodeIfPresent(KeepAlive.self, forKey: .keepAlive) ?? KeepAlive()
+        probe = try c.decodeIfPresent(Probe.self, forKey: .probe) ?? Probe()
+        backoff = try c.decodeIfPresent(BackoffSettings.self, forKey: .backoff) ?? BackoffSettings()
+        launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? true
+        autoConnect = try c.decodeIfPresent(Bool.self, forKey: .autoConnect) ?? true
+        declaredProxyMode = try c.decodeIfPresent(String.self, forKey: .declaredProxyMode) ?? "unknown"
+        useRegisteredMACForAuth = try c.decodeIfPresent(Bool.self, forKey: .useRegisteredMACForAuth) ?? false
+        compatibilityMode = try c.decodeIfPresent(Bool.self, forKey: .compatibilityMode) ?? false
+        ip2locationKey = try c.decodeIfPresent(String.self, forKey: .ip2locationKey) ?? ""
+        maxmindAccount = try c.decodeIfPresent(String.self, forKey: .maxmindAccount) ?? ""
+        maxmindLicense = try c.decodeIfPresent(String.self, forKey: .maxmindLicense) ?? ""
+        lastSuccessfulLogin = try c.decodeIfPresent(String.self, forKey: .lastSuccessfulLogin)
+        logLevel = try c.decodeIfPresent(String.self, forKey: .logLevel) ?? "info"
+    }
 }
 
 /// 极简 JSON 落盘（不引入第三方）。写盘失败只记日志，不打断用户操作。
@@ -106,11 +156,28 @@ struct ConfigStore {
     static var fileURL: URL { directory.appendingPathComponent("config.json") }
 
     static func load() -> AppConfig {
-        guard let data = try? Data(contentsOf: fileURL),
-              let config = try? JSONDecoder().decode(AppConfig.self, from: data) else {
-            return AppConfig()
+        guard let data = try? Data(contentsOf: fileURL) else {
+            // 文件不在：先看有没有上一份备份（重装/写坏时用得上）
+            return loadBackup() ?? AppConfig()
         }
-        return config
+        if let config = try? JSONDecoder().decode(AppConfig.self, from: data) {
+            return config
+        }
+        // 解不开：**绝不静默覆盖**——留一份原文件，再尝试备份
+        let stamp = ISO8601DateFormatter().string(from: .now).replacingOccurrences(of: ":", with: "-")
+        let broken = directory.appendingPathComponent("config.unreadable-\(stamp).json")
+        try? FileManager.default.copyItem(at: fileURL, to: broken)
+        FileLogger.shared.log("配置解析失败，已保留原文件：\(broken.lastPathComponent)")
+        return loadBackup() ?? AppConfig()
+    }
+
+    private static func backupURL() -> URL {
+        directory.appendingPathComponent("config.backup.json")
+    }
+
+    private static func loadBackup() -> AppConfig? {
+        guard let data = try? Data(contentsOf: backupURL()) else { return nil }
+        return try? JSONDecoder().decode(AppConfig.self, from: data)
     }
 
     static func delete() {
@@ -120,6 +187,10 @@ struct ConfigStore {
     static func save(_ config: AppConfig) {
         do {
             FilePrivacy.secureDirectory(directory)
+            // 覆盖前留一份上一版（只保留一份，够用且不堆垃圾）
+            if let old = try? Data(contentsOf: fileURL) {
+                try? FilePrivacy.write(old, to: backupURL())
+            }
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             // 配置里有账号/学号：按 0600 写，且不留 0644 的窗口期
