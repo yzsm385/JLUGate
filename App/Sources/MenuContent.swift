@@ -78,11 +78,11 @@ struct MenuContent: View {
             header
             Divider().opacity(0.35)
             detailGrid
-            if !model.recentLog.isEmpty {
-                Text(model.recentLog.prefix(3).joined(separator: "\n"))
+            if let action = model.statusStory.action {
+                Label(action, systemImage: "hand.point.right")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16)
@@ -99,38 +99,53 @@ struct MenuContent: View {
                 .symbolEffect(.pulse, isActive: model.state.isBusy)
                 .foregroundStyle(model.statusColor)
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.statusTitle).font(.headline)
-                Text(model.detailLine)
+                Text(model.statusStory.title).font(.headline)
+                Text(model.statusStory.oneLiner)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer()
         }
     }
 
     private var detailGrid: some View {
-        Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
-            GridRow {
-                Text("链路").font(.caption).foregroundStyle(.secondary)
-                Text(model.linkTitle).font(.caption)
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            detailRow("链路", model.linkTitle, hint: linkHint)
             if let ip = model.clientIP {
-                GridRow {
-                    Text("本机 IP").font(.caption).foregroundStyle(.secondary)
-                    Text(ip).font(.caption).monospacedDigit()
-                }
+                detailRow("本机 IP", ip, hint: "学校分给这台机器的门牌号", mono: true)
             }
             if model.state.isOnline {
-                GridRow {
-                    Text("本次在线").font(.caption).foregroundStyle(.secondary)
-                    Text(timeText).font(.caption).monospacedDigit()
-                }
+                detailRow("已在线", timeText, hint: "这期间认证一直在续，不用你管", mono: true)
             }
-            GridRow {
-                Text("接口").font(.caption).foregroundStyle(.secondary)
-                Text(model.routeSummary).font(.caption2).foregroundStyle(.secondary)
+            detailRow("出口", model.routeSummary,
+                      hint: "认证包从哪张网卡出去；走代理不一定坏，但慢/丢包会被判掉线", small: true)
+        }
+    }
+
+    /// 一行明细：左边标签，右边值，值下面一句人话注解（说明贴着它自己那一行）
+    private func detailRow(_ label: String, _ value: String,
+                           hint: String, mono: Bool = false, small: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label).font(.caption2).foregroundStyle(.secondary)
+                .frame(width: 44, alignment: .leading)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(value)
+                    .font(mono ? .caption.monospacedDigit() : (small ? .caption2 : .caption))
+                    .lineLimit(2)
+                Text(hint).font(.system(size: 10)).foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var linkHint: String {
+        switch model.config.link {
+        case "wired": "插网线的那种，最稳"
+        case "jluPC": "学校无线信号，要用 Wi-Fi 网卡的身份认证"
+        case "jluWiFi": "网页登录那种，走浏览器"
+        default: "自动：先探一下再决定用哪条路"
         }
     }
 

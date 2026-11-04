@@ -85,11 +85,13 @@ public enum DrcomError: Error, Sendable, Equatable {
         case .capturedByTunnel(let name):
             return "检测到代理接管了校园网段（出口 \(name)）。请在代理规则里把 10.0.0.0/8 设为直连，或关闭全局路由。"
         case .officialClientRunning(let process, let pid):
-            let pidText = pid.map { "，PID \($0)" } ?? ""
-            return "端口 61440 被官方客户端占用（\(process)\(pidText)）。请先退出 DrClientNS；若仍占用需停掉它的后台组件。"
+            let pidText = pid.map { "（PID \($0)）" } ?? ""
+            return "官方 Dr.Com 客户端\(pidText)正握着认证通道（它先占了本地 61440）——通常说明它已经在替你上网。"
+                + "想让 JLU Gate 接管，先在它里面退出登录；若端口仍被占，关掉它的后台进程 DrClientNS。"
         case .localPortInUse(let port, let process):
             let who = process.map { "（\($0)）" } ?? ""
-            return "本地 UDP \(port) 已被其它进程占用\(who)。"
+            return "认证要用的那个「联系电话」（本地 61440）被别的程序先占了\(who)。"
+                + "如果是官方 Dr.Com 客户端，先退出它就对了。"
         case .accountInUse(let reason):
             return reason
         case .macInUse(let reason), .macRejected(let reason):

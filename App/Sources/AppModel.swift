@@ -66,6 +66,10 @@ final class AppModel {
     var diagnosticsBusy = false
     /// 上次启动闪退后进入的安全模式（不自动连、不读密码）
     var isSafeMode = false
+    /// 官方 Dr.Com 客户端占着 61440（说明它可能在替你上网）
+    var portHeldByOfficialClient = false
+    /// 在线是由官方客户端维持的（端口在它手里）
+    var onlineViaOfficialClient = false
     /// 最近一次进入在线的时间（判断"重复登录被拒"用）
     var lastOnlineAt: Date?
     var proxyAnalysis: ProxyModeAnalysis?
@@ -227,17 +231,25 @@ final class AppModel {
         }
     }
 
-    var statusTitle: String {
+    /// 当前状态的人话叙述（标题 + 一句比喻 + 该做什么）
+    var statusPhase: StatusPhase {
         switch state {
-        case .idle: "未登录"
-        case .discovering: "正在识别网络…"
-        case .challenging: "握手中…"
-        case .authenticating: "认证中…"
-        case .online: "在线"
-        case .reconnecting(let attempt): "重连中（第 \(attempt) 次）"
-        case .failed: "未连接"
+        case .idle: .idle
+        case .discovering, .challenging, .authenticating, .reconnecting: .working
+        case .online: onlineViaOfficialClient ? .onlineViaOfficialClient : .online
+        case .failed(let error):
+            switch error {
+            case .adapterUnplugged, .interfaceHasNoIPv4: .waitingForNetwork
+            case .officialClientRunning, .localPortInUse:
+                onlineViaOfficialClient ? .onlineViaOfficialClient : .officialClientHoldingPort
+            default: .failed
+            }
         }
     }
+
+    var statusStory: StatusStory { StatusNarrator.story(statusPhase) }
+
+    var statusTitle: String { statusStory.title }
 
     var linkTitle: String {
         link?.displayName ?? (config.link == "auto" ? "自动（未探测）" : config.link)
@@ -1012,6 +1024,7 @@ final class AppModel {
             switch next {
             case .online:
                 lastOnlineAt = Date()
+                if portHeldByOfficialClient { onlineViaOfficialClient = true }
                 // 在线期间别被 App Nap 挂起（不然 10s 心跳会被延迟成几十秒）
                 activityKeeper.begin()
                 Notifier.resetDeduplication()
@@ -1023,6 +1036,8 @@ final class AppModel {
             }
             if case .failed(let error) = next {
                 lastError = error
+                if case .officialClientRunning = error { portHeldByOfficialClient = true }
+                if case .localPortInUse = error { portHeldByOfficialClient = true }
                 Notifier.notifyFailure(error)
                 // "账号已在别处登录"这类失败，如果本机网络其实通着（会话还在），
                 // 不要把徽标打回"未连接"——服务器常常只是重复登录时报这个。
@@ -1041,6 +1056,7 @@ final class AppModel {
                 }()
                 if !offlineReason, await probeReachable() {
                     state = .online
+                    if portHeldByOfficialClient { onlineViaOfficialClient = true }
                     markSuccessfulLogin()
                     recentLog.insert("认证没有明确成功，但网络实际可用：按已连接处理（服务器原话：\(error.userMessage)）", at: 0)
                     FileLogger.shared.log("probe healthy after failure -> online; server said: \(error.userMessage)")
