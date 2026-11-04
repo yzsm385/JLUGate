@@ -398,10 +398,7 @@ final class AppModel {
             }
         }
         if shouldAutoConnectOnLaunch {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(800))
-                self.connect()
-            }
+            scheduleLaunchAutoConnect()
         }
         if DevOverrides.uiProbeOnLaunch {
             Task { @MainActor in
@@ -468,6 +465,28 @@ final class AppModel {
     var wizardNotice: String?
 
     /// 首次启动 / 换账号时的向导窗口（PLAN §9.1）。
+    /// 开机/启动后的自动连接：几秒后开始，失败就隔几秒重试，最多 5 次。
+    /// 只在"还没在线、没有手动在连"时动作，避免打架。
+    private var launchConnectTask: Task<Void, Never>?
+
+    private func scheduleLaunchAutoConnect() {
+        launchConnectTask?.cancel()
+        launchConnectTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            for attempt in 1...5 {
+                let delay: Duration = attempt == 1 ? .seconds(4) : .seconds(5)
+                try? await Task.sleep(for: delay)
+                if Task.isCancelled { return }
+                if self.state.isOnline || self.state.isBusy { return }
+                FileLogger.shared.log("开机自动连接：第 \(attempt)/5 次尝试")
+                self.connect()
+                try? await Task.sleep(for: .seconds(4))
+                if self.state.isOnline { return }
+            }
+            FileLogger.shared.log("开机自动连接：5 次都没成功，等用户手动重试")
+        }
+    }
+
     func presentWizard() {
         showWizard = true
         show(.wizard)
