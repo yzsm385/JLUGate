@@ -30,6 +30,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApplication.shared.setActivationPolicy(.accessory)
         _ = SingleInstance.claim { NSApp.terminate(nil) }
 
+        buildMainMenu()
+        terminateOtherCopies()
         let model = AppModel()
         self.model = model
         buildStatusItem(model: model)
@@ -96,9 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let quit = NSMenuItem(title: "退出 JLU Gate", action: #selector(quitFromMenu), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
-        statusItem?.menu = menu
-        button.performClick(nil)
-        statusItem?.menu = nil
+        // 直接把菜单弹在按钮下方：比"临时挂 menu + performClick"可靠
+        menu.popUp(positioning: nil,
+                   at: NSPoint(x: 0, y: button.bounds.height + 4),
+                   in: button)
     }
 
     @objc private func connectFromMenu() { model?.retry() }
@@ -146,6 +149,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// 给 LSUIElement 也能用 ⌘Q 退出（菜单栏图标失灵时的兜底）
+    private func buildMainMenu() {
+        let mainMenu = NSMenu()
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "关于 JLU Gate", action: nil, keyEquivalent: "")
+        appMenu.addItem(.separator())
+        let quit = NSMenuItem(title: "退出 JLU Gate", action: #selector(quitFromMenu), keyEquivalent: "q")
+        quit.target = self
+        appMenu.addItem(quit)
+        appMenuItem.submenu = appMenu
+        NSApp.mainMenu = mainMenu
+    }
+
+    /// 同 bundle id 的旧副本（例如 /Applications 里那份）会抢同一个状态栏图标，
+    /// 导致"点了没反应"。启动时把它们关掉，只留当前这份。
+    private func terminateOtherCopies() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        let current = ProcessInfo.processInfo.processIdentifier
+        for app in NSWorkspace.shared.runningApplications
+        where app.bundleIdentifier == bundleID && app.processIdentifier != current {
+            FileLogger.shared.log("发现另一份 JLU Gate（pid \(app.processIdentifier)），正在结束它")
+            app.terminate()
+        }
+    }
+
     func showPanel() {
         guard let model, let button = statusItem?.button else { return }
         if popover == nil {
@@ -162,6 +192,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.contentSize = NSSize(width: 380, height: 560)
             self.popover = popover
             FileLogger.shared.log("面板：已创建 NSPopover（380×560）")
+        }
+        guard button.window != nil else {
+            // 刚登录/刚重启时状态栏按钮可能还没进窗口：稍后再试一次，而不是静默失败
+            FileLogger.shared.log("面板：按钮还不在窗口里，稍后重试")
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                guard let button = self.statusItem?.button, button.window != nil else { return }
+                self.popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+            return
         }
         popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         NSApp.activate(ignoringOtherApps: true)
