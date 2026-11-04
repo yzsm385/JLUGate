@@ -71,6 +71,7 @@ struct MenuContent: View {
                 actionButtons
             }
 
+            offCampusAssist
             footer
         }
         .padding(14)
@@ -337,6 +338,13 @@ struct MenuContent: View {
             return JLUAccessPolicy.macMismatchHint(expected: expected, actual: actual)
         default:
             return nil
+        }
+    }
+
+    @ViewBuilder
+    private var offCampusAssist: some View {
+        if model.isOffCampus {
+            WebVPNAssistCard()
         }
     }
 

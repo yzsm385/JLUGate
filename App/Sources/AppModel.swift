@@ -43,6 +43,15 @@ final class AppModel {
 
     private(set) var panel: Panel = .main
 
+    /// 是否处在"非校园网"：引擎判定不在校园网，或体检发现校内系统全不通
+    var isOffCampus: Bool {
+        if case .failed(let error) = state, case .notCampusNetwork = error { return true }
+        if let diagnosis = reachabilityDiagnosis, diagnosis.verdict == .campusUnreachable {
+            return true
+        }
+        return false
+    }
+
     /// 站点合集里"复制账号"用
     var account: String { config.account }
 
