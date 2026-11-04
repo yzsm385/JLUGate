@@ -75,6 +75,31 @@ public enum FieldFormatting {
         return result
     }
 
+    /// 把"整体地址"拆成段：同时接受 `·`、`.`、`:` 三种分隔符；
+    /// 没有分隔符时按组长度切（IPv4 每 3 位、MAC 每 2 位）。
+    public static func splitAddress(_ text: String, groups: Int, groupSize: Int) -> [String] {
+        let normalized = text
+            .replacingOccurrences(of: "·", with: ".")
+            .replacingOccurrences(of: ":", with: ".")
+            .replacingOccurrences(of: "：", with: ".")
+        var pieces: [String] = []
+        if normalized.contains(".") {
+            pieces = normalized.split(separator: ".", omittingEmptySubsequences: false)
+                .map { String($0) }
+        } else {
+            let digits = normalized.filter { $0.isHexDigit || $0.isNumber }
+            var buffer = ""
+            for character in digits {
+                buffer.append(character)
+                if buffer.count == groupSize { pieces.append(buffer); buffer = "" }
+            }
+            if !buffer.isEmpty { pieces.append(buffer) }
+        }
+        var result = Array(pieces.prefix(groups))
+        while result.count < groups { result.append("") }
+        return result
+    }
+
     /// 把一段 IPv4 文本拆成 4 个小段（给"四格输入"用，界面上只显示点号，不用手打）。
     public static func splitIPv4(_ text: String) -> [String] {
         var parts = text.split(separator: ".", omittingEmptySubsequences: false).map(String.init)

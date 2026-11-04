@@ -128,6 +128,16 @@ public struct RouteValidator: Sendable {
     }
 
     public func validate(_ request: RouteRequest, interfaceGateway: String?) throws {
+        // ⓪ 任何空白/控制字符一律拒绝（解析器会 trim，不能指望它挡注入）
+        func hasIllegalCharacters(_ text: String) -> Bool {
+            text.contains { $0.isWhitespace || $0.isNewline || $0.asciiValue.map { $0 < 0x20 } == true }
+        }
+        guard !hasIllegalCharacters(request.host) else {
+            throw RouteRequestError.hostNotAllowed(request.host)
+        }
+        guard !hasIllegalCharacters(request.gateway) else {
+            throw RouteRequestError.gatewayNotIPv4(request.gateway)
+        }
         // ① host 必须是白名单里的 IPv4 字面量（等价于 /32）
         guard IPv4Address(request.host) != nil, allowedHosts.contains(request.host) else {
             throw RouteRequestError.hostNotAllowed(request.host)

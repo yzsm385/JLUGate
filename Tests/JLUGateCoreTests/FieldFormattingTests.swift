@@ -83,3 +83,48 @@ struct LiveFieldFormattingTests {
         #expect(FieldFormatting.liveMAC("0200000000012345") == "02:00:00:00:00:01")
     }
 }
+
+@Suite("整体地址拆分（预填/粘贴）")
+struct SplitAddressTests {
+    @Test("中间点、ASCII 点、冒号都能拆")
+    func separators() {
+        #expect(FieldFormatting.splitAddress("203·0·113·11", groups: 4, groupSize: 3)
+                == ["203", "0", "113", "11"])
+        #expect(FieldFormatting.splitAddress("203.0.113.11", groups: 4, groupSize: 3)
+                == ["203", "0", "113", "11"])
+        #expect(FieldFormatting.splitAddress("02:00:00:00:00:01", groups: 6, groupSize: 2)
+                == ["02", "00", "00", "00", "00", "01"])
+    }
+
+    @Test("没有分隔符：按组长度切，不会全塞进第一个框")
+    func chunking() {
+        #expect(FieldFormatting.splitAddress("203011311", groups: 4, groupSize: 3)
+                == ["203", "011", "311", ""])
+        #expect(FieldFormatting.splitAddress("020000000001", groups: 6, groupSize: 2)
+                == ["02", "00", "00", "00", "00", "01"])
+    }
+
+    @Test("段数不足会补空，段数过多被截断")
+    func padding() {
+        #expect(FieldFormatting.splitAddress("10", groups: 4, groupSize: 3) == ["10", "", "", ""])
+        #expect(FieldFormatting.splitAddress("1·2·3·4·5", groups: 4, groupSize: 3)
+                == ["1", "2", "3", "4"])
+    }
+}
+
+@Suite("地址解析：中间点也要认")
+struct AddressParsingCompatTests {
+    @Test("IPv4：· / . / 全角 都能解析")
+    func ipv4() {
+        #expect(IPv4Address("203·0·113·11")?.description == "203.0.113.11")
+        #expect(IPv4Address("203.0.113.11")?.description == "203.0.113.11")
+        #expect(IPv4Address(" 203．0．113．11 ")?.description == "203.0.113.11")
+    }
+
+    @Test("MAC：· / : / - 都能解析")
+    func mac() {
+        #expect(MACAddress("02·00·00·00·00·01")?.description == "02:00:00:00:00:01")
+        #expect(MACAddress("02:00:00:00:00:01")?.description == "02:00:00:00:00:01")
+        #expect(MACAddress("02-00-00-00-00-01")?.description == "02:00:00:00:00:01")
+    }
+}

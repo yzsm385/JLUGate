@@ -10,7 +10,14 @@ public struct IPv4Address: Sendable, Hashable, CustomStringConvertible {
     }
 
     public init?(_ string: String) {
-        let parts = string.split(separator: ".", omittingEmptySubsequences: false)
+        // UI 里的分隔符是中间点 `·`，配置/剪贴板里可能是 `.` 或全角 `．`：
+        // 解析必须都认，否则"填好的地址"在保存校验时会被判成格式错误。
+        let normalized = string
+            .replacingOccurrences(of: "·", with: ".")
+            .replacingOccurrences(of: "．", with: ".")
+            .replacingOccurrences(of: "。", with: ".")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = normalized.split(separator: ".", omittingEmptySubsequences: false)
         guard parts.count == 4 else { return nil }
         var result: [UInt8] = []
         result.reserveCapacity(4)
@@ -42,9 +49,14 @@ public struct MACAddress: Sendable, Hashable, CustomStringConvertible {
     }
 
     public init?(_ string: String) {
-        let parts = string.split(separator: ":").isEmpty
-            ? string.split(separator: "-")
-            : string.split(separator: ":")
+        let normalized = string
+            .replacingOccurrences(of: "·", with: ":")
+            .replacingOccurrences(of: "：", with: ":")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        // 注意：不能用 split(...).isEmpty 判断"有没有冒号"——没有冒号时它返回 1 个元素
+        let parts = normalized.contains(":")
+            ? normalized.split(separator: ":")
+            : normalized.split(separator: "-")
         guard parts.count == 6 else { return nil }
         var result: [UInt8] = []
         for part in parts {

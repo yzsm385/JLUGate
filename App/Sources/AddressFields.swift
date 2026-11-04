@@ -96,8 +96,33 @@ struct AddressField: View {
             get: { parts[index] },
             set: { newValue in
                 guard parts.indices.contains(index) else { return }
+
+                // 整段输入/粘贴：带分隔符，或长度超过一格 → 按整体地址摊到各段，
+                // 绝不把 "203·0·113·11" 全塞进第一个框。
+                let hasSeparator = newValue.contains { $0 == "·" || $0 == "." || $0 == ":" }
+                let cleaned = newValue.filter { kind.isAllowed($0) }
+                if hasSeparator || cleaned.count > kind.maxLength {
+                    var distributed = FieldFormatting.splitAddress(
+                        newValue, groups: kind.count, groupSize: kind.maxLength)
+                    distributed = distributed.map { part in
+                        let filtered = part.filter { kind.isAllowed($0) }
+                        return String((kind.isHex ? filtered.lowercased() : filtered)
+                            .prefix(kind.maxLength))
+                    }
+                    parts = distributed
+                    emit()
+                    // 光标落到最后一个有内容的段
+                    if let last = distributed.lastIndex(where: { !$0.isEmpty }),
+                       last + 1 < parts.count {
+                        focused = last + 1
+                    } else {
+                        focused = distributed.firstIndex(where: { $0.isEmpty }) ?? index
+                    }
+                    return
+                }
+
                 let previous = parts[index]
-                var filtered = newValue.filter { kind.isAllowed($0) }
+                var filtered = cleaned
                 if kind.isHex { filtered = filtered.lowercased() }
                 let value = String(filtered.prefix(kind.maxLength))
                 parts[index] = value
@@ -124,11 +149,13 @@ struct AddressField: View {
     }
 
     static func split(_ text: String, kind: Kind) -> [String] {
-        let pieces = text.split(separator: Character(kind == .ipv4 ? "." : ":"),
-                                omittingEmptySubsequences: false).map(String.init)
-        var result = Array(pieces.prefix(kind.count))
-        while result.count < kind.count { result.append("") }
-        return result
+        // 同时接受 中间点 · / ASCII 点 . / 冒号 :
+        FieldFormatting.splitAddress(text, groups: kind.count, groupSize: kind.maxLength)
+            .map { part in
+                let filtered = part.filter { kind.isAllowed($0) }
+                return String((kind.isHex ? filtered.lowercased() : filtered)
+                    .prefix(kind.maxLength))
+            }
     }
 }
 
