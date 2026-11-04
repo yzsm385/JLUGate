@@ -45,12 +45,11 @@ struct AddressField: View {
     }
 }
 
-/// 一行"标签 + 地址框"，标签列固定 72pt，所有行左对齐。
+/// 一行"标签 + 地址框"，含义写在字段下面。
 struct LabeledAddressField: View {
     let title: String
     let kind: AddressField.Kind
     @Binding var text: String
-    /// 这个字段是什么意思——直接挂在字段下面，不另开说明区
     var hint: String?
     var onSubmit: (() -> Void)?
 
@@ -61,7 +60,7 @@ struct LabeledAddressField: View {
                     .font(.caption)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(width: 64, alignment: .leading)
-                    .foregroundStyle(.secondary)
+                .foregroundStyle(.secondary)
                 AddressField(kind: kind, text: $text, onSubmit: onSubmit)
             }
             if let hint {
@@ -88,27 +87,23 @@ struct SegmentedAddressField: NSViewRepresentable {
         let container = SegmentedContainer(kind: kind, coordinator: context.coordinator)
         context.coordinator.container = container
         container.build()
-        context.coordinator.lastEmitted = text
         container.setSegments(Coordinator.split(text, kind: kind))
         return container
     }
 
     func updateNSView(_ container: SegmentedContainer, context: Context) {
         context.coordinator.parent = self
-        // 只处理**真正的外部改动**（载入配置 / 清空）。
-        // 关键：用 lastEmitted 比对，而不是和 SwiftUI 的当前值比对——
-        // 否则别处一刷新（比如在另一个框里打字），拿到的旧值会把这里正在输的内容清空。
-        guard text != context.coordinator.lastEmitted else { return }
-        context.coordinator.lastEmitted = text
-        container.setSegments(Coordinator.split(text, kind: kind))
+        // 只处理"外部改动"（载入配置 / 清空）；用户输入由 AppKit 自己维护
+        let incoming = Coordinator.split(text, kind: kind)
+        if container.currentSegments() != incoming, !container.isEditing {
+            container.setSegments(incoming)
+        }
     }
 
     @MainActor
     final class Coordinator: NSObject, NSTextFieldDelegate {
         var parent: SegmentedAddressField
         weak var container: SegmentedContainer?
-        /// 最后一次由本控件写出去的值（用来区分"外部改动"和"回灌"）
-        var lastEmitted = ""
 
         init(parent: SegmentedAddressField) { self.parent = parent }
 
@@ -122,25 +117,19 @@ struct SegmentedAddressField: NSViewRepresentable {
 
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSTextField,
-                  let container, let index = container.index(of: field),
-                  let editor = field.currentEditor() as? NSTextView else { return }
-
-            // 必须读**字段编辑器**里的内容：正在编辑时 field.stringValue 可能是旧值，
-            // 拿它去截断会把刚敲的字符吞掉，还会引发跳格。
-            let typed = editor.string
-            var filtered = typed.filter { parent.kind.isAllowed($0) }
-            if parent.kind.isHex { filtered = filtered.lowercased() }
-            let value = String(filtered.prefix(parent.kind.maxLength))
-
-            if value != typed {
-                editor.string = value
-                editor.selectedRange = NSRange(location: value.count, length: 0)
+                  let container, let index = container.index(of: field) else { return }
+            var value = field.stringValue.filter { parent.kind.isAllowed($0) }
+            if parent.kind.isHex { value = value.lowercased() }
+            value = String(value.prefix(parent.kind.maxLength))
+            if value != field.stringValue {
+                field.stringValue = value
+                field.currentEditor()?.selectedRange = NSRange(location: value.count, length: 0)
             }
             container.commit(segment: index, value: value)
 
-            // 只有"刚好输满这一段、光标在末尾"才跳下一段（MAC 两字符、IP 三字符）
+            // 输满一段且光标在末尾 → 自动跳下一段
             if value.count == parent.kind.maxLength, index + 1 < parent.kind.count,
-               editor.selectedRange.location >= value.count {
+               let editor = field.currentEditor(), editor.selectedRange.location >= value.count {
                 container.focus(index + 1)
             }
         }
@@ -264,7 +253,6 @@ final class SegmentedContainer: NSView {
         var parts = currentSegments()
         parts[index] = value
         let joined = parts.joined(separator: String(kind.separator))
-        coordinator.lastEmitted = joined
         coordinator.parent.text = joined
     }
 
