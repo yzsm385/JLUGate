@@ -43,10 +43,15 @@ public struct ReachabilityService: Sendable {
         }
     }
 
+    /// 教务/OA 只对校内开放；邮箱在校外也能开（实测），所以不算"校内独有"。
+    static let campusOnlyHosts: Set<String> = ["iedu.jlu.edu.cn", "oa.jlu.edu.cn"]
+
     public func checkCampus(host: String, timeout: Duration = .seconds(6)) async -> SiteResult {
         let result = await check(host: host, domestic: true, timeout: timeout)
         return SiteResult(host: host, stage: result.stage, httpStatus: result.httpStatus,
-                          milliseconds: result.milliseconds, isDomestic: true, isCampus: true)
+                          milliseconds: result.milliseconds, isDomestic: true,
+                          isCampus: true,
+                          isCampusOnly: Self.campusOnlyHosts.contains(host))
     }
 
     public func check(host: String, domestic: Bool, timeout: Duration = .seconds(8)) async -> SiteResult {

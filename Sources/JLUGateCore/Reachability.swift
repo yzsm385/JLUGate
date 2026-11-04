@@ -27,20 +27,24 @@ public struct SiteResult: Sendable, Equatable, Identifiable {
     public let httpStatus: Int?
     public let milliseconds: Int?
     public let isDomestic: Bool
-    /// 校内系统（教务/通知/邮箱）：不通通常说明"不在校园网"
+    /// 校内系统（教务/通知/邮箱）
     public let isCampus: Bool
+    /// 只在校园网内才能访问（邮箱在校外也能开，不算）
+    public let isCampusOnly: Bool
 
     public var id: String { host }
     public var ok: Bool { stage == .ok }
 
     public init(host: String, stage: ProbeStage, httpStatus: Int? = nil,
-                milliseconds: Int? = nil, isDomestic: Bool, isCampus: Bool = false) {
+                milliseconds: Int? = nil, isDomestic: Bool, isCampus: Bool = false,
+                isCampusOnly: Bool = false) {
         self.host = host
         self.stage = stage
         self.httpStatus = httpStatus
         self.milliseconds = milliseconds
         self.isDomestic = isDomestic
         self.isCampus = isCampus
+        self.isCampusOnly = isCampusOnly
     }
 
     public var display: String {
@@ -140,9 +144,10 @@ public enum ReachabilityDiagnosisEngine {
                          action: "需要访问境外站点时打开代理；只想校内上网则无需处理。")
         }
         // 校内系统全挂、公网正常 → 不是代理问题，是不在校园网
-        let campus = sites.filter(\.isCampus)
+        // 只有"校内独有"的系统全挂才说明不在校园网；邮箱在校外也能开，不能当证据
+        let campusOnly = sites.filter(\.isCampusOnly)
         let publicSites = sites.filter { !$0.isCampus }
-        if !campus.isEmpty, campus.allSatisfy({ !$0.ok }), publicSites.contains(where: \.ok) {
+        if !campusOnly.isEmpty, campusOnly.allSatisfy({ !$0.ok }), publicSites.contains(where: \.ok) {
             return .init(verdict: .campusUnreachable,
                          summary: "公网站点能上，但教务/通知/邮箱全不通——这些系统只对校内网开放。",
                          action: "如果在校外，用学校 WebVPN 再访问；在校内则先确认认证是否成功（有线/JLU.PC）。")

@@ -77,6 +77,8 @@ final class AppModel {
 
     var inspection = Inspection()
     var inspectionRunning = false
+    /// 每个体检模块的耗时（毫秒）
+    var inspectionTimings: [String: Int] = [:]
 
     /// 「能不能上网」的分层排查结果
     var reachability: [SiteResult] = []
@@ -173,6 +175,12 @@ final class AppModel {
             self.reachabilityRunning = false
             FileLogger.shared.log("排查：\(self.reachabilityDiagnosis?.summary ?? "-")")
         }
+    }
+
+    static func elapsedMilliseconds(since start: ContinuousClock.Instant) -> Int {
+        let elapsed = ContinuousClock.now - start
+        return Int(elapsed.components.seconds) * 1000
+            + Int(elapsed.components.attoseconds / 1_000_000_000_000_000)
     }
 
     private func campusServerReachable() async -> Bool {
@@ -328,25 +336,6 @@ final class AppModel {
 
     // MARK: 派生显示
 
-    var statusColor: Color {
-        switch state {
-        case .online: .green
-        case .failed: .red
-        case .idle: .secondary
-        default: .orange
-        }
-    }
-
-    var statusSymbol: String {
-        switch state {
-        case .online: "checkmark.circle.fill"
-        case .failed: "exclamationmark.triangle.fill"
-        case .idle: "circle.dashed"
-        case .reconnecting: "arrow.triangle.2.circlepath"
-        default: "circle.dotted"
-        }
-    }
-
     /// 当前状态的人话叙述（标题 + 一句比喻 + 该做什么）
     var statusPhase: StatusPhase {
         switch state {
@@ -366,6 +355,28 @@ final class AppModel {
     var statusStory: StatusStory { StatusNarrator.story(statusPhase) }
 
     var statusTitle: String { statusStory.title }
+
+    /// 图标与颜色也按 statusPhase 走，避免出现"文字说已连接、图标却是红色"
+    var statusColor: Color {
+        switch statusPhase {
+        case .online, .onlineViaOfficialClient: .green
+        case .working: .orange
+        case .waitingForNetwork, .failed: .red
+        case .officialClientHoldingPort: .orange
+        case .idle: .secondary
+        }
+    }
+
+    var statusSymbol: String {
+        switch statusPhase {
+        case .online, .onlineViaOfficialClient: "checkmark.circle.fill"
+        case .working: "arrow.triangle.2.circlepath"
+        case .waitingForNetwork: "cable.connector.slash"
+        case .officialClientHoldingPort: "exclamationmark.circle"
+        case .failed: "xmark.circle.fill"
+        case .idle: "circle.dashed"
+        }
+    }
 
     var linkTitle: String {
         link?.displayName ?? (config.link == "auto" ? "自动（未探测）" : config.link)
@@ -819,12 +830,28 @@ final class AppModel {
         FileLogger.shared.log("体检：开始")
         Task { @MainActor in
             let service = InspectionService()
+            self.inspectionTimings = [:]
+
+            var started = ContinuousClock.now
             let ips = await service.publicIPs()
             self.inspection.publicIPs = ips
+            self.inspectionTimings["ip"] = Self.elapsedMilliseconds(since: started)
+
+            started = ContinuousClock.now
             self.inspection.cloudflare = await service.cloudflareTrace()
+            self.inspectionTimings["cloudflare"] = Self.elapsedMilliseconds(since: started)
+
+            started = ContinuousClock.now
             self.inspection.webRTC = await service.webRTC()
+            self.inspectionTimings["webrtc"] = Self.elapsedMilliseconds(since: started)
+
+            started = ContinuousClock.now
             self.inspection.dns = await service.dnsLeak()
+            self.inspectionTimings["dns"] = Self.elapsedMilliseconds(since: started)
+
+            started = ContinuousClock.now
             self.inspection.captcha = await service.captchaChecks()
+            self.inspectionTimings["captcha"] = Self.elapsedMilliseconds(since: started)
             if self.inspection.cloudflare?.ip != nil {
                 await self.refreshReputation()
             }

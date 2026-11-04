@@ -50,11 +50,11 @@ struct InspectPanel: View {
             .buttonStyle(.borderedProminent)
             .disabled(model.inspectionRunning)
 
-            module("出口 IP", value: ipValue, hint: ipHint)
-            module("Cloudflare", value: cloudflareValue, hint: cloudflareHint)
-            module("WebRTC（STUN）", value: webRTCValue, hint: webRTCHint)
-            module("DNS", value: dnsValue, hint: dnsHint)
-            module("人机验证", value: captchaValue, hint: captchaHint)
+            module("出口 IP", timingKey: "ip", value: ipValue, hint: ipHint)
+            module("Cloudflare", timingKey: "cloudflare", value: cloudflareValue, hint: cloudflareHint)
+            module("WebRTC（STUN）", timingKey: "webrtc", value: webRTCValue, hint: webRTCHint)
+            module("DNS", timingKey: "dns", value: dnsValue, hint: dnsHint)
+            module("人机验证", timingKey: "captcha", value: captchaValue, hint: captchaHint)
 
             // IP 纯净度：住宅 or 机房
             module("出口 IP 纯净度",
@@ -173,9 +173,15 @@ struct InspectPanel: View {
         return "点上面的「开始检测」，会查出口 IP 的归属与类型（住宅 / 机房）"
     }
 
-    private func module(_ title: String, value: String, hint: String) -> some View {
+    private func module(_ title: String, timingKey: String? = nil,
+                        value: String, hint: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.caption).bold()
+            HStack(spacing: 6) {
+                Text(title).font(.caption).bold()
+                if let key = timingKey, let ms = model.inspectionTimings[key] {
+                    Text("\(ms) ms").font(.system(size: 9)).foregroundStyle(.tertiary)
+                }
+            }
             if !value.isEmpty {
                 Text(value).font(.caption.monospaced()).foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)

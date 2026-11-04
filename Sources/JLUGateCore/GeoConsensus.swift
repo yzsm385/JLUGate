@@ -127,8 +127,8 @@ public enum DNSIPAlignmentEngine {
             || dnsEgress.hasPrefix("10.") || dnsEgress.hasPrefix("192.168.")
             || dnsEgress.hasPrefix("172.16.") || dnsEgress.hasPrefix("169.254.") {
             return .init(verdict: .unknown, ipCountry: ipCountry, dnsCountry: dnsCountry,
-                         explanation: "系统 DNS 被代理接管（解析出口是 \(dnsEgress) 这种假地址），"
-                            + "无法判断真实解析位置；把 DNS 也交给代理（常见做法）可以消除这个不一致。")
+                         explanation: "系统 DNS 被代理接管（解析出口是 \(dnsEgress) 这个假地址），"
+                            + "所以**不存在**可比较的真实解析位置——这不是不一致，只是比不出来。")
         }
         if dnsEgress == ip {
             return .init(verdict: .sameAddress, ipCountry: ipCountry, dnsCountry: dnsCountry,

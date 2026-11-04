@@ -68,9 +68,12 @@ struct ReachabilityTests {
     @Test("校内系统全不通、公网正常 → 判定为不在校园网")
     func campusUnreachable() {
         let sites = [
-            SiteResult(host: "iedu.jlu.edu.cn", stage: .dns, isDomestic: true, isCampus: true),
-            SiteResult(host: "oa.jlu.edu.cn", stage: .dns, isDomestic: true, isCampus: true),
-            SiteResult(host: "mails.jlu.edu.cn", stage: .dns, isDomestic: true, isCampus: true),
+            SiteResult(host: "iedu.jlu.edu.cn", stage: .dns, isDomestic: true,
+                       isCampus: true, isCampusOnly: true),
+            SiteResult(host: "oa.jlu.edu.cn", stage: .dns, isDomestic: true,
+                       isCampus: true, isCampusOnly: true),
+            SiteResult(host: "mails.jlu.edu.cn", stage: .ok, httpStatus: 200, isDomestic: true,
+                       isCampus: true, isCampusOnly: false),
             site("baidu.com", .ok, status: 200, domestic: true),
             site("bing.com", .ok, status: 200),
         ]
@@ -78,6 +81,20 @@ struct ReachabilityTests {
                                                      hasUsableInterface: true, proxyInUse: true)
         #expect(d.verdict == .campusUnreachable)
         #expect(d.action.contains("WebVPN"))
+    }
+
+    @Test("邮箱校外可访问 → 不能作为\"不在校园网\"的证据")
+    func mailIsNotCampusOnly() {
+        let sites = [
+            SiteResult(host: "iedu.jlu.edu.cn", stage: .ok, httpStatus: 200,
+                       isDomestic: true, isCampus: true, isCampusOnly: true),
+            SiteResult(host: "mails.jlu.edu.cn", stage: .ok, httpStatus: 200,
+                       isDomestic: true, isCampus: true, isCampusOnly: false),
+            site("baidu.com", .ok, status: 200, domestic: true),
+        ]
+        let d = ReachabilityDiagnosisEngine.diagnose(sites: sites, campusAuthReachable: nil,
+                                                     hasUsableInterface: true, proxyInUse: false)
+        #expect(d.verdict == .healthy)
     }
 
     @Test("校内系统正常、公网部分不通 → 仍然按公网归因")

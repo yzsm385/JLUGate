@@ -29,7 +29,8 @@ public struct IPReputationService: Sendable {
             group.addTask { await self.ipinfoSample(ip) }
             group.addTask { await self.ipapiSample(ip) }
             group.addTask { await self.ipwhoSample(ip) }
-            group.addTask { await self.bilibiliSample(ip) }
+            // BiliBili 不参与多数派：它返回的是"请求方"地址，
+            // 与我方出口可能不是同一条路；只作为单独观测展示。
             if !options.ip2locationKey.isEmpty {
                 group.addTask { await self.ip2locationSample(ip, key: options.ip2locationKey) }
             }
