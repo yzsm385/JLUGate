@@ -194,6 +194,8 @@ final class AppModel {
     var portHeldByOfficialClient = false
     /// 在线是由官方客户端维持的（端口在它手里）
     var onlineViaOfficialClient = false
+    /// 最近一次真实探测成功的时间（用于状态粘性）
+    var lastHealthyProbeAt: Date?
     /// 最近一次进入在线的时间（判断"重复登录被拒"用）
     var lastOnlineAt: Date?
     var proxyAnalysis: ProxyModeAnalysis?
@@ -339,15 +341,25 @@ final class AppModel {
     /// 当前状态的人话叙述（标题 + 一句比喻 + 该做什么）
     var statusPhase: StatusPhase {
         switch state {
-        case .idle: .idle
-        case .discovering, .challenging, .authenticating, .reconnecting: .working
-        case .online: onlineViaOfficialClient ? .onlineViaOfficialClient : .online
+        case .idle:
+            return .idle
+        case .discovering, .challenging, .authenticating, .reconnecting:
+            return .working
+        case .online:
+            return onlineViaOfficialClient ? .onlineViaOfficialClient : .online
         case .failed(let error):
+            // 刚探测通过/刚在线过 → 不把图标打回红色（真机上出现过 灰→绿→红 乱跳）
+            if StatusStickiness.treatFailureAsOnline(lastOnlineAt: lastOnlineAt,
+                                                     lastHealthyProbeAt: lastHealthyProbeAt) {
+                return onlineViaOfficialClient ? .onlineViaOfficialClient : .online
+            }
             switch error {
-            case .adapterUnplugged, .interfaceHasNoIPv4: .waitingForNetwork
+            case .adapterUnplugged, .interfaceHasNoIPv4:
+                return .waitingForNetwork
             case .officialClientRunning, .localPortInUse:
-                onlineViaOfficialClient ? .onlineViaOfficialClient : .officialClientHoldingPort
-            default: .failed
+                return onlineViaOfficialClient ? .onlineViaOfficialClient : .officialClientHoldingPort
+            default:
+                return .failed
             }
         }
     }
@@ -1309,7 +1321,10 @@ final class AppModel {
         guard let interface else { return false }
         let outcome = await ConnectivityProbe().run(interface: interface,
                                                     dnsServers: ConnectivityProbe.fallbackDNSServers)
-        if case .healthy = outcome { return true }
+        if case .healthy = outcome {
+            lastHealthyProbeAt = Date()
+            return true
+        }
         return false
     }
 
