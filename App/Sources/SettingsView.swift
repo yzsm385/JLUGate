@@ -165,25 +165,28 @@ struct SettingsView: View {
                         Button("关闭") { model.closeSettings() }
                             .buttonStyle(.bordered)
                     }
-                    HStack(spacing: 8) {
-                        Button("用系统当前读数填入") {
-                            let suggestion = model.applySystemParameters()
-                            if suggestion.hasUsableValues { load(); saved = true }
-                            else { model.recentLog.insert(suggestion.reason, at: 0) }
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Button("读系统值") {
+                                let suggestion = model.applySystemParameters()
+                                if suggestion.hasUsableValues { load(); saved = true }
+                                else { model.recentLog.insert(suggestion.reason, at: 0) }
+                            }
+                            Button("重新检测") { model.refreshDiagnostics() }
                         }
-                        Button("重新检测") { model.refreshDiagnostics() }
-                        Button("从剪贴板导入参数卡") {
-                            if model.importConfigCardFromClipboard() {
-                                load()
+                        HStack(spacing: 8) {
+                            Button("导入参数卡") {
+                                if model.importConfigCardFromClipboard() {
+                                    load()
+                                    saved = true
+                                }
+                            }
+                            Button("清空网络参数") {
+                                draft.ip = ""; draft.mask = ""; draft.gateway = ""
+                                draft.dns = ""; draft.registeredMAC = ""
+                                model.clearNetworkParameters()
                                 saved = true
                             }
-                        }
-                        Spacer()
-                        Button("清空网络参数") {
-                            draft.ip = ""; draft.mask = ""; draft.gateway = ""
-                            draft.dns = ""; draft.registeredMAC = ""
-                            model.clearNetworkParameters()
-                            saved = true
                         }
                         Button("删除已保存的密码") {
                             model.clearSavedPassword()

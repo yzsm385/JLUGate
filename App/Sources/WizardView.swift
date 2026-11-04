@@ -314,15 +314,17 @@ struct WizardView: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 Button("用系统当前读数填入") { fillFromSystem() }
                     .buttonStyle(.borderedProminent)
-                if hasSavedProfile {
-                    Button("载入上次保存的参数") { loadSavedProfile() }
+                HStack(spacing: 8) {
+                    if hasSavedProfile {
+                        Button("载入上次参数") { loadSavedProfile() }
+                            .buttonStyle(.bordered)
+                    }
+                    Button("清空") { clearFields() }
                         .buttonStyle(.bordered)
                 }
-                Button("清空这几格") { clearFields() }
-                    .buttonStyle(.bordered)
             }
             if let note = suggestionNote {
                 Text(note).font(.caption2).foregroundStyle(isSuggestionTrustworthy ? Color.secondary : Color.orange)

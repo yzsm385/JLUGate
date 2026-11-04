@@ -58,8 +58,9 @@ struct LabeledAddressField: View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(alignment: .center, spacing: 8) {
                 Text(title)
-                    .lineLimit(1)
-                    .frame(width: 58, alignment: .leading)
+                    .font(.caption)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .frame(width: 64, alignment: .leading)
                     .foregroundStyle(.secondary)
                 AddressField(kind: kind, text: $text, onSubmit: onSubmit)
             }
@@ -68,7 +69,7 @@ struct LabeledAddressField: View {
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 66)
+                    .padding(.leading, 72)
             }
         }
     }
