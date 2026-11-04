@@ -496,3 +496,30 @@ struct LoginVariantFallbackTests {
         await engine.stop()
     }
 }
+
+@Suite("拔网线后反复重试不应该崩")
+struct UnpluggedRetryTests {
+    @Test("没有物理网口时：进入 failed，重试多次仍然稳定")
+    func retryWithoutInterfaces() async throws {
+        let channel = FakeChannel { _ in [] }
+        let provider = FakeInterfaceProvider(interfaces: [], route: nil,
+                                            configMethod: nil, gateway: nil)
+        let engine = DrcomEngine(
+            configuration: EngineConfiguration(account: "20230001", password: "test-pass-2024",
+                                               hostname: "test-mac.local"),
+            codec: DrcomCodec(randomness: SeededRandomSource(seed: 5)),
+            channelFactory: RecordingChannelFactory(channel: channel),
+            interfaces: provider,
+            clock: FakeClock())
+        for _ in 0..<5 {
+            await engine.start()
+            try await Task.sleep(for: .milliseconds(120))
+            await engine.retry()
+            try await Task.sleep(for: .milliseconds(120))
+        }
+        await engine.stop()
+        // 能走到这里就说明没有崩溃；状态应停在 failed/idle，而不是 online
+        let state = await engine.currentState()
+        #expect(state != .online)
+    }
+}

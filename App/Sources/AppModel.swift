@@ -880,6 +880,9 @@ final class AppModel {
     }
 
     func retry() {
+        // 先把网卡列表刷新到"当下"，否则拔线后缓存里还留着 en7，
+        // connect() 的守卫会放行，随后又拿一个已经不存在的接口去建通道。
+        refreshDiagnostics()
         FileLogger.shared.log("重试：接口数=\(interfaces.count)，状态=\(state)")
         disconnect()
         connect()
