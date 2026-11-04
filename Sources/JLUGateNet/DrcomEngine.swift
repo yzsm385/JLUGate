@@ -26,6 +26,8 @@ public struct EngineConfiguration: Sendable {
     public var expectedIP: IPv4Address?
     /// 排障开关：打印完整登录报文（默认关；报文里含账号与 MAC）
     public var verboseAuthLogging: Bool = false
+    /// 自动选口时是否"有线优先"（JLU.WIFI 模式要设 false，否则会被有线抢走）
+    public var preferWired: Bool = true
     public var expectedMask: String?
 
     public var challengeSubtype: UInt8
@@ -41,6 +43,7 @@ public struct EngineConfiguration: Sendable {
                 expectedIP: IPv4Address? = nil, expectedMask: String? = nil,
                 useRegisteredMACForAuth: Bool = false,
                 verboseAuthLogging: Bool = false,
+                preferWired: Bool = true,
                 strictMACCheck: Bool = false,
                 server: IPv4Address = PacketLayout.defaultServer,
                 serverPort: UInt16 = PacketLayout.serverPort,
@@ -61,6 +64,7 @@ public struct EngineConfiguration: Sendable {
         self.expectedMask = expectedMask
         self.useRegisteredMACForAuth = useRegisteredMACForAuth
         self.verboseAuthLogging = verboseAuthLogging
+        self.preferWired = preferWired
         self.strictMACCheck = strictMACCheck
         self.server = server
         self.serverPort = serverPort
@@ -326,7 +330,8 @@ public actor DrcomEngine {
         // 用户会以为程序"自己跑去连无线"，实际是拿错了网卡。
         let wiredUp = candidates.filter { !$0.isWireless && $0.isUp && !$0.isLoopback
             && !VirtualInterfaceNames.isVirtual($0.name) }
-        if allowReentry, configuration.interfaceLock == nil, !wiredUp.isEmpty {
+        if allowReentry, configuration.preferWired,
+           configuration.interfaceLock == nil, !wiredUp.isEmpty {
             let usableWired = wiredUp.filter(\.isUsableForAuthentication)
             guard !usableWired.isEmpty else {
                 let name = wiredUp.first!.name

@@ -733,6 +733,7 @@ final class AppModel {
             expectedMask: devServer != nil ? nil : profile?.mask,
             useRegisteredMACForAuth: config.useRegisteredMACForAuth,
             verboseAuthLogging: config.verboseAuthLogging,
+            preferWired: config.link != "jluWiFi",
             server: server,
             serverPort: serverPort,
             localPort: UInt16(config.localPort),
