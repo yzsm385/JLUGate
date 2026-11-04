@@ -51,7 +51,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key>      <string>dev.jlugate.app</string>
     <key>CFBundleExecutable</key>      <string>JLUGate</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.3.15</string>
+    <key>CFBundleShortVersionString</key><string>0.3.16</string>
     <key>CFBundleVersion</key>         <string>BUILD_STAMP</string>
     <key>LSMinimumSystemVersion</key>  <string>26.0</string>
     <key>LSUIElement</key>             <true/>
@@ -116,7 +116,7 @@ fi
 
 # 先写 CFBundleVersion，再签名。
 # 反过来（签名后改 Info.plist）会让签名立刻失效，Gatekeeper 报"已损坏"——
-# 0.3.15 及之前所有包都有这个 bug。
+# 0.3.16 及之前所有包都有这个 bug。
 BUILD_STAMP="$(date -u +%Y%m%d%H%M)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_STAMP" "$APP/Contents/Info.plist" 2>/dev/null \
     || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_STAMP" "$APP/Contents/Info.plist"
