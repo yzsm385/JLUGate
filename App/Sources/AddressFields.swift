@@ -1,23 +1,21 @@
 import SwiftUI
-import AppKit
 import JLUGateCore
 
-/// 地址输入：**分段格子**（每段一个原生输入框，段间是分隔符）。
+/// 地址输入：**SwiftUI 圆角小框**（每段一个 `TextField(.roundedBorder)`，段间是分隔符）。
 ///
-/// 用 AppKit 而不是 SwiftUI 的原因：SwiftUI 的分段 TextField 在每次输入重排时
-/// 会重建子视图、把光标打回末尾——表现就是"前面的格子点进去也改不了，只能整行清空"。
-/// 原生 `NSTextField` 由我们直接控制焦点与光标。
+/// 为什么用它：圆角框是系统标准样式，外观、深浅色、字体缩放都跟系统一致；
+/// 不自己画 AppKit 方框，也就不需要维护 NSTextField 的字段编辑器状态。
 ///
 /// 键盘：
-/// - **Enter**：跳到下一段（最后一段 → 触发外层"下一步/完成"）
-/// - **← / →**：在段首/段尾时切到相邻段
+/// - 输满一段（IP 3 位 / MAC 2 位）自动跳下一段
+/// - **Enter**：下一段；最后一段触发外层「下一步/完成」
+/// - **← / →**：跨段
 /// - **⌫**：当前段为空时退回上一段
 struct AddressField: View {
     enum Kind {
         case ipv4
         case mac
 
-        var placeholder: String { self == .ipv4 ? "IP" : "MAC" }
         var count: Int { self == .ipv4 ? 4 : 6 }
         var maxLength: Int { self == .ipv4 ? 3 : 2 }
         var separator: String { self == .ipv4 ? "·" : ":" }
@@ -33,15 +31,104 @@ struct AddressField: View {
     @Binding var text: String
     var onSubmit: (() -> Void)?
 
-    var body: some View {
-        SegmentedAddressField(kind: kind, text: $text, onSubmit: onSubmit)
-            .frame(width: totalWidth, height: 24)
+    @State private var parts: [String]
+    @FocusState private var focused: Int?
+
+    init(kind: Kind, text: Binding<String>, onSubmit: (() -> Void)? = nil) {
+        self.kind = kind
+        self._text = text
+        self.onSubmit = onSubmit
+        _parts = State(initialValue: AddressField.split(text.wrappedValue, kind: kind))
     }
 
-    private var totalWidth: CGFloat {
-        let segments = kind.segmentWidth * CGFloat(kind.count)
-        let separators = 10 * CGFloat(kind.count - 1)
-        return segments + separators + 2
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(parts.indices, id: \.self) { index in
+                TextField("", text: binding(for: index))
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)      // 系统圆角框
+                    .multilineTextAlignment(.center)
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(width: kind.segmentWidth, height: 22)
+                    .focused($focused, equals: index)
+                    .onSubmit { advance(from: index) }
+                    .onKeyPress(.leftArrow) {
+                        guard focused == index, index > 0 else { return .ignored }
+                        focused = index - 1
+                        return .handled
+                    }
+                    .onKeyPress(.rightArrow) {
+                        guard focused == index, index + 1 < parts.count else { return .ignored }
+                        focused = index + 1
+                        return .handled
+                    }
+                    .onKeyPress(.delete) {
+                        guard focused == index, parts[index].isEmpty, index > 0 else { return .ignored }
+                        focused = index - 1
+                        return .handled
+                    }
+
+                if index < parts.count - 1 {
+                    Text(kind.separator)
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(height: 22)
+                }
+            }
+        }
+        .onAppear {
+            let incoming = Self.split(text, kind: kind)
+            if incoming != parts { parts = incoming }
+        }
+        .onChange(of: text) { _, newValue in
+            // 自己写出去的值会立刻回流：和当前拼接结果一样就忽略。
+            // 不一样才说明是外部改动（预填/清空/切换档案）。
+            let joined = parts.joined(separator: kind.separator)
+            guard newValue != joined else { return }
+            let incoming = Self.split(newValue, kind: kind)
+            guard incoming != parts else { return }
+            parts = incoming
+        }
+    }
+
+    private func binding(for index: Int) -> Binding<String> {
+        Binding(
+            get: { parts[index] },
+            set: { newValue in
+                guard parts.indices.contains(index) else { return }
+                let previous = parts[index]
+                var filtered = newValue.filter { kind.isAllowed($0) }
+                if kind.isHex { filtered = filtered.lowercased() }
+                let value = String(filtered.prefix(kind.maxLength))
+                parts[index] = value
+                emit()
+                if value.count == kind.maxLength, previous.count < kind.maxLength,
+                   index + 1 < parts.count, focused == index {
+                    focused = index + 1
+                }
+            })
+    }
+
+    private func advance(from index: Int) {
+        if index + 1 < parts.count {
+            focused = index + 1
+        } else {
+            onSubmit?()
+        }
+    }
+
+    private func emit() {
+        let joined = parts.joined(separator: kind.separator)
+        guard joined != text else { return }
+        text = joined
+    }
+
+    static func split(_ text: String, kind: Kind) -> [String] {
+        let pieces = text.split(separator: Character(kind == .ipv4 ? "." : ":"),
+                                omittingEmptySubsequences: false).map(String.init)
+        var result = Array(pieces.prefix(kind.count))
+        while result.count < kind.count { result.append("") }
+        return result
     }
 }
 
@@ -60,7 +147,7 @@ struct LabeledAddressField: View {
                     .font(.caption)
                     .fixedSize(horizontal: true, vertical: false)
                     .frame(width: 64, alignment: .leading)
-                .foregroundStyle(.secondary)
+                    .foregroundStyle(.secondary)
                 AddressField(kind: kind, text: $text, onSubmit: onSubmit)
             }
             if let hint {
@@ -70,198 +157,6 @@ struct LabeledAddressField: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 72)
             }
-        }
-    }
-}
-
-// MARK: - AppKit 分段输入
-
-struct SegmentedAddressField: NSViewRepresentable {
-    let kind: AddressField.Kind
-    @Binding var text: String
-    let onSubmit: (() -> Void)?
-
-    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
-
-    func makeNSView(context: Context) -> SegmentedContainer {
-        let container = SegmentedContainer(kind: kind, coordinator: context.coordinator)
-        context.coordinator.container = container
-        container.build()
-        container.setSegments(Coordinator.split(text, kind: kind))
-        return container
-    }
-
-    func updateNSView(_ container: SegmentedContainer, context: Context) {
-        context.coordinator.parent = self
-        // 只处理"外部改动"（载入配置 / 清空）；用户输入由 AppKit 自己维护
-        let incoming = Coordinator.split(text, kind: kind)
-        if container.currentSegments() != incoming, !container.isEditing {
-            container.setSegments(incoming)
-        }
-    }
-
-    @MainActor
-    final class Coordinator: NSObject, NSTextFieldDelegate {
-        var parent: SegmentedAddressField
-        weak var container: SegmentedContainer?
-
-        init(parent: SegmentedAddressField) { self.parent = parent }
-
-        static func split(_ text: String, kind: AddressField.Kind) -> [String] {
-            let parts = text.split(separator: Character(kind == .ipv4 ? "." : ":"),
-                                   omittingEmptySubsequences: false).map(String.init)
-            var result = Array(parts.prefix(kind.count))
-            while result.count < kind.count { result.append("") }
-            return result
-        }
-
-        func controlTextDidChange(_ notification: Notification) {
-            guard let field = notification.object as? NSTextField,
-                  let container, let index = container.index(of: field) else { return }
-            var value = field.stringValue.filter { parent.kind.isAllowed($0) }
-            if parent.kind.isHex { value = value.lowercased() }
-            value = String(value.prefix(parent.kind.maxLength))
-            if value != field.stringValue {
-                field.stringValue = value
-                field.currentEditor()?.selectedRange = NSRange(location: value.count, length: 0)
-            }
-            container.commit(segment: index, value: value)
-
-            // 输满一段且光标在末尾 → 自动跳下一段
-            if value.count == parent.kind.maxLength, index + 1 < parent.kind.count,
-               let editor = field.currentEditor(), editor.selectedRange.location >= value.count {
-                container.focus(index + 1)
-            }
-        }
-
-        func control(_ control: NSControl, textView: NSTextView,
-                     doCommandBy selector: Selector) -> Bool {
-            guard let container else { return false }
-            let index = container.index(of: control as? NSTextField)
-            let careful: Int = index ?? 0
-            switch selector {
-            case #selector(NSResponder.insertNewline(_:)):
-                if careful + 1 < parent.kind.count {
-                    container.focus(careful + 1)
-                } else {
-                    parent.onSubmit?()
-                }
-                return true
-            case #selector(NSResponder.moveRight(_:)):
-                if textView.selectedRange.location >= (control as? NSTextField)?.stringValue.count ?? 0,
-                   careful + 1 < parent.kind.count {
-                    container.focus(careful + 1)
-                    return true
-                }
-                return false
-            case #selector(NSResponder.moveLeft(_:)):
-                if textView.selectedRange.location == 0, careful > 0 {
-                    container.focus(careful - 1)
-                    return true
-                }
-                return false
-            case #selector(NSResponder.deleteBackward(_:)):
-                if (control as? NSTextField)?.stringValue.isEmpty == true, careful > 0 {
-                    container.focus(careful - 1)
-                    return true
-                }
-                return false
-            default:
-                return false
-            }
-        }
-    }
-}
-
-/// 一个横向排布若干 `NSTextField` 的容器，自己管焦点。
-@MainActor
-final class SegmentedContainer: NSView {
-    let kind: AddressField.Kind
-    private let coordinator: SegmentedAddressField.Coordinator
-    private var fields: [NSTextField] = []
-    private var labels: [NSTextField] = []
-    private var highlighter = false
-
-    var isEditing: Bool { fields.contains { $0.currentEditor() != nil } }
-
-    init(kind: AddressField.Kind, coordinator: SegmentedAddressField.Coordinator) {
-        self.kind = kind
-        self.coordinator = coordinator
-        super.init(frame: .zero)
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    func build() {
-        for index in 0..<kind.count {
-            let field = NSTextField()
-            field.delegate = coordinator
-            field.alignment = .center
-            field.font = .monospacedSystemFont(ofSize: 13, weight: .regular)
-            field.bezelStyle = .roundedBezel
-            field.isBordered = true
-            field.focusRingType = .default
-            field.translatesAutoresizingMaskIntoConstraints = true
-            addSubview(field)
-            fields.append(field)
-            if index < kind.count - 1 {
-                let label = NSTextField(labelWithString: kind.separator)
-                label.font = .monospacedSystemFont(ofSize: 13, weight: .semibold)
-                label.textColor = .secondaryLabelColor
-                label.alignment = .center
-                addSubview(label)
-                labels.append(label)
-            }
-        }
-    }
-
-    override func layout() {
-        super.layout()
-        // 绝不在 layout() 里修改**自己**的 frame：那会让窗口再次 needsLayout，
-        // 触发 AppKit 的 "more Layout Window passes than there are views" 异常
-        // （这就是点设置闪退的原因）。
-        var x: CGFloat = 0
-        let height = max(bounds.height, 24)
-        for (index, field) in fields.enumerated() {
-            field.frame = NSRect(x: x, y: (height - 22) / 2, width: kind.segmentWidth, height: 22)
-            x += kind.segmentWidth
-            if index < labels.count {
-                labels[index].frame = NSRect(x: x, y: (height - 18) / 2, width: 12, height: 18)
-                x += 12
-            }
-        }
-    }
-
-    override var intrinsicContentSize: NSSize {
-        let width = kind.segmentWidth * CGFloat(kind.count) + 12 * CGFloat(kind.count - 1)
-        return NSSize(width: width, height: 24)
-    }
-
-    func index(of field: NSTextField?) -> Int? {
-        guard let field else { return nil }
-        return fields.firstIndex(of: field)
-    }
-
-    func currentSegments() -> [String] { fields.map(\.stringValue) }
-
-    func setSegments(_ values: [String]) {
-        for (field, value) in zip(fields, values) { field.stringValue = value }
-    }
-
-    func commit(segment index: Int, value: String) {
-        guard index < fields.count else { return }
-        var parts = currentSegments()
-        parts[index] = value
-        let joined = parts.joined(separator: String(kind.separator))
-        coordinator.parent.text = joined
-    }
-
-    func focus(_ index: Int) {
-        guard fields.indices.contains(index) else { return }
-        window?.makeFirstResponder(fields[index])
-        if let editor = fields[index].currentEditor() {
-            let length = fields[index].stringValue.count
-            editor.selectedRange = NSRange(location: length, length: 0)
         }
     }
 }
