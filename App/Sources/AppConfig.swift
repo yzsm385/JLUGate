@@ -73,6 +73,10 @@ struct AppConfig: Codable, Sendable {
     var useRegisteredMACForAuth = false
     /// 兼容模式：绕开液态玻璃渲染（虚拟机/老显卡上更稳），重启生效。
     var compatibilityMode = false
+    /// 可选：IP2Location / MaxMind 的密钥（留空则跳过该来源）
+    var ip2locationKey = ""
+    var maxmindAccount = ""
+    var maxmindLicense = ""
     /// 上次成功认证成功的时间；非空 = 这台机器上"记住且连过"。
     var lastSuccessfulLogin: String?
     var logLevel = "info"

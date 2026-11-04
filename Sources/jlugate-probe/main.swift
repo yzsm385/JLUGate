@@ -996,13 +996,31 @@ func runReputation() -> Int32 {
             semaphore.signal()
             return
         }
-        if let reputation = await IPReputationService().lookup(
-            ip: ip, cloudflareCountry: trace?.location) {
-            print("  " + reputation.summary)
-            for note in reputation.notes { print("  · " + note) }
-        } else {
-            print("  查不到归属（两个接口都不可用）")
+        let service = IPReputationService()
+        let consensus = await service.geoConsensus(ip: ip)
+        print("== 多源归属 ==")
+        for sample in consensus.samples {
+            print("  \(sample.source): \(sample.short)")
         }
+        if consensus.countryDisagreement {
+            print("  ⚠️ 多源国家不一致：\(consensus.countries.joined(separator: " / "))")
+        }
+        if let reputation = await service.lookup(ip: ip, cloudflareCountry: trace?.location) {
+            print("  结论：" + reputation.summary)
+            for note in reputation.notes { print("  · " + note) }
+        }
+
+        // DNS 出口 vs IP 出口
+        let dns = await InspectionService().dnsLeak()
+        var dnsCountry: String?
+        if let egress = dns.systemEgress {
+            dnsCountry = await service.geoConsensus(ip: egress).country
+        }
+        let alignment = DNSIPAlignmentEngine.align(ip: ip, ipCountry: consensus.country,
+                                                   dnsEgress: dns.systemEgress,
+                                                   dnsCountry: dnsCountry)
+        print("== DNS 与 IP 出口 ==")
+        print("  " + alignment.explanation)
         semaphore.signal()
     }
     _ = semaphore.wait(timeout: .now() + 30)

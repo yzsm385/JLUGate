@@ -85,6 +85,13 @@ final class AppModel {
 
     /// 出口 IP 纯净度（住宅 / 机房）
     var ipReputation: IPReputation?
+    /// 多源归属交叉
+    var geoConsensus: GeoConsensus?
+    /// DNS 出口与 IP 出口是否吻合
+    var dnsAlignment: DNSIPAlignment?
+    /// BiliBili 看到的出口（可能与代理出口不同，说明分流）
+    var bilibiliObservation: GeoSourceSample?
+    var bilibiliAddr: String?
     /// 带宽三档：直连、默认出口、本地代理（可选）
     var speedDirect: SpeedResult?
     var speedViaDefault: SpeedResult?
@@ -115,10 +122,34 @@ final class AppModel {
 
     func lookupReputation() {
         Task { @MainActor in
-            guard let trace = inspection.cloudflare, let ip = trace.ip else { return }
-            ipReputation = await IPReputationService().lookup(ip: ip,
-                                                              cloudflareCountry: trace.location)
+            await self.refreshReputation()
         }
+    }
+
+    /// 多源归属 + 纯净度 + DNS/IP 吻合度，一次算完。
+    func refreshReputation() async {
+        guard let ip = inspection.cloudflare?.ip else { return }
+        let options = IPReputationService.Options(ip2locationKey: config.ip2locationKey,
+                                                  maxmindAccount: config.maxmindAccount,
+                                                  maxmindLicense: config.maxmindLicense)
+        let service = IPReputationService()
+        geoConsensus = await service.geoConsensus(ip: ip, options: options)
+        if let zone = await service.bilibiliZone() {
+            bilibiliObservation = zone.sample
+            bilibiliAddr = zone.addr
+        }
+        ipReputation = await service.lookup(ip: ip,
+                                            cloudflareCountry: inspection.cloudflare?.location)
+        // DNS 出口的地理位置（用于比对）
+        var dnsCountry: String?
+        if let dnsEgress = inspection.dns?.systemEgress {
+            let consensus = await service.geoConsensus(ip: dnsEgress, options: options)
+            dnsCountry = consensus.country
+        }
+        dnsAlignment = DNSIPAlignmentEngine.align(ip: ip,
+                                                  ipCountry: geoConsensus?.country ?? ipReputation?.country,
+                                                  dnsEgress: inspection.dns?.systemEgress,
+                                                  dnsCountry: dnsCountry)
     }
 
     func runReachability() {
@@ -794,9 +825,8 @@ final class AppModel {
             self.inspection.webRTC = await service.webRTC()
             self.inspection.dns = await service.dnsLeak()
             self.inspection.captcha = await service.captchaChecks()
-            if let ip = self.inspection.cloudflare?.ip {
-                self.ipReputation = await IPReputationService().lookup(
-                    ip: ip, cloudflareCountry: self.inspection.cloudflare?.location)
+            if self.inspection.cloudflare?.ip != nil {
+                await self.refreshReputation()
             }
             self.inspectionRunning = false
             FileLogger.shared.log("体检：完成，出口 \(ips.first?.ip ?? "-")")

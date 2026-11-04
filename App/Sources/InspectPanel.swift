@@ -60,6 +60,35 @@ struct InspectPanel: View {
             module("出口 IP 纯净度",
                    value: model.ipReputation?.summary ?? "",
                    hint: purityHint)
+            if let consensus = model.geoConsensus {
+                ForEach(consensus.samples) { sample in
+                    HStack(spacing: 6) {
+                        Text(sample.source).font(.system(size: 10)).frame(width: 66, alignment: .leading)
+                        Text(sample.short).font(.system(size: 10)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let bilibili = model.bilibiliObservation {
+                    HStack(spacing: 6) {
+                        Text("BiliBili").font(.system(size: 10)).frame(width: 66, alignment: .leading)
+                        Text("\(model.bilibiliAddr ?? "-") · " + bilibili.short
+                             + (model.bilibiliAddr == consensus.ip ? "" : "（B 站走了另一条路）"))
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if consensus.countryDisagreement {
+                    Text("⚠️ 各源国家不一致（\(consensus.countries.joined(separator: " / "))）：可能是广播/中转 IP")
+                        .font(.system(size: 10)).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if let alignment = model.dnsAlignment {
+                Text("DNS 与 IP 出口：" + alignment.explanation)
+                    .font(.system(size: 10))
+                    .foregroundStyle(alignment.verdict == .differentCountry ? Color.orange : Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let notes = model.ipReputation?.notes, !notes.isEmpty {
                 ForEach(notes, id: \.self) { note in
                     Text("· " + note).font(.system(size: 10)).foregroundStyle(.secondary)
