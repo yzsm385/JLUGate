@@ -9,6 +9,7 @@ struct SitesPanel: View {
     @State private var query = ""
     @State private var copiedHint: String?
     @State private var collegeQuery = ""
+    @State private var showAllColleges = false
 
     private var grouped: [(category: JLUSite.Category, sites: [JLUSite])] {
         JLUSite.Category.allCases.compactMap { category in
@@ -29,9 +30,6 @@ struct SitesPanel: View {
                     Image(systemName: "link")
                     Text("吉大常用站点").font(.headline)
                     Spacer()
-                    Button("返回") { model.show(.main) }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.secondary)
                 }
 
                 TextField("搜站点、域名或用途…", text: $query)
@@ -104,7 +102,11 @@ struct SitesPanel: View {
                     TextField("搜学院名或域名", text: $collegeQuery)
                         .textFieldStyle(.roundedBorder)
                 }
-                ForEach(CollegeDirectory.search(collegeQuery).prefix(6)) { college in
+                let matches = CollegeDirectory.search(collegeQuery)
+                let shown = showAllColleges ? matches : Array(matches.prefix(6))
+                Text(collegeCountText(matches.count))
+                    .font(.system(size: 9)).foregroundStyle(.tertiary)
+                ForEach(shown) { college in
                     Button {
                         model.setMyCollege(college)
                     } label: {
@@ -116,12 +118,26 @@ struct SitesPanel: View {
                     }
                     .buttonStyle(.plain)
                 }
+                if matches.count > 6, !showAllColleges {
+                    Button("展开全部 \(matches.count) 个学院") { showAllColleges = true }
+                        .buttonStyle(.link).font(.system(size: 10))
+                }
             }
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35),
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    /// 明确告诉用户"一共有多少个"，避免只看到 6 个以为就这些
+    private func collegeCountText(_ total: Int) -> String {
+        let all = CollegeDirectory.all.count
+        if total == all { return "一共 \(all) 个学院" }
+        if total > 6, !showAllColleges {
+            return "匹配 \(total) 个，先显示前 6 个；继续输入可以缩小范围，或点下面展开"
+        }
+        return "匹配 \(total) 个"
     }
 
     private func row(_ site: JLUSite) -> some View {
