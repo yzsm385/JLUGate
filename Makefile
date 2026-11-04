@@ -57,9 +57,10 @@ portal-e2e:
 portal-e2e-window:
 	./scripts/portal-app-e2e.sh --window
 
-# 本地跑一遍 CI 里的三件事
+# 本地跑一遍 CI 里的几件事（连接路径冻结守卫也在里面）
 ci: test self-test portal-self-test
 	./scripts/privacy-scan.sh
+	./scripts/connection-guard.sh
 
 clean:
 	rm -rf .build
