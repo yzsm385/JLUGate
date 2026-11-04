@@ -43,6 +43,36 @@ final class AppModel {
 
     private(set) var panel: Panel = .main
 
+    // MARK: 检查更新
+
+    enum UpdateStatus: Equatable {
+        case idle
+        case checking
+        case upToDate
+        case available(tag: String, name: String, page: URL?, asset: URL?)
+        case failed(String)
+    }
+    var updateStatus: UpdateStatus = .idle
+    private var updateChecker = UpdateChecker()
+
+    func checkForUpdates(force: Bool = false) {
+        guard updateStatus != .checking else { return }
+        updateStatus = .checking
+        Task { @MainActor in
+            let release = await updateChecker.latest(forceRefresh: force)
+            guard let release else {
+                updateStatus = .failed("查不到更新（网络或 GitHub 限流），稍后再试")
+                return
+            }
+            if UpdateVersion.isNewer(release.tag, than: BuildInfo.version) {
+                updateStatus = .available(tag: release.tag, name: release.name,
+                                          page: release.pageURL, asset: release.assetURL)
+            } else {
+                updateStatus = .upToDate
+            }
+        }
+    }
+
     /// 是否处在"非校园网"：引擎判定不在校园网，或体检发现校内系统全不通
     var isOffCampus: Bool {
         if case .failed(let error) = state, case .notCampusNetwork = error { return true }

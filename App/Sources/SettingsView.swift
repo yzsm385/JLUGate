@@ -127,6 +127,16 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("更新") {
+                HStack(spacing: 10) {
+                    Button("检查更新") { model.checkForUpdates(force: true) }
+                        .disabled(model.updateStatus == .checking)
+                    updateStatusView
+                    Spacer()
+                    Text("当前版本 \(BuildInfo.version)").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+
             Section("高级") {
                 TextField("服务器", text: $draft.server)
                 TextField("服务器端口", text: $draft.serverPort)
@@ -207,6 +217,31 @@ struct SettingsView: View {
 
     private func focusNextField() {
         NSApp.keyWindow?.selectNextKeyView(nil)
+    }
+
+    @ViewBuilder
+    private var updateStatusView: some View {
+        switch model.updateStatus {
+        case .idle:
+            Text("").font(.caption)
+        case .checking:
+            Label("检查中…", systemImage: "arrow.triangle.2.circlepath")
+                .font(.caption).foregroundStyle(.secondary)
+        case .upToDate:
+            Label("已是最新", systemImage: "checkmark.circle").font(.caption).foregroundStyle(.green)
+        case .available(let tag, let name, let page, let asset):
+            HStack(spacing: 6) {
+                Label("有新版本 \(tag)", systemImage: "arrow.down.circle")
+                    .font(.caption).foregroundStyle(.orange)
+                Button("下载") {
+                    if let url = asset ?? page { NSWorkspace.shared.open(url) }
+                }
+                .buttonStyle(.link).font(.caption)
+                Text(name).font(.caption2).foregroundStyle(.tertiary)
+            }
+        case .failed(let message):
+            Text(message).font(.caption2).foregroundStyle(.orange)
+        }
     }
 
     private func load() {
