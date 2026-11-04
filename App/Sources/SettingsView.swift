@@ -53,14 +53,22 @@ struct SettingsView: View {
             }
 
             Section {
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                    LabeledAddressField(title: "IP", kind: .ipv4, text: $draft.ip, onSubmit: focusNextField)
-                    LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $draft.mask, onSubmit: focusNextField)
-                    LabeledAddressField(title: "网关", kind: .ipv4, text: $draft.gateway, onSubmit: focusNextField)
+                VStack(alignment: .leading, spacing: 8) {
+                    LabeledAddressField(title: "IP", kind: .ipv4, text: $draft.ip,
+                                        hint: "学校分给你的固定地址，按通知单照抄（不是 DHCP 分到的）",
+                                        onSubmit: focusNextField)
+                    LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $draft.mask,
+                                        hint: "一般是 255.255.255.0",
+                                        onSubmit: focusNextField)
+                    LabeledAddressField(title: "网关", kind: .ipv4, text: $draft.gateway,
+                                        hint: "同网段的第一跳，通常是 x.x.x.254",
+                                        onSubmit: focusNextField)
                     LabeledAddressField(title: "DNS", kind: .ipv4, text: Binding(
                         get: { draft.dns.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? "" },
-                        set: { draft.dns = $0 }))
+                        set: { draft.dns = $0 }),
+                                        hint: "校内 10.10.10.10；校外可换 223.5.5.5")
                     LabeledAddressField(title: "登记 MAC", kind: .mac, text: $draft.registeredMAC,
+                                        hint: "学校登记的那块网卡的物理地址（不是系统随机 MAC）",
                                         onSubmit: save)
                 }
                 Toggle("兼容模式：关闭液态玻璃（虚拟机/老显卡上更稳，重启生效）", isOn: $draft.compatibilityMode)
@@ -69,14 +77,10 @@ struct SettingsView: View {
                     .font(.caption2).foregroundStyle(.secondary)
             } header: {
                 Text("静态网络参数")
-            } footer: {
-                Text("学校按宿舍端口分配固定地址，必须人工照抄；下面灰色的是系统当前值，仅供核对，**不要照抄 DHCP 分到的地址**。")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
             }
 
             Section("系统当前值（仅供核对）") {
-                ForEach(model.interfaces, id: \.name) { item in
+                ForEach(model.orderedInterfaces, id: \.name) { item in
                     Text("\(item.name)：\(item.ipv4 ?? "无 IPv4")  当前 MAC \(item.mac ?? "—")  出厂 MAC \(item.hardwareMAC ?? "—")")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -128,13 +132,16 @@ struct SettingsView: View {
             }
 
             Section("更新") {
-                HStack(spacing: 10) {
-                    Button("检查更新") { model.checkForUpdates(force: true) }
-                        .disabled(model.updateStatus == .checking)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Button("检查更新") { model.checkForUpdates(force: true) }
+                            .disabled(model.updateStatus == .checking)
+                        Text("当前版本 \(BuildInfo.version)")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     updateStatusView
-                    Spacer()
-                    Text("当前版本 \(BuildInfo.version)").font(.caption).foregroundStyle(.secondary)
                 }
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             Section("高级") {
@@ -230,15 +237,16 @@ struct SettingsView: View {
         case .upToDate:
             Label("已是最新", systemImage: "checkmark.circle").font(.caption).foregroundStyle(.green)
         case .available(let tag, let name, let page, let asset):
-            HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 3) {
                 Label("有新版本 \(tag)", systemImage: "arrow.down.circle")
                     .font(.caption).foregroundStyle(.orange)
-                Button("下载") {
+                Button("下载 \(name)") {
                     if let url = asset ?? page { NSWorkspace.shared.open(url) }
                 }
                 .buttonStyle(.link).font(.caption)
-                Text(name).font(.caption2).foregroundStyle(.tertiary)
+                .lineLimit(2)
             }
+            .fixedSize(horizontal: false, vertical: true)
         case .failed(let message):
             Text(message).font(.caption2).foregroundStyle(.orange)
         }

@@ -278,9 +278,15 @@ struct WizardView: View {
 
             // 分隔符由界面画出来：IP 四格、MAC 六格，填满自动跳下一格
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
-                LabeledAddressField(title: "IP", kind: .ipv4, text: $ip, onSubmit: focusNextField)
-                LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $mask, onSubmit: focusNextField)
-                LabeledAddressField(title: "网关", kind: .ipv4, text: $gateway, onSubmit: focusNextField)
+                LabeledAddressField(title: "IP", kind: .ipv4, text: $ip,
+                                    hint: "学校分给你的固定地址（通知单上那串）",
+                                    onSubmit: focusNextField)
+                LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $mask,
+                                    hint: "一般是 255.255.255.0",
+                                    onSubmit: focusNextField)
+                LabeledAddressField(title: "网关", kind: .ipv4, text: $gateway,
+                                    hint: "同网段第一跳，通常 x.x.x.254",
+                                    onSubmit: focusNextField)
                 GridRow {
                     Text("DNS").frame(width: 72, alignment: .leading).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 6) {
@@ -289,7 +295,9 @@ struct WizardView: View {
                             set: { dns = FieldFormatting.ipv4ListInput($0) }))
                     }
                 }
-                LabeledAddressField(title: "登记 MAC", kind: .mac, text: $mac, onSubmit: finish)
+                LabeledAddressField(title: "登记 MAC", kind: .mac, text: $mac,
+                                    hint: "学校登记的那块网卡（不是系统随机 MAC）",
+                                    onSubmit: finish)
             }
 
             Label("这些值只能从学校通知单照抄。下面是系统当前读数，仅供核对——**不要照抄 DHCP 分到的地址**。",
@@ -313,7 +321,7 @@ struct WizardView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            ForEach(model.interfaces.filter { $0.ipv4 != nil }, id: \.name) { item in
+            ForEach(model.orderedInterfaces.filter { $0.ipv4 != nil }, id: \.name) { item in
                 Text("\(item.name)：\(item.ipv4 ?? "-")  \(item.mac ?? "")")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)

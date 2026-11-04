@@ -21,7 +21,7 @@ struct AddressField: View {
         var count: Int { self == .ipv4 ? 4 : 6 }
         var maxLength: Int { self == .ipv4 ? 3 : 2 }
         var separator: String { self == .ipv4 ? "·" : ":" }
-        var segmentWidth: CGFloat { self == .ipv4 ? 52 : 34 }
+        var segmentWidth: CGFloat { self == .ipv4 ? 42 : 26 }
         var isHex: Bool { self == .mac }
 
         func isAllowed(_ character: Character) -> Bool {
@@ -36,14 +36,12 @@ struct AddressField: View {
     var body: some View {
         SegmentedAddressField(kind: kind, text: $text, onSubmit: onSubmit)
             .frame(width: totalWidth, height: 24)
-            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var totalWidth: CGFloat {
         let segments = kind.segmentWidth * CGFloat(kind.count)
-        let gaps = 3 * CGFloat(kind.count - 1) * 2
-        let separators = 12 * CGFloat(kind.count - 1)
-        return segments + gaps + separators + 6
+        let separators = 10 * CGFloat(kind.count - 1)
+        return segments + separators + 2
     }
 }
 
@@ -52,14 +50,26 @@ struct LabeledAddressField: View {
     let title: String
     let kind: AddressField.Kind
     @Binding var text: String
+    /// 这个字段是什么意思——直接挂在字段下面，不另开说明区
+    var hint: String?
     var onSubmit: (() -> Void)?
 
     var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text(title)
-                .frame(width: 72, alignment: .leading)
-                .foregroundStyle(.secondary)
-            AddressField(kind: kind, text: $text, onSubmit: onSubmit)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(title)
+                    .lineLimit(1)
+                    .frame(width: 58, alignment: .leading)
+                    .foregroundStyle(.secondary)
+                AddressField(kind: kind, text: $text, onSubmit: onSubmit)
+            }
+            if let hint {
+                Text(hint)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 66)
+            }
         }
     }
 }
