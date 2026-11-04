@@ -91,21 +91,26 @@ JLU Gate 0.1.0（便携版）
   · 端口 61440 被占用：先退出官方 DrClientNS；仍有占用说明它的后台组件在跑。
 README
 
-echo "==> 打包（优先 DMG，做不出来就退回 ZIP）"
+echo "==> 打包（优先 DMG；--skip-dmg 或做不出来则退回 ZIP）"
 rm -f "$DMG"
 ZIP="dist/JLU Gate ${VERSION}.zip"
 rm -f "$ZIP"
 
-if hdiutil create -volname "JLU Gate ${VERSION}" -srcfolder "$STAGE_ROOT" -ov -format UDZO "$DMG" >/dev/null 2>&1 \
-   && hdiutil verify "$DMG" >/dev/null 2>&1; then
-    echo "OK -> $DMG"
-    ls -lh "$DMG"
-else
-    echo "  ⚠️ 当前环境做不出 DMG（受限沙箱下 hdiutil 会失败），改打 ZIP。"
-    echo "     在普通 macOS 会话里重跑本脚本即可得到 DMG。"
-    rm -f "$DMG"
+made=0
+if [ "${JLUGATE_SKIP_DMG:-0}" != "1" ]; then
+    if hdiutil create -volname "JLU Gate ${VERSION}" -srcfolder "$STAGE_ROOT" -ov -format UDZO "$DMG" >/dev/null 2>&1 \
+       && hdiutil verify "$DMG" >/dev/null 2>&1; then
+        echo "OK -> $DMG"
+        ls -lh "$DMG"
+        made=1
+    else
+        echo "  ⚠️ 当前环境做不出 DMG，改用 ZIP。"
+        rm -f "$DMG"
+    fi
+fi
+
+if [ "$made" = "0" ]; then
     ditto -c -k --sequesterRsrc --keepParent "$STAGE_ROOT" "$ZIP"
     echo "OK -> $ZIP"
-    unzip -l "$ZIP" | sed -n '1,12p'
     ls -lh "$ZIP"
 fi

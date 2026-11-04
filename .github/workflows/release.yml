@@ -16,11 +16,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 构建便携包（App + 卸载脚本 + 说明）
-        run: make package
+      - name: 构建便携包（App + 卸载脚本 + 说明；CI 上跳过 DMG）
+        run: |
+          set -eux
+          JLUGATE_SKIP_DMG=1 ./scripts/make-portable-package.sh
+          ls -lh dist
 
       - name: 组装资产名（去掉空格，方便下载）
         run: |
+          set -eux
           mkdir -p out
           cp "dist/JLU Gate 0.1.0.zip" "out/JLU-Gate-${{ github.ref_name }}.zip"
           ls -lh out
