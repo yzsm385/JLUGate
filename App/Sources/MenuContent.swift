@@ -1,9 +1,12 @@
 import SwiftUI
+import Combine
 import JLUGateCore
 
 /// 菜单栏下拉内容（`.menuBarExtraStyle(.window)`），全部用系统 Liquid Glass，不自绘毛玻璃。
 struct MenuContent: View {
     @Environment(AppModel.self) private var model
+    /// 每秒刷新一次，让"已在线"的时长真的在走
+    @State private var now = Date()
 
     var body: some View {
         Group {
@@ -72,11 +75,11 @@ struct MenuContent: View {
             }
 
             offCampusAssist
-            campusAdRow
             footer
         }
         .padding(14)
         .frame(width: 348)
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now = $0 }
     }
 
     private var statusCard: some View {
@@ -84,6 +87,26 @@ struct MenuContent: View {
             header
             Divider().opacity(0.35)
             detailGrid
+            if case .failed(let error) = model.state {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(error.userMessage)
+                        .font(.system(size: 10)).foregroundStyle(.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if error.requiresUserAction {
+                        Text("需要你处理一下；改完后点「重试」。")
+                            .font(.system(size: 9)).foregroundStyle(.tertiary)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if !model.recentLog.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(model.recentLog.prefix(3).enumerated()), id: \.offset) { _, line in
+                        Text(line).font(.system(size: 9)).foregroundStyle(.tertiary)
+                            .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
             if let action = model.statusStory.action {
                 Label(action, systemImage: "hand.point.right")
                     .font(.caption2)
@@ -155,9 +178,20 @@ struct MenuContent: View {
         }
     }
 
+    /// 在线时长：以 lastOnlineAt 为起点**实时计算**。
+    /// 以前只读引擎上报的 secondsOnline，心跳一停就冻住不动。
     private var timeText: String {
-        let total = Int(model.secondsOnline)
-        return String(format: "%d:%02d", total / 60, total % 60)
+        let total: Int
+        if let start = model.lastOnlineAt {
+            total = max(0, Int(now.timeIntervalSince(start)))
+        } else {
+            total = Int(model.secondsOnline)
+        }
+        let absolute = model.lastOnlineAt.map {
+            DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short)
+        }
+        let duration = String(format: "%d:%02d", total / 60, total % 60)
+        return absolute.map { "\($0) 起 · \(duration)" } ?? duration
     }
 
     // MARK: 动作
@@ -342,27 +376,6 @@ struct MenuContent: View {
         }
     }
 
-    /// 校园广告/门户：主面板直接给入口（以前只藏在体检页，等于没有）
-    private var campusAdRow: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Button {
-                    model.openCampusAd()
-                } label: {
-                    Label("看校园广告 / 门户", systemImage: "megaphone")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                Spacer()
-            }
-            if let status = model.campusAdStatus {
-                Text(status).font(.system(size: 9)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
     @ViewBuilder
     private var offCampusAssist: some View {
         if model.isOffCampus {
@@ -376,7 +389,7 @@ struct MenuContent: View {
             HStack(spacing: 2) {
                 footerButton("设置", "gearshape") { model.presentSettings() }
                 footerButton("站点", "link") { model.show(.sites) }
-                footerButton("状态", "info.circle") { model.presentConnectionStatus() }
+
                 footerButton("详情", "network") { model.presentNetworkDetail() }
                 footerButton("体检", "stethoscope") { model.show(.inspect) }
             }

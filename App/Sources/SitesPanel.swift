@@ -39,6 +39,7 @@ struct SitesPanel: View {
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                campusAdCard
                 myCollegeCard
 
                 ForEach(grouped, id: \.category) { group in
@@ -68,6 +69,34 @@ struct SitesPanel: View {
                     .transition(.opacity)
             }
         }
+    }
+
+    // MARK: 校园广告 / 门户
+
+    @ViewBuilder
+    private var campusAdCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("校园网门户 / 今日广告").font(.caption).bold()
+            HStack(spacing: 8) {
+                Button {
+                    model.openCampusAd()
+                } label: {
+                    Label("打开门户", systemImage: "megaphone")
+                }
+                .buttonStyle(.borderedProminent).controlSize(.small)
+                if let status = model.campusAdStatus {
+                    Text(status).font(.system(size: 9)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Text("认证后学校常弹一个欢迎/广告页；这里直接给你地址，用系统浏览器打开，不自动弹。")
+                .font(.system(size: 9)).foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.35),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     // MARK: 我的学院

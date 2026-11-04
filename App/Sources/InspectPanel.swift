@@ -17,7 +17,7 @@ struct InspectPanel: View {
                 // 已经合并进「开始检测」：这里只显示结果，不再单独给按钮
                 Text("能不能上网（含校内系统）").font(.caption).bold()
                 if model.reachability.isEmpty {
-                    Text("点上面的「开始检测」，会一并测公网站点与教务/通知/邮箱")
+                    Text("进入本页会自动检测；下面的按钮只用于重试")
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -44,7 +44,7 @@ struct InspectPanel: View {
             Button {
                 model.runInspection()
             } label: {
-                Label(model.inspectionRunning ? "检测中…" : "开始检测", systemImage: "stethoscope")
+                Label(model.inspectionRunning ? "检测中…" : "重新检测", systemImage: "arrow.clockwise")
             }
             .buttonStyle(.borderedProminent)
             .disabled(model.inspectionRunning)
@@ -140,6 +140,12 @@ struct InspectPanel: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
+            }
+        }
+        .onAppear {
+            // 进入体检就自动开始；按钮只当"重试"
+            if !model.inspectionRunning {
+                model.runInspection()
             }
         }
     }

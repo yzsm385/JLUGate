@@ -73,11 +73,16 @@ final class AppModel {
         }
     }
 
-    /// 是否处在"非校园网"：引擎判定不在校园网，或体检发现校内系统全不通
+    /// 是否处在"非校园网"：**只认引擎的判定**。
+    /// 不能用体检结果推断——体检里校内网站打不开可能只是代理/DNS 问题，
+    /// 明明插着网线在校园网里，却被提示"你现在不在校园网"是错的。
     var isOffCampus: Bool {
         if case .failed(let error) = state, case .notCampusNetwork = error { return true }
-        if let diagnosis = reachabilityDiagnosis, diagnosis.verdict == .campusUnreachable {
-            return true
+        // 有线网卡有地址且到认证服务器走物理口 → 就在校园网
+        if let routeInterfaceName,
+           let wired = interfaces.first(where: { $0.name == routeInterfaceName }),
+           wired.ipv4 != nil, !wired.isWireless {
+            return false
         }
         return false
     }

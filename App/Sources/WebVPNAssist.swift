@@ -13,12 +13,12 @@ struct WebVPNAssistCard: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Image(systemName: "wifi.exclamationmark").foregroundStyle(.orange)
-                Text("现在不在校园网").font(.caption).bold()
+                Text("校园网认证没通").font(.caption).bold()
                 Spacer()
                 Button("重测") { model.runInspection() }
                     .buttonStyle(.link).font(.system(size: 10))
             }
-            Text("用的像是热点/流量——校内系统要走 WebVPN。下面这个按钮会打开它，并把账号复制好。")
+            Text("如果确实在校外用热点/流量，校内系统要走 WebVPN；插着网线在校园网内则先重试认证。按钮会打开 WebVPN 并复制账号。")
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
