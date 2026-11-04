@@ -90,6 +90,13 @@ final class AppModel {
         return false
     }
 
+    /// 账号 + 本机密码（曾成功登录过）都在：不需要再提示"填写账号密码"
+    var hasStoredCredentials: Bool {
+        guard !config.account.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        guard let stored = CredentialStore.password(for: config.account), !stored.isEmpty else { return false }
+        return CredentialStore.verifiedAt(account: config.account) != nil
+    }
+
     /// 站点合集里"复制账号"用
     var account: String { config.account }
 

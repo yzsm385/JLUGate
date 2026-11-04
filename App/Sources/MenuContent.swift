@@ -204,7 +204,7 @@ struct MenuContent: View {
     private var actionButtons: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
-                if model.observingExistingSession {
+                if model.observingExistingSession, !model.hasStoredCredentials {
                     // 用户本来就在线（浏览器里登录过），我们只是如实显示；
                     // 给他一个"顺手把账号记下来"的入口，断线后能自动重连。
                     Button {
@@ -214,7 +214,8 @@ struct MenuContent: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
-                } else if model.state.isOnline || model.state.isBusy {
+                } else if model.state.isOnline || model.state.isBusy
+                            || model.observingExistingSession {
                     Button {
                         model.disconnect()
                     } label: {
