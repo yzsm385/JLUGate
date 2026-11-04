@@ -37,6 +37,11 @@ struct SettingsView: View {
             Section("账号") {
                 TextField("学校邮箱前缀（如 zhangcyy2122 / zhangshanwu）", text: $draft.account)
                 SecureField("密码（存 Keychain）", text: $draft.password)
+                if let saved = model.storedPasswordSummary {
+                    Text("留空 = 继续用已保存的密码（\(saved)）")
+                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Section("链路") {

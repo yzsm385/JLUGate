@@ -229,15 +229,6 @@ public actor DrcomEngine {
 
                 // ldap auth error：实测同一密码也会偶发（账号在别处在线 / 服务器忙），
                 // 换一个新 salt 重试两次；仍失败才交给用户。
-                // 服务端回 0x15（版本不兼容）：换另一种登录报文版本再试一次
-                if case .rejected(let message) = error,
-                   message.contains("需要升级客户端"), loginVariant == .current {
-                    loginVariant = .legacy
-                    emit(.log("服务端要求更新客户端版本：改用旧版报文再试一次"))
-                    try? await clock.sleep(for: .milliseconds(300))
-                    continue
-                }
-
                 if error.isCredentialRejection, credentialRetries < 2 {
                     credentialRetries += 1
                     emit(.log("服务器回 ldap auth error：换新 salt 重试第 \(credentialRetries) 次"))

@@ -457,9 +457,9 @@ private final class LoginCounter: @unchecked Sendable {
     }
 }
 
-@Suite("版本不兼容（0x15）自动换报文版本")
+@Suite("0x15 视为凭据被拒（不再换报文版本）")
 struct LoginVariantFallbackTests {
-    @Test("先回 0x15，再换旧版报文重试成功")
+    @Test("0x15 只重试有限次，然后进 failed 等用户重输密码")
     func fallsBackToLegacy() async throws {
         let counter = LoginCounter()
         let channel = FakeChannel { datagram in
@@ -469,9 +469,8 @@ struct LoginVariantFallbackTests {
                 return [RecordedGateway.challengeReply(serial: serial)]
             }
             if datagram.count > 300, datagram.first == 0x03 {
-                return counter.next() == 0
-                    ? [RecordedGateway.loginFailure(reason: "ldap auth error", code: 0x15)]
-                    : [RecordedGateway.loginSuccess()]
+                _ = counter.next()
+                return [RecordedGateway.loginFailure(reason: "ldap auth error", code: 0x15)]
             }
             return []
         }
@@ -486,12 +485,14 @@ struct LoginVariantFallbackTests {
                                  clock: FakeClock(),
                                  backoff: Backoff())
         await engine.start()
-        try await expectEventually("进入 online", timeout: .seconds(4)) {
-            await engine.currentState() == .online
+        try await expectEventually("进入 failed", timeout: .seconds(4)) {
+            if case .failed = await engine.currentState() { true } else { false }
         }
+        guard case .failed(let error) = await engine.currentState() else { return }
+        #expect(error.isCredentialRejection, "0x15 应当被当成凭据被拒")
         let logins = channel.sentFrames.filter { $0.count > 300 && $0.first == 0x03 }
-        #expect(logins.count >= 2, "第一次被 0x15 拒绝后必须换版本重试")
-        #expect(Set(logins.map(\.count)).count >= 2, "两次登录包的版本应当不同（长度不同）")
+        #expect(logins.count <= 3, "只允许换 salt 少量重试，不能死循环")
+        #expect(Set(logins.map(\.count)).count == 1, "不再切换报文版本")
         await engine.stop()
     }
 }

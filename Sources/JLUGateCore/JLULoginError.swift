@@ -27,7 +27,7 @@ public enum JLULoginError: UInt8, Sendable, CaseIterable {
         case .ipMismatch: "IP 不匹配"
         case .macMismatch: "MAC 不匹配"
         case .tooManyIPs: "在线设备数超限"
-        case .clientUpgradeRequired: "需要升级客户端版本"
+        case .clientUpgradeRequired: "服务器拒绝凭据（0x15）"
         case .ipAndMACMismatch: "IP 与 MAC 都不匹配"
         case .mustUseDHCP: "必须使用 DHCP"
         }
@@ -50,7 +50,8 @@ public enum JLULoginError: UInt8, Sendable, CaseIterable {
         case .tooManyIPs:
             "同时在线的设备数已达上限，先注销其它设备。"
         case .clientUpgradeRequired:
-            "服务端要求更新客户端版本（认证报文的版本标识过旧）。这不是密码问题。"
+            "吉大网络里这个码通常表示**密码不正确**（社区实现 jlu-drcom-ng 在本地图里就是这么标注的）；"
+            + "也可能随服务端升级变化。先用网页版验证密码，再去客户端重新输入。"
         case .mustUseDHCP:
             "把网卡改成「使用 DHCP 自动获取地址」再试。"
         }

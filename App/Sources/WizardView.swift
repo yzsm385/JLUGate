@@ -153,19 +153,25 @@ struct WizardView: View {
 
             if hasSavedPassword, password.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label(savedPasswordVerified
-                          ? "本机保存过密码（上次成功登录过）"
-                          : "本机保存过密码，但**未验证**（上次没登录成功）",
-                          systemImage: savedPasswordVerified ? "checkmark.seal" : "exclamationmark.triangle")
+                    Label(model.requirePasswordReentry
+                          ? "上次这份密码被服务器拒绝，请重新输入"
+                          : (savedPasswordVerified ? "本机保存过密码（上次成功登录过）"
+                                                   : "本机保存过密码，但未验证"),
+                          systemImage: (savedPasswordVerified && !model.requirePasswordReentry)
+                            ? "checkmark.seal" : "exclamationmark.triangle")
                         .font(.caption2)
-                        .foregroundStyle(savedPasswordVerified ? Color.secondary : Color.orange)
+                        .foregroundStyle((savedPasswordVerified && !model.requirePasswordReentry)
+                                         ? Color.secondary : Color.orange)
                     HStack(spacing: 8) {
-                        Button("使用已保存的密码") {
-                            if let stored = CredentialStore.password(for: account), !stored.isEmpty {
-                                password = stored
+                        if !model.requirePasswordReentry {
+                            Button("使用已保存的密码") {
+                                if let stored = CredentialStore.password(for: account),
+                                   !stored.isEmpty {
+                                    password = stored
+                                }
                             }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                         Button("重新输入") {
                             hasSavedPassword = false      // 收起这块，直接输入新的
                             password = ""

@@ -120,6 +120,18 @@ final class AppModel {
         ConfigStore.save(config)
     }
 
+    /// 上一次连接因"凭据被拒"失败：向导只允许重新输入，不再提供"使用已保存的密码"
+    var requirePasswordReentry = false
+
+    /// 设置页显示用：已保存密码的"长度 + 指纹"（不显示密码本身）
+    var storedPasswordSummary: String? {
+        guard !config.account.isEmpty,
+              let stored = CredentialStore.password(for: config.account), !stored.isEmpty else {
+            return nil
+        }
+        return PasswordFingerprint.describe(stored)
+    }
+
     /// 站点合集里"复制密码"用：只读本机保存的那份，绝不落日志。
     func storedPasswordForPrefill() -> String? {
         CredentialStore.password(for: config.account)
@@ -341,10 +353,11 @@ final class AppModel {
         if safeMode {
             FileLogger.shared.log("安全模式：跳过自动连接与密码恢复")
         }
-        // dev 自检不碰钥匙串：ad-hoc 每次签名都不同，读旧条目会弹"允许访问钥匙串"
-        password = (DevOverrides.isEnabled || safeMode)
-            ? (DevOverrides.isEnabled ? "test-pass-2024" : "")
-            : (CredentialStore.password(for: loaded.account) ?? "")
+        // **不在启动时把保存的密码读进内存。**
+        // 之前这里预加载，connect() 看到 password 非空就当成"本次输入"，
+        // 于是服务器每次收到的都是那份旧密码——界面显示成点号，用户以为是自己刚输的。
+        // 现在内存里只有"这次真的输入过"的密码；保存的那份只在连接时按需取，并标好来源。
+        password = (DevOverrides.isEnabled && !safeMode) ? "test-pass-2024" : ""
 
         let profile = loaded.currentProfile
         let needsStatic = WizardPolicy.requiresStaticAddresses(link: loaded.link)
@@ -677,11 +690,12 @@ final class AppModel {
                 } else {
                     passwordSource = .savedUnverified
                 }
-                FileLogger.shared.log("使用保存的密码（来源：\(passwordSource.rawValue)）")
+                FileLogger.shared.log("使用保存的密码（来源：\(passwordSource.rawValue)，"
+                                      + "\(PasswordFingerprint.describe(password))）")
             }
         } else {
             passwordSource = .typed
-            FileLogger.shared.log("使用本次输入的密码")
+            FileLogger.shared.log("使用本次输入的密码（\(PasswordFingerprint.describe(password))）")
         }
         guard !config.account.trimmingCharacters(in: .whitespaces).isEmpty, !password.isEmpty else {
             recentLog.insert("还没有账号或密码：请先在设置里填一次（之后会自动记住）", at: 0)
@@ -1471,7 +1485,8 @@ final class AppModel {
                     // 清空内存里的密码，让向导显示"用已保存 / 重新输入"的选择，
                     // 而不是把一个看不出真假的旧密码填在点号里（这正是之前反复失败的原因之一）
                     password = ""
-                    recentLog.insert("服务器回了 ldap auth error（账号验证没过）。常见原因：账号在别的设备在线、服务器忙，或密码确实要重输。点「重新输入密码」可重来。", at: 0)
+                    requirePasswordReentry = true
+                    recentLog.insert("服务器拒绝了凭据（错误码 0x15）。在吉大网络里这通常表示密码不正确——请点「重新输入密码」。", at: 0)
                     FileLogger.shared.log("凭据被拒（保留已保存密码），已提示用户")
                 }
                 // 有线插着但没填静态参数：直接打开向导的网络参数页，而不是丢一句"连接失败"
@@ -1521,6 +1536,7 @@ final class AppModel {
             switch telemetry {
             case .session(let account, let clientIP, let session):
                 CredentialStore.markVerified(account: account)
+                requirePasswordReentry = false
                 self.passwordSource = .savedVerified
                 self.clientIP = clientIP
                 sessionNumber = session

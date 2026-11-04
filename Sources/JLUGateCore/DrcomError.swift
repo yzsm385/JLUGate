@@ -117,7 +117,8 @@ public enum DrcomError: Error, Sendable, Equatable {
         let lowered = reason.lowercased()
         return lowered.contains("ldap") || lowered.contains("auth")
             || lowered.contains("password") || reason.contains("密码")
-            || reason.contains("账号不存在")
+            || reason.contains("账号不存在") || reason.contains("0x15")
+            || reason.contains("凭据")
     }
 
     public var isRetryable: Bool {
