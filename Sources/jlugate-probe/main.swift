@@ -1046,7 +1046,9 @@ func runSpeed3(_ options: Options) -> Int32 {
         } else {
             print("  默认出口：不可用")
         }
-        if let proxy = options.proxy, !proxy.isEmpty {
+        let proxy = options.proxy ?? LocalProxyDetector.detect()?.hostPort
+        if let proxy, !proxy.isEmpty {
+            print("  使用代理：\(proxy)")
             if let viaProxy = await service.download(endpoint: endpoint, interface: nil, proxy: proxy) {
                 print("  本地代理 \(proxy)：\(Throughput.format(megabitsPerSecond: viaProxy.megabitsPerSecond))")
             } else {

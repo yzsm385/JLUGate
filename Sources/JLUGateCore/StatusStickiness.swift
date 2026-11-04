@@ -1,26 +1,31 @@
 import Foundation
 
-/// 状态"粘性"：刚连上不久、且网络确实可达时，不要因为引擎一次失败就把图标打回未连接。
+/// 状态"粘性"：决定"引擎报失败时，界面要不要变红"。
 ///
-/// 真机上出现过：灰（启动）→ 绿（已连接）→ 红（未连接），但网络一直是通的。
-/// 原因是引擎重试/端口被官方客户端占用时会报失败，而界面直接照着 failed 画。
-public enum StatusStickiness {
-    /// 判定"这次失败要不要当成仍在在线"。
-    /// - Parameters:
-    ///   - lastOnlineAt: 最近一次确认在线的时间
-    ///   - lastHealthyProbeAt: 最近一次真实探测成功的时间
-    ///   - now: 当前时间
-    ///   - grace: 宽限期（默认 120 秒）
-    public static func treatFailureAsOnline(lastOnlineAt: Date?,
-                                            lastHealthyProbeAt: Date?,
-                                            now: Date = Date(),
-                                            grace: TimeInterval = 120) -> Bool {
-        guard let lastHealthy = lastHealthyProbeAt else { return false }
-        guard now.timeIntervalSince(lastHealthy) <= grace else { return false }
-        // 只要最近探测是通的，就认为会话仍然有效（哪怕从没在线过，例如官方客户端在管）
-        if let lastOnline = lastOnlineAt {
-            return now.timeIntervalSince(lastOnline) <= grace
-        }
-        return true
+/// 规则只有一条——**最后一次真实探测成功，才是绿；最后一次探测失败，才变红**。
+/// 引擎的失败（端口被占、重连中、服务器回绝）不足以推翻"网络实际可用"这个事实：
+/// 真机上就出现过 灰 → 绿 → 红 的乱跳，而网络一直是通的。
+public struct StatusStickiness: Sendable {
+    /// 最近一次探测成功
+    public var lastHealthyProbeAt: Date?
+    /// 最近一次探测失败
+    public var lastFailedProbeAt: Date?
+    /// 宽限期：这么久没有新的探测结果，才允许按引擎状态显示
+    public var grace: TimeInterval
+
+    public init(lastHealthyProbeAt: Date? = nil, lastFailedProbeAt: Date? = nil,
+                grace: TimeInterval = 600) {
+        self.lastHealthyProbeAt = lastHealthyProbeAt
+        self.lastFailedProbeAt = lastFailedProbeAt
+        self.grace = grace
+    }
+
+    /// 引擎报失败时，是否仍应显示为在线。
+    public func shouldStayOnline(now: Date = Date()) -> Bool {
+        guard let healthy = lastHealthyProbeAt else { return false }
+        // 最近一次探测是失败的 → 允许变红
+        if let failed = lastFailedProbeAt, failed > healthy { return false }
+        // 探测结果太旧 → 不再坚持
+        return now.timeIntervalSince(healthy) <= grace
     }
 }

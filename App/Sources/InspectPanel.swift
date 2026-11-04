@@ -14,14 +14,13 @@ struct InspectPanel: View {
 
             // 快捷排查：能不能上网 + 到底哪一层坏了
             VStack(alignment: .leading, spacing: 6) {
-                Text("能不能上网（快捷排查）").font(.caption).bold()
-                Button {
-                    model.runReachability()
-                } label: {
-                    Label(model.reachabilityRunning ? "排查中…" : "开始排查", systemImage: "bolt.horizontal")
+                // 已经合并进「开始检测」：这里只显示结果，不再单独给按钮
+                Text("能不能上网（含校内系统）").font(.caption).bold()
+                if model.reachability.isEmpty {
+                    Text("点上面的「开始检测」，会一并测公网站点与教务/通知/邮箱")
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .buttonStyle(.bordered)
-                .disabled(model.reachabilityRunning)
 
                 ForEach(model.reachability.filter { !$0.isCampus }) { reachRow($0) }
                 if model.reachability.contains(where: \.isCampus) {
@@ -50,7 +49,7 @@ struct InspectPanel: View {
             .buttonStyle(.borderedProminent)
             .disabled(model.inspectionRunning)
 
-            module("出口 IP", timingKey: "ip", value: ipValue, hint: ipHint)
+            module("出口 IP", timingKey: "ip", value: ipValueWithFlag, hint: ipHint)
             module("Cloudflare", timingKey: "cloudflare", value: cloudflareValue, hint: cloudflareHint)
             module("WebRTC（STUN）", timingKey: "webrtc", value: webRTCValue, hint: webRTCHint)
             module("DNS", timingKey: "dns", value: dnsValue, hint: dnsHint)
@@ -58,13 +57,15 @@ struct InspectPanel: View {
 
             // IP 纯净度：住宅 or 机房
             module("出口 IP 纯净度",
-                   value: model.ipReputation?.summary ?? "",
+                   value: (CountryFlag.emoji(for: model.ipReputation?.country).map { $0 + " " } ?? "")
+                          + (model.ipReputation?.summary ?? ""),
                    hint: purityHint)
             if let consensus = model.geoConsensus {
                 ForEach(consensus.samples) { sample in
                     HStack(spacing: 6) {
                         Text(sample.source).font(.system(size: 10)).frame(width: 66, alignment: .leading)
-                        Text(sample.short).font(.system(size: 10)).foregroundStyle(.secondary)
+                        Text((CountryFlag.emoji(for: sample.country).map { $0 + " " } ?? "") + sample.short)
+                            .font(.system(size: 10)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -84,7 +85,9 @@ struct InspectPanel: View {
                 }
             }
             if let alignment = model.dnsAlignment {
-                Text("DNS 与 IP 出口：" + alignment.explanation)
+                Text("DNS 与 IP 出口：" + alignment.explanation
+                     + "  " + CountryFlag.label(alignment.ipCountry)
+                     + " / " + CountryFlag.label(alignment.dnsCountry))
                     .font(.system(size: 10))
                     .foregroundStyle(alignment.verdict == .differentCountry ? Color.orange : Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -118,7 +121,9 @@ struct InspectPanel: View {
                         .buttonStyle(.bordered)
                         .disabled(model.speedRunning)
                 }
-                Text("第三档用你本机住宅代理客户端的本地端口；只有直连/代理两档时留空即可。")
+                Text(model.speedProxy.isEmpty
+                     ? "没检测到本地代理端口：若用的是 TUN 全局模式，第二档就是最终带宽，不用再测第三档。"
+                     : "已自动检测到 \(model.detectedProxy?.label ?? "本地代理")（\(model.speedProxy)）；也可手动改。")
                     .font(.system(size: 10)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -203,6 +208,13 @@ struct InspectPanel: View {
         return samples.map { "\($0.source): \($0.ip)" }.joined(separator: "\n")
     }
 
+    private var ipValueWithFlag: String {
+        let base = ipValue
+        guard let country = model.geoConsensus?.country ?? model.inspection.cloudflare?.location,
+              let flag = CountryFlag.emoji(for: country) else { return base }
+        return "\(flag) \(base)"
+    }
+
     private var ipHint: String {
         if model.inspection.publicIPs.isEmpty {
             return model.inspectionRunning ? "正在问不同网站「你看到我是谁」…" : "点「开始检测」，问几个网站同一个问题"
@@ -218,7 +230,9 @@ struct InspectPanel: View {
     private var cloudflareValue: String {
         guard let trace = model.inspection.cloudflare else { return "" }
         var parts: [String] = []
-        if let ip = trace.ip { parts.append(ip) }
+        if let ip = trace.ip {
+            parts.append((CountryFlag.emoji(for: trace.location).map { $0 + " " } ?? "") + ip)
+        }
         if let location = trace.location { parts.append("地区 \(location)") }
         if let colo = trace.colo { parts.append("机房 \(colo)") }
         return parts.joined(separator: " · ")

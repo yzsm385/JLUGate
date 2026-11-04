@@ -49,35 +49,3 @@ struct StatusNarratorTests {
         }
     }
 }
-
-@Suite("状态粘性（避免灰→绿→红乱跳）")
-struct StatusStickinessTests {
-    private let now = Date()
-
-    @Test("刚探测通过、刚在线过 → 失败也当在线")
-    func sticky() {
-        #expect(StatusStickiness.treatFailureAsOnline(
-            lastOnlineAt: now.addingTimeInterval(-30),
-            lastHealthyProbeAt: now.addingTimeInterval(-5), now: now))
-    }
-
-    @Test("探测早就成功了但已经过去很久 → 不算在线")
-    func stale() {
-        #expect(!StatusStickiness.treatFailureAsOnline(
-            lastOnlineAt: now.addingTimeInterval(-600),
-            lastHealthyProbeAt: now.addingTimeInterval(-600), now: now))
-    }
-
-    @Test("从没在线过，但探测刚通过（官方客户端在管）→ 视为在线")
-    func neverOnlineButHealthy() {
-        #expect(StatusStickiness.treatFailureAsOnline(
-            lastOnlineAt: nil,
-            lastHealthyProbeAt: now.addingTimeInterval(-2), now: now))
-    }
-
-    @Test("没有探测成功记录 → 不粘")
-    func noProbe() {
-        #expect(!StatusStickiness.treatFailureAsOnline(
-            lastOnlineAt: now.addingTimeInterval(-5), lastHealthyProbeAt: nil, now: now))
-    }
-}

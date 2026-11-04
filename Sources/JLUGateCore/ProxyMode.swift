@@ -19,7 +19,7 @@ public enum ProxyMode: String, Sendable, CaseIterable, Equatable {
     public var title: String {
         switch self {
         case .direct: "直连（无代理接管）"
-        case .ruleSplit: "规则 / 配置模式（校园网已直连）"
+        case .ruleSplit: "代理已接管公网（校内网段仍直连）"
         case .global: "全局代理（校园网段被接管）"
         case .tunnelIdle: "TUN 已开启但未接管默认路由"
         case .unknown: "无法判断"
@@ -100,7 +100,9 @@ public enum ProxyModeAnalyzer {
         case .direct:
             return "所有流量都从物理网卡出去\(appText)，认证包不会被代理吞掉。"
         case .ruleSplit:
-            return "默认流量走代理，但校园网段仍从 \(facts.campusRouteInterface ?? "物理网卡") 直接出去\(appText)——认证包不绕路，延迟最低、最稳。"
+            return "公网流量被代理接管，校内网段仍从 \(facts.campusRouteInterface ?? "物理网卡") 直接出去\(appText)。"
+                + "注意：**小火箭/Clash 即使在「全局」模式下通常也会放行内网段**，"
+                + "所以光看路由分不出「全局」还是「规则」——只要认证包没绕路，就是好事。"
         case .global:
             return "连校园网段也被虚拟网卡接管了\(appText)。认证包会绕一圈代理——**能不能成功取决于这段绕路是否稳定**："
                 + "延迟低、不丢包就照样能认证；一旦代理抖动/排队，认证或保活超时就会被服务器判为中断。"
@@ -116,7 +118,7 @@ public enum ProxyModeAnalyzer {
         case .direct:
             "无需改动。若你想通过代理上网，可以在小火箭里切到「配置」或「代理」。"
         case .ruleSplit:
-            "保持现状即可。若哪天掉线，先确认小火箭仍是「配置」且 10.0.0.0/8 命中 DIRECT。"
+            "这个状态对认证最友好：不用改。若哪天掉线，先确认代理没有把 10.0.0.0/8 也接管掉。"
         case .global:
             "全局模式下先测一下「认证通道延迟」：直连和经代理差得多、或经代理有丢包，就换成「配置」模式并把 10.0.0.0/8 设为 DIRECT（Clash: IP-CIDR,10.0.0.0/8,DIRECT）。延迟够低的话全局也能用，只是更容易被中断。"
         case .tunnelIdle:
@@ -130,7 +132,8 @@ public enum ProxyModeAnalyzer {
         guard declared != .unknown else { return nil }
         switch declared {
         case .direct: return mode == .direct || mode == .tunnelIdle
-        case .proxy: return mode == .global
+        // 全局 vs 规则：路由上分不出来（代理普遍放行私网），不硬判"不一致"
+        case .proxy: return mode == .global ? true : (mode == .ruleSplit ? nil : false)
         case .config, .scene: return mode == .ruleSplit || mode == .direct
         case .unknown: return nil
         }

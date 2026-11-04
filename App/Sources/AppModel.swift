@@ -99,7 +99,9 @@ final class AppModel {
     var speedViaDefault: SpeedResult?
     var speedViaProxy: SpeedResult?
     var speedRunning = false
-    var speedProxy = ""          // 形如 127.0.0.1:7890
+    var speedProxy = ""          // 形如 127.0.0.1:7890（留空则自动检测）
+    /// 自动检测到的本地代理（供测速第三档使用）
+    var detectedProxy: LocalProxyCandidate?
 
     func runSpeedAll() {
         guard !speedRunning else { return }
@@ -109,6 +111,10 @@ final class AppModel {
             let service = SpeedTestService()
             let endpoint = SpeedEndpoint.defaults[0]
             let interface = self.interfaces.first(where: \.isUsableForAuthentication)
+            if self.speedProxy.isEmpty {
+                self.detectedProxy = LocalProxyDetector.detect()
+                if let detected = self.detectedProxy { self.speedProxy = detected.hostPort }
+            }
             self.speedDirect = await service.download(endpoint: endpoint, interface: interface)
             self.speedViaDefault = await service.download(endpoint: endpoint, interface: nil)
             if !self.speedProxy.isEmpty {
@@ -155,10 +161,15 @@ final class AppModel {
     }
 
     func runReachability() {
+        Task { @MainActor in await self.runReachabilityInline() }
+    }
+
+    /// 内部实现：体检流程也会直接调用它
+    func runReachabilityInline() async {
         guard !reachabilityRunning else { return }
         reachabilityRunning = true
         FileLogger.shared.log("排查：开始")
-        Task { @MainActor in
+        do {
             let results = await ReachabilityService().checkAll()
             self.reachability = results
             let interface = self.interfaces.first(where: \.isUsableForAuthentication)
@@ -194,8 +205,9 @@ final class AppModel {
     var portHeldByOfficialClient = false
     /// 在线是由官方客户端维持的（端口在它手里）
     var onlineViaOfficialClient = false
-    /// 最近一次真实探测成功的时间（用于状态粘性）
+    /// 最近一次真实探测成功 / 失败的时间（用于状态粘性）
     var lastHealthyProbeAt: Date?
+    var lastFailedProbeAt: Date?
     /// 最近一次进入在线的时间（判断"重复登录被拒"用）
     var lastOnlineAt: Date?
     var proxyAnalysis: ProxyModeAnalysis?
@@ -290,6 +302,12 @@ final class AppModel {
                 self.devSimulateWiredSave()
             }
         }
+        if DevOverrides.runInspectOnLaunch {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(1500))
+                self.runInspection()
+            }
+        }
         if DevOverrides.openSettingsOnLaunch {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(700))
@@ -349,8 +367,8 @@ final class AppModel {
             return onlineViaOfficialClient ? .onlineViaOfficialClient : .online
         case .failed(let error):
             // 刚探测通过/刚在线过 → 不把图标打回红色（真机上出现过 灰→绿→红 乱跳）
-            if StatusStickiness.treatFailureAsOnline(lastOnlineAt: lastOnlineAt,
-                                                     lastHealthyProbeAt: lastHealthyProbeAt) {
+            if StatusStickiness(lastHealthyProbeAt: lastHealthyProbeAt,
+                                lastFailedProbeAt: lastFailedProbeAt).shouldStayOnline() {
                 return onlineViaOfficialClient ? .onlineViaOfficialClient : .online
             }
             switch error {
@@ -552,6 +570,22 @@ final class AppModel {
         // 否则每次重连都会改一次 keychain item，签名一变就会弹授权框。
         if !DevOverrides.isEnabled {
             ConfigStore.save(config)
+        }
+
+        // 官方 Dr.Com 客户端占着 61440 且网络是通的 → 直接用"已连接（官方客户端在管）"，
+        // 不再发认证包（否则会失败一次，界面就跳红一次）。
+        if config.link == "wired" || config.link == "jluPC" || config.link == "auto" {
+            if case .officialClient(let process, let pid) = BSDChannel.diagnosePort(PacketLayout.localPort) {
+                let detail = pid.map { "\(process)(\($0))" } ?? process
+                portHeldByOfficialClient = true
+                onlineViaOfficialClient = true
+                state = .online
+                recentLog.insert("官方客户端 \(detail) 正在维持连接：已按「已连接」显示，未重复认证", at: 0)
+                FileLogger.shared.log("connect：端口被官方客户端占用（\(detail)），跳过本次认证")
+                // 顺手确认网络确实可达（失败也不推翻结论，官方客户端通常就是在保住它）
+                Task { @MainActor in _ = await self.probeReachable() }
+                return
+            }
         }
 
         let profile = config.currentProfile
@@ -864,6 +898,11 @@ final class AppModel {
             started = ContinuousClock.now
             self.inspection.captcha = await service.captchaChecks()
             self.inspectionTimings["captcha"] = Self.elapsedMilliseconds(since: started)
+
+            // 顺手把「能不能上网」也跑了（合并成一次检测）
+            started = ContinuousClock.now
+            await self.runReachabilityInline()
+            self.inspectionTimings["reach"] = Self.elapsedMilliseconds(since: started)
             if self.inspection.cloudflare?.ip != nil {
                 await self.refreshReputation()
             }
@@ -1319,11 +1358,40 @@ final class AppModel {
             ?? interfaces.first(where: \.isUsableForAuthentication)
             ?? interfaces.first
         guard let interface else { return false }
+        // 先走 UDP DNS 探针（快），失败再补一次 HTTP：
+        // 代理把 UDP 接管掉时 DNS 探针会失败，但网络其实是通的。
         let outcome = await ConnectivityProbe().run(interface: interface,
                                                     dnsServers: ConnectivityProbe.fallbackDNSServers)
         if case .healthy = outcome {
             lastHealthyProbeAt = Date()
             return true
+        }
+        if await httpReachable() {
+            lastHealthyProbeAt = Date()
+            return true
+        }
+        lastFailedProbeAt = Date()
+        return false
+    }
+
+    /// 走默认路由的一次轻量 HTTP 检查（代理下也能通）。
+    private func httpReachable() async -> Bool {
+        for urlString in ["http://connect.rom.miui.com/generate_204",
+                          "https://www.baidu.com/"] {
+            guard let url = URL(string: urlString) else { continue }
+            var request = URLRequest(url: url)
+            request.timeoutInterval = 3
+            request.httpMethod = "GET"
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.timeoutIntervalForRequest = 3
+            configuration.waitsForConnectivity = false
+            let session = URLSession(configuration: configuration)
+            defer { session.invalidateAndCancel() }
+            if let (_, response) = try? await session.data(for: request),
+               let status = (response as? HTTPURLResponse)?.statusCode,
+               status < 500 {
+                return true
+            }
         }
         return false
     }

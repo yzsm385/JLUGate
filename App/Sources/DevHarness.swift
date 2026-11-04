@@ -37,6 +37,8 @@ enum DevOverrides {
         var openPanel: Bool?
         /// 打开面板时先切到某个子页面：settings / wizard / detail / status / portal
         var startPanel: String?
+        /// 自检：启动后自动跑一次网络体检（用于截图验证）
+        var runInspect: Bool?
     }
 
     private static let fileConfig: FileConfig? = {
@@ -83,6 +85,11 @@ enum DevOverrides {
     static var openPanelOnLaunch: Bool {
         guard isEnabled else { return false }
         return fileConfig?.openPanel ?? false
+    }
+
+    static var runInspectOnLaunch: Bool {
+        guard isEnabled else { return false }
+        return fileConfig?.runInspect ?? false
     }
 
     static var startPanelName: String? {

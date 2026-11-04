@@ -25,12 +25,13 @@ struct ProxyModeTests {
         #expect(analysis.advice.contains("延迟"), "建议里要先测延迟，而不是断言必失败")
     }
 
-    @Test("规则/配置模式：默认走代理，校园网段直连 → 认证能成功")
+    @Test("公网走代理、校内直连：这是最稳的状态，且不硬判全局/规则")
     func ruleSplit() {
         let analysis = ProxyModeAnalyzer.analyze(facts(defaultTunnel: true, campusTunnel: false))
         #expect(analysis.mode == .ruleSplit)
         #expect(analysis.summary.contains("en0"))
-        #expect(analysis.advice.contains("保持"))
+        #expect(analysis.summary.contains("全局"), "要解释：全局模式下代理通常也放行内网，路由分不出来")
+        #expect(analysis.advice.contains("不用改"))
     }
 
     @Test("直连：没有 TUN 抢默认路由")
@@ -52,7 +53,8 @@ struct ProxyModeTests {
     func declaredComparison() {
         let split = facts(defaultTunnel: true, campusTunnel: false)
         #expect(ProxyModeAnalyzer.analyze(split, declared: .config).matchesDeclared == true)
-        #expect(ProxyModeAnalyzer.analyze(split, declared: .proxy).matchesDeclared == false)
+        // 用户选了全局、但路由显示校内直连 → 无法判定，不报"不一致"
+        #expect(ProxyModeAnalyzer.analyze(split, declared: .proxy).matchesDeclared == nil)
         #expect(ProxyModeAnalyzer.analyze(split, declared: .direct).matchesDeclared == false)
 
         let global = facts(defaultTunnel: true, campusTunnel: true)
