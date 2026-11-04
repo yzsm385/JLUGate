@@ -148,10 +148,7 @@ struct AppConfig: Codable, Sendable {
 
 /// 极简 JSON 落盘（不引入第三方）。写盘失败只记日志，不打断用户操作。
 struct ConfigStore {
-    static var directory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("JLUGate", isDirectory: true)
-    }
+    static var directory: URL { AppIdentity.supportDirectory }
 
     static var fileURL: URL { directory.appendingPathComponent("config.json") }
 

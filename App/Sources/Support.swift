@@ -16,10 +16,16 @@ enum SingleInstance {
     /// 4. 别的实例构建号更新（比如从旧包启动，但新包已在跑）→ 让位给更新的。
     @MainActor
     static func claim(terminateSelf: @escaping @MainActor () -> Void) -> Bool {
+        // 便携副本：不接管、不让位，和 /Applications 那份共存
+        guard AppIdentity.isInstalled else { return true }
         guard let bundleID = Bundle.main.bundleIdentifier else { return true }
         let currentBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "dev"
         let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
             .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+            .filter { app in
+                guard let url = app.bundleURL else { return false }
+                return AppIdentity.sameKind(as: url)      // 只和同类副本打交道
+            }
         guard let existing = others.first else {
             warnAboutStaleCopies(currentBuild: currentBuild)
             return true

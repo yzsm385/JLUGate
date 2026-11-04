@@ -147,9 +147,7 @@ enum CredentialStore {
     // MARK: 文件（仅开发版）
 
     private static var fileURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("JLUGate", isDirectory: true)
-            .appendingPathComponent("credentials.json")
+        AppIdentity.supportDirectory.appendingPathComponent("credentials.json")
     }
 
     private static func loadFile() -> [String: String] {

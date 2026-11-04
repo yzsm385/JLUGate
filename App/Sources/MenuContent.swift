@@ -133,7 +133,7 @@ struct MenuContent: View {
                 .symbolEffect(.pulse, isActive: model.state.isBusy)
                 .foregroundStyle(model.statusColor)
             VStack(alignment: .leading, spacing: 2) {
-                Text(model.statusStory.title).font(.headline)
+                Text(model.statusStory.title + AppIdentity.displaySuffix).font(.headline)
                 Text(model.statusStory.oneLiner)
                     .font(.caption)
                     .foregroundStyle(.secondary)

@@ -42,6 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = SingleInstance.claim { NSApp.terminate(nil) }
 
         buildMainMenu()
+        AppIdentity.migrateIfNeeded()
         terminateOtherCopies()
         let model = AppModel()
         self.model = model
@@ -182,10 +183,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 同 bundle id 的旧副本（例如 /Applications 里那份）会抢同一个状态栏图标，
     /// 导致"点了没反应"。启动时把它们关掉，只留当前这份。
     private func terminateOtherCopies() {
-        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        // 只结束"同类"副本：正式版清正式版，便携版不动别人
+        guard AppIdentity.isInstalled, let bundleID = Bundle.main.bundleIdentifier else { return }
         let current = ProcessInfo.processInfo.processIdentifier
         for app in NSWorkspace.shared.runningApplications
-        where app.bundleIdentifier == bundleID && app.processIdentifier != current {
+        where app.bundleIdentifier == bundleID && app.processIdentifier != current
+            && AppIdentity.sameKind(as: app.bundleURL ?? URL(fileURLWithPath: "/")) {
             FileLogger.shared.log("发现另一份 JLU Gate（pid \(app.processIdentifier)），正在结束它")
             app.terminate()
         }
