@@ -34,6 +34,24 @@ struct DeveloperPanel: View {
                 if let hint {
                     Text(hint).font(.caption2).foregroundStyle(.green)
                 }
+
+                Divider().opacity(0.4)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("字段是什么意思").font(.caption).bold()
+                    Text("详情页不再堆解释；要查某个字段（DNS、网关、TUN…）看这里。")
+                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    ForEach(FieldGuide.entries) { entry in
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(entry.term).font(.system(size: 10, weight: .medium))
+                            Text(entry.explanation)
+                                .font(.system(size: 9)).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
             }
             .padding(14)
         }

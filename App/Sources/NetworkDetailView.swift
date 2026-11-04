@@ -59,7 +59,7 @@ struct NetworkDetailView: View {
     // MARK: 代理模式
 
     private var proxyModeSection: some View {
-        card("代理模式（对照小火箭）", notes: ["wireless"]) {
+        card("代理模式（对照小火箭）") {
             if let analysis = model.proxyAnalysis {
                 HStack(spacing: 8) {
                     Image(systemName: icon(for: analysis.mode))
@@ -119,7 +119,7 @@ struct NetworkDetailView: View {
     // MARK: VPN
 
     private var vpnSection: some View {
-        card("VPN / TUN", notes: ["tun"]) {
+        card("VPN / TUN") {
             if let snapshot, !snapshot.tunnels.isEmpty {
                 ForEach(snapshot.tunnels) { tunnel in
                     LabeledContent(tunnel.name) {
@@ -149,7 +149,7 @@ struct NetworkDetailView: View {
     // MARK: 网口
 
     private var interfaceSection: some View {
-        card("网口", notes: ["interface", "mac", "ipv4", "linklocal"]) {
+        card("网口") {
             ForEach(snapshot?.interfaces ?? []) { row in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
@@ -184,7 +184,7 @@ struct NetworkDetailView: View {
     }
 
     private var routeSection: some View {
-        card("路由与 DNS", notes: ["mask", "gateway", "dns", "route"]) {
+        card("路由与 DNS") {
             if let route = snapshot?.defaultRoute {
                 LabeledContent("默认路由") {
                     Text("\(route.interface ?? "?")（网关 \(route.gateway ?? "—")）")
@@ -233,7 +233,7 @@ struct NetworkDetailView: View {
     // MARK: Ping
 
     private var pingSection: some View {
-        card("Ping（TCP 握手延迟）", notes: ["ping"]) {
+        card("Ping（TCP 握手延迟）") {
             if model.pingResults.isEmpty {
                 Text("点下方「开始 Ping」测一下网关/公网的往返延迟；同时对比走 VPN 的额外延迟。")
                     .font(.caption).foregroundStyle(.secondary)
@@ -255,7 +255,7 @@ struct NetworkDetailView: View {
     // MARK: 测速
 
     private var speedSection: some View {
-        card("测速（HTTP 下载，对比直连与 VPN）", notes: ["speed"]) {
+        card("测速（HTTP 下载，对比直连与 VPN）") {
             if model.speedResults.isEmpty {
                 Text("会分别用「网口直连」和「当前默认出口（含 VPN）」各下载一次，单位 Mbps。")
                     .font(.caption).foregroundStyle(.secondary)
