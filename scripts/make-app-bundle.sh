@@ -51,7 +51,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key>      <string>dev.jlugate.app</string>
     <key>CFBundleExecutable</key>      <string>JLUGate</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.2.3</string>
+    <key>CFBundleShortVersionString</key><string>0.2.4</string>
     <key>CFBundleVersion</key>         <string>BUILD_STAMP</string>
     <key>LSMinimumSystemVersion</key>  <string>26.0</string>
     <key>LSUIElement</key>             <true/>
@@ -114,13 +114,18 @@ if [ "$DEV" = "2" ]; then
 DEVJSON
 fi
 
-echo "==> ad-hoc sign"
-codesign --force --sign - "$APP"
-
-echo "==> verify"
-codesign -dv "$APP" 2>&1 | grep -E "Identifier|Signature" || true
+# 先写 CFBundleVersion，再签名。
+# 反过来（签名后改 Info.plist）会让签名立刻失效，Gatekeeper 报"已损坏"——
+# 0.2.4 及之前所有包都有这个 bug。
 BUILD_STAMP="$(date -u +%Y%m%d%H%M)"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_STAMP" "$APP/Contents/Info.plist" 2>/dev/null \
     || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_STAMP" "$APP/Contents/Info.plist"
 plutil -lint "$APP/Contents/Info.plist" >/dev/null
-echo "OK -> $APP"
+
+echo "==> ad-hoc sign"
+codesign --force --sign - "$APP"
+
+echo "==> verify（签名必须有效，否则 Gatekeeper 会报"已损坏"）"
+codesign --verify --strict --verbose=2 "$APP"
+codesign -dv "$APP" 2>&1 | grep -E "Identifier|Signature" || true
+echo "OK -> $APP (build $BUILD_STAMP)"
