@@ -474,13 +474,13 @@ final class AppModel {
         launchConnectTask = Task { @MainActor [weak self] in
             guard let self else { return }
             for attempt in 1...5 {
-                let delay: Duration = attempt == 1 ? .seconds(4) : .seconds(5)
+                let delay: Duration = attempt == 1 ? .milliseconds(1500) : .seconds(2)
                 try? await Task.sleep(for: delay)
                 if Task.isCancelled { return }
                 if self.state.isOnline || self.state.isBusy { return }
                 FileLogger.shared.log("开机自动连接：第 \(attempt)/5 次尝试")
                 self.connect()
-                try? await Task.sleep(for: .seconds(4))
+                try? await Task.sleep(for: .seconds(2))
                 if self.state.isOnline { return }
             }
             FileLogger.shared.log("开机自动连接：5 次都没成功，等用户手动重试")
@@ -738,6 +738,15 @@ final class AppModel {
             state = .failed(.malformed("服务器地址不合法"))
             return
         }
+        // 网线被拔掉时 interfaces 会变空：此时启动引擎只会立刻报错，
+        // 而且在没有物理口的瞬间做通道/探针操作容易触发底层异常——先挡在这里。
+        if DevOverrides.server == nil, interfaces.isEmpty {
+            state = .failed(.adapterUnplugged(interface: config.interfaceLock ?? "en*"))
+            recentLog.insert("没有检测到可用的物理网口（网线可能被拔掉）。插回网线后点「重试」。", at: 0)
+            FileLogger.shared.log("connect：没有物理网口，跳过本次认证")
+            return
+        }
+
         // 注意：这里**不写钥匙串**。凭据只在向导/设置页保存时落盘（用户明确动作），
         // 否则每次重连都会改一次 keychain item，签名一变就会弹授权框。
         if !DevOverrides.isEnabled {
@@ -871,6 +880,7 @@ final class AppModel {
     }
 
     func retry() {
+        FileLogger.shared.log("重试：接口数=\(interfaces.count)，状态=\(state)")
         disconnect()
         connect()
     }
@@ -1461,6 +1471,14 @@ final class AppModel {
         }
         if !recentLog.isEmpty {
             text += "\n\n== 最近事件 ==\n" + recentLog.prefix(20).joined(separator: "\n")
+        }
+        // 闪退时用户往往只发诊断文件：把崩溃栈尾部一起带上
+        let crashLog = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Logs/JLUGate/crash-stack.log")
+        if let data = try? Data(contentsOf: crashLog),
+           let content = String(data: data, encoding: .utf8) {
+            let tail = content.split(separator: "\n").suffix(40).joined(separator: "\n")
+            text += "\n\n== 崩溃日志（最后 40 行）==\n" + tail
         }
         return text
     }
