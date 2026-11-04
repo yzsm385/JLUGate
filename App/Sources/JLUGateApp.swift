@@ -68,10 +68,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.image?.isTemplate = true
             button.target = self
             button.action = #selector(togglePanel(_:))
-            button.sendAction(on: [.leftMouseUp])
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         statusItem = item
     }
+
+    /// 菜单栏右键菜单：不打开面板也能操作
+    private func showContextMenu() {
+        guard let model, let button = statusItem?.button else { return }
+        let menu = NSMenu()
+        let toggle = model.state.isOnline
+            ? NSMenuItem(title: "断开连接", action: #selector(disconnectFromMenu), keyEquivalent: "")
+            : NSMenuItem(title: "立即连接", action: #selector(connectFromMenu), keyEquivalent: "")
+        toggle.target = self
+        menu.addItem(toggle)
+        menu.addItem(.separator())
+        let status = NSMenuItem(title: "刷新状态", action: #selector(refreshFromMenu), keyEquivalent: "")
+        status.target = self
+        menu.addItem(status)
+        let inspect = NSMenuItem(title: "网络体检", action: #selector(inspectFromMenu), keyEquivalent: "")
+        inspect.target = self
+        menu.addItem(inspect)
+        let settings = NSMenuItem(title: "设置…", action: #selector(settingsFromMenu), keyEquivalent: ",")
+        settings.target = self
+        menu.addItem(settings)
+        menu.addItem(.separator())
+        let quit = NSMenuItem(title: "退出 JLU Gate", action: #selector(quitFromMenu), keyEquivalent: "q")
+        quit.target = self
+        menu.addItem(quit)
+        statusItem?.menu = menu
+        button.performClick(nil)
+        statusItem?.menu = nil
+    }
+
+    @objc private func connectFromMenu() { model?.retry() }
+    @objc private func disconnectFromMenu() { model?.disconnect() }
+    @objc private func refreshFromMenu() { model?.refreshDiagnostics() }
+    @objc private func inspectFromMenu() { model?.show(.inspect) }
+    @objc private func settingsFromMenu() { model?.presentSettings() }
+    @objc private func quitFromMenu() { NSApp.terminate(nil) }
 
     private func observeIcon(model: AppModel) {
         iconTask = Task { @MainActor [weak self] in
@@ -99,6 +134,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: 面板
 
     @objc private func togglePanel(_ sender: Any?) {
+        // 右键：弹菜单（连接/断开、体检、设置、退出）
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            showContextMenu()
+            return
+        }
         if popover?.isShown == true {
             popover?.performClose(nil)
         } else {
