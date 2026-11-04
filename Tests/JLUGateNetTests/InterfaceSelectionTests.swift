@@ -136,7 +136,15 @@ struct MACSelectionTests {
             route: RouteInfo(destination: "10.100.61.3", gateway: "192.0.2.1", interface: "en7"),
             configMethod: "Manual", gateway: "192.0.2.1")
         let channel = FakeChannel(responder: { datagram in
-            datagram.count == 20 ? [Data([0x02, 0x03, 0x1d, 0x63]) + Data(repeating: 0, count: 72)] : []
+            if datagram.count == 20 {
+                var reply = Data([0x02, 0x03, 0x1d, 0x63])
+                reply.append(Data(repeating: 0, count: 72))
+                return [reply]
+            }
+            if datagram.count > 300, datagram.first == 0x03 {
+                return [RecordedGateway.loginSuccess()]
+            }
+            return []
         })
         let engine = DrcomEngine(
             configuration: EngineConfiguration(account: "20230001", password: "test-pass-2024",
@@ -147,10 +155,13 @@ struct MACSelectionTests {
             clock: FakeClock())
         await engine.start()
         try await expectEventually("发出登录包", timeout: .seconds(3)) {
-            channel.sentFrames.contains { $0.count == 342 }
+            channel.sentFrames.contains { $0.count > 300 && $0.first == 0x03 }
         }
-        let login = try #require(channel.sentFrames.first { $0.count == 342 })
-        #expect([UInt8](login[0x14C..<0x152]) == hardwareBytes, "登录包 0x14C 必须是出厂 MAC")
+        let login = try #require(channel.sentFrames.first { $0.count > 300 && $0.first == 0x03 })
+        // MAC 紧跟在密码段之后：偏移 = 322 + 密码字节数
+        let macOffset = 322 + "test-pass-2024".utf8.count
+        #expect([UInt8](login[macOffset..<(macOffset + 6)]) == hardwareBytes,
+                "登录包里的 MAC 必须是出厂 MAC（偏移随密码长度平移）")
         await engine.stop()
     }
 

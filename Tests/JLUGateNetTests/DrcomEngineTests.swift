@@ -15,6 +15,11 @@ struct DrcomEngineTests {
             keepAliveInterval: keepAliveInterval)
     }
 
+    /// 登录包长度随密码长度变化（338 + 额外段），不能写死 342。
+    static func isLoginFrame(_ data: Data) -> Bool {
+        data.count >= 300 && data.first == 0x03
+    }
+
     private func makeEngine(configuration: EngineConfiguration,
                             provider: FakeInterfaceProvider = .wired,
                             responder: @escaping @Sendable (Data) -> [Data])
@@ -35,9 +40,9 @@ struct DrcomEngineTests {
     private func wellBehavedResponder(loginReply: Data? = nil) -> @Sendable (Data) -> [Data] {
         let success = loginReply ?? RecordedGateway.loginSuccess()
         return { datagram in
+            if Self.isLoginFrame(datagram) { return [success] }
             switch datagram.count {
             case 20: return [RecordedGateway.challengeReply()]
-            case 342: return [success]
             case 38: return [RecordedGateway.keepAliveAReply()]
             case 40: return [RecordedGateway.keepAliveBReply(to: datagram)]
             default: return []
@@ -66,7 +71,7 @@ struct DrcomEngineTests {
 
         let sent = channel.sentFrames
         #expect(sent.first?.count == 20, "第一包必须是 20 字节 challenge")
-        #expect(sent.contains { $0.count == 342 }, "必须发过 342 字节登录包")
+        #expect(sent.contains { Self.isLoginFrame($0) }, "必须发过登录包")
 
         let params = try #require(channel.openParameters)
         #expect(params.localPort == 61440)
@@ -90,7 +95,8 @@ struct DrcomEngineTests {
         let responder: @Sendable (Data) -> [Data] = { datagram in
             switch datagram.count {
             case 20: return [stale, fresh]   // 先塞一个过期的
-            case 342: return [RecordedGateway.loginSuccess()]
+            case let count where count > 300 && datagram.first == 0x03:
+                return [RecordedGateway.loginSuccess()]
             case 38: return [RecordedGateway.keepAliveAReply()]
             case 40: return [RecordedGateway.keepAliveBReply(to: datagram)]
             default: return []
@@ -100,7 +106,7 @@ struct DrcomEngineTests {
         await engine.start()
         try await expectEventually("进入 online") { await engine.currentState() == .online }
 
-        let login = try #require(channel.sentFrames.first { $0.count == 342 })
+        let login = try #require(channel.sentFrames.first { Self.isLoginFrame($0) })
         let expected = DrcomCodec.digestA(password: "test-pass-2024",
                                           salt: [0x49, 0xCB, 0x72, 0x0F])
         #expect([UInt8](login[0x004..<0x014]) == expected,
@@ -154,8 +160,12 @@ struct DrcomEngineTests {
                     let serial = UInt16(datagram[datagram.startIndex + 2]) << 8
                         | UInt16(datagram[datagram.startIndex + 3])
                     return [RecordedGateway.challengeReply(serial: serial)]
-                case 342: return [RecordedGateway.loginFailure(reason: "ldap auth error")]
-                default: return []
+
+                default:
+                    if Self.isLoginFrame(datagram) {
+                        return [RecordedGateway.loginFailure(reason: "ldap auth error")]
+                    }
+                    return []
                 }
             })
         await engine.start()
@@ -166,13 +176,17 @@ struct DrcomEngineTests {
             Issue.record("状态应为 failed")
             return
         }
-        #expect(error == .rejected(reason: "ldap auth error"), "实际错误：\(error)")
+        guard case .rejected(let message) = error else {
+            Issue.record("应为 rejected，实际：\(error)")
+            return
+        }
+        #expect(message.contains("ldap auth error"), "服务器原文必须保留：\(message)")
         // ldap auth error 会先自动换 salt 重试两次（实测同一密码也会偶发），之后再交给用户
-        #expect(channel.sentFrames.filter { $0.count == 342 }.count <= 3)
+        #expect(channel.sentFrames.filter { Self.isLoginFrame($0) }.count <= 3)
 
-        let loginCount = channel.sentFrames.filter { $0.count == 342 }.count
+        let loginCount = channel.sentFrames.filter { Self.isLoginFrame($0) }.count
         try await Task.sleep(for: .milliseconds(120))
-        #expect(channel.sentFrames.filter { $0.count == 342 }.count == loginCount,
+        #expect(channel.sentFrames.filter { Self.isLoginFrame($0) }.count == loginCount,
                 "认证失败必须停下来等用户，不许循环重登")
         await engine.stop()
     }
@@ -182,11 +196,11 @@ struct DrcomEngineTests {
         let (engine, channel, _, _) = makeEngine(
             configuration: makeConfiguration(),
             responder: { datagram in
-                switch datagram.count {
-                case 20: return [RecordedGateway.challengeReply()]
-                case 342: return [RecordedGateway.loginFailure(reason: "account in use")]
-                default: return []
+                if datagram.count == 20 { return [RecordedGateway.challengeReply()] }
+                if Self.isLoginFrame(datagram) {
+                    return [RecordedGateway.loginFailure(reason: "account in use")]
                 }
+                return []
             })
         await engine.start()
         try await expectEventually("进入 failed") {
@@ -195,7 +209,7 @@ struct DrcomEngineTests {
         guard case .failed(let error) = await engine.currentState() else { return }
         #expect(error == .accountInUse(reason: "account in use"))
         #expect(error.userMessage == "account in use")
-        #expect(channel.sentFrames.filter { $0.count == 342 }.count == 1)
+        #expect(channel.sentFrames.filter { Self.isLoginFrame($0) }.count == 1)
         await engine.stop()
     }
 
@@ -240,16 +254,18 @@ struct DrcomEngineTests {
                 route: RouteInfo(destination: "10.100.61.3", gateway: "192.0.2.1", interface: "en7"),
                 configMethod: "Manual", gateway: "192.0.2.1"),
             responder: { datagram in
-                datagram.count == 20 ? [RecordedGateway.challengeReply()]
-                    : (datagram.count == 342 ? [RecordedGateway.loginSuccess()] : [])
+                if datagram.count == 20 { return [RecordedGateway.challengeReply()] }
+                if Self.isLoginFrame(datagram) { return [RecordedGateway.loginSuccess()] }
+                return []
             })
         await engine.start()
         try await expectEventually("发出登录包", timeout: .seconds(3)) {
-            channel.sentFrames.contains { $0.count == 342 }
+            channel.sentFrames.contains { Self.isLoginFrame($0) }
         }
-        let login = try #require(channel.sentFrames.first { $0.count == 342 })
+        let login = try #require(channel.sentFrames.first { Self.isLoginFrame($0) })
         // 登记 MAC 是 02:00:00:00:00:01，即使网卡是 aa:bb:...，报文也用登记值
-        #expect([UInt8](login[0x14C..<0x152]) == [0x02, 0x00, 0x00, 0x00, 0x00, 0x01])
+        let macOffset = 322 + makeConfiguration().password.utf8.count
+        #expect([UInt8](login[macOffset..<(macOffset + 6)]) == [0x02, 0x00, 0x00, 0x00, 0x00, 0x01])
         await engine.stop()
     }
 
@@ -403,7 +419,7 @@ struct DrcomEngineTests {
 
         let frameTypes = channel.sentFrames.map { $0.count }
         #expect(frameTypes.first == 20)
-        #expect(frameTypes.contains(342))
+        #expect(frameTypes.contains { $0 > 300 })
         #expect(frameTypes.contains(38), "必须有 A 型（38 字节）")
         #expect(frameTypes.filter { $0 == 40 }.count >= 2, "必须有 B 型（40 字节）")
 
@@ -427,5 +443,55 @@ final class Atomic<Value: Sendable>: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return body(&value)
+    }
+}
+
+private final class LoginCounter: @unchecked Sendable {
+    private var value = 0
+    private let lock = NSLock()
+    func next() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        let current = value
+        value += 1
+        return current
+    }
+}
+
+@Suite("版本不兼容（0x15）自动换报文版本")
+struct LoginVariantFallbackTests {
+    @Test("先回 0x15，再换旧版报文重试成功")
+    func fallsBackToLegacy() async throws {
+        let counter = LoginCounter()
+        let channel = FakeChannel { datagram in
+            if datagram.count == 20 {
+                let serial = UInt16(datagram[datagram.startIndex + 2]) << 8
+                    | UInt16(datagram[datagram.startIndex + 3])
+                return [RecordedGateway.challengeReply(serial: serial)]
+            }
+            if datagram.count > 300, datagram.first == 0x03 {
+                return counter.next() == 0
+                    ? [RecordedGateway.loginFailure(reason: "ldap auth error", code: 0x15)]
+                    : [RecordedGateway.loginSuccess()]
+            }
+            return []
+        }
+        let configuration = EngineConfiguration(
+            account: "20230001", password: "test-pass-2024", hostname: "test-mac.local",
+            registeredMAC: MACAddress("02:00:00:00:00:01"),
+            keepAliveInterval: .seconds(10))
+        let engine = DrcomEngine(configuration: configuration,
+                                 codec: DrcomCodec(randomness: SeededRandomSource(seed: 7)),
+                                 channelFactory: RecordingChannelFactory(channel: channel),
+                                 interfaces: FakeInterfaceProvider.wired,
+                                 clock: FakeClock(),
+                                 backoff: Backoff())
+        await engine.start()
+        try await expectEventually("进入 online", timeout: .seconds(4)) {
+            await engine.currentState() == .online
+        }
+        let logins = channel.sentFrames.filter { $0.count > 300 && $0.first == 0x03 }
+        #expect(logins.count >= 2, "第一次被 0x15 拒绝后必须换版本重试")
+        #expect(Set(logins.map(\.count)).count >= 2, "两次登录包的版本应当不同（长度不同）")
+        await engine.stop()
     }
 }

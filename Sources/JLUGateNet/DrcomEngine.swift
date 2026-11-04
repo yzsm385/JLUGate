@@ -195,10 +195,12 @@ public actor DrcomEngine {
     private func runLoop(epoch: UInt64) async {
         var attempt = 0
         var credentialRetries = 0
+        var loginVariant: LoginVariant = .current
         while isCurrent(epoch) && !Task.isCancelled {
             do {
                 let context = try await discover(epoch: epoch)
-                let ticket = try await authenticate(context: context, epoch: epoch)
+                let ticket = try await authenticate(context: context, epoch: epoch,
+                                                    variant: loginVariant)
                 attempt = 0
                 credentialRetries = 0
                 try await stayOnline(context: context, ticket: ticket, epoch: epoch)
@@ -219,6 +221,15 @@ public actor DrcomEngine {
 
                 // ldap auth error：实测同一密码也会偶发（账号在别处在线 / 服务器忙），
                 // 换一个新 salt 重试两次；仍失败才交给用户。
+                // 服务端回 0x15（版本不兼容）：换另一种登录报文版本再试一次
+                if case .rejected(let message) = error,
+                   message.contains("需要升级客户端"), loginVariant == .current {
+                    loginVariant = .legacy
+                    emit(.log("服务端要求更新客户端版本：改用旧版报文再试一次"))
+                    try? await clock.sleep(for: .milliseconds(300))
+                    continue
+                }
+
                 if error.isCredentialRejection, credentialRetries < 2 {
                     credentialRetries += 1
                     emit(.log("服务器回 ldap auth error：换新 salt 重试第 \(credentialRetries) 次"))
@@ -347,7 +358,8 @@ public actor DrcomEngine {
 
     // MARK: challenging + authenticating
 
-    private func authenticate(context: SessionContext, epoch: UInt64) async throws -> SessionTicket {
+    private func authenticate(context: SessionContext, epoch: UInt64,
+                              variant: LoginVariant = .current) async throws -> SessionTicket {
         let channel = context.channel
         self.channel = channel
         try await channel.open(
@@ -400,7 +412,7 @@ public actor DrcomEngine {
             mac: (configuration.useRegisteredMACForAuth || !interfaceMatchesRegistered ? configuration.registeredMAC : nil)
                 ?? context.interface.macForAuthentication
                 ?? MACAddress(bytes: [0, 0, 0, 0, 0, 0])!)
-        let login = try codec.makeLogin(loginContext)
+        let login = try codec.makeLogin(loginContext, variant: variant)
         let digest = DrcomCodec.digestA(password: configuration.password, salt: salt)
         emit(.log("登录包原文=\(Hex.string(login))"))
         emit(.log("发送登录包：\(login.count) 字节，摘要A=\(Hex.string(digest, limit: 8))…，"
@@ -430,8 +442,13 @@ public actor DrcomEngine {
                           session: ticket.session))
             return ticket
         case .loginFailure(let reason):
-            emit(.log("登录被服务器拒绝：\"\(reason)\"（原始帧前 32 字节=\(Hex.string(incoming.payload, limit: 32))）"))
-            throw DrcomError.classifyRejection(reason)
+            let code = codec.parseLoginFailureCode(Data(incoming.payload))
+            let mapped = code.flatMap(JLULoginError.from(code:))
+            let codeText = code.map { String(format: "0x%02X", $0) } ?? "无"
+            emit(.log("登录被服务器拒绝：\"\(reason)\" 错误码=\(codeText)"
+                      + (mapped.map { "（\($0.title)：\($0.advice)）" } ?? "")
+                      + "（原始帧前 32 字节=\(Hex.string(incoming.payload, limit: 32))）"))
+            throw DrcomError.classifyRejection(reason, code: code)
         default:
             // 把"服务器到底回了什么"记下来：这是判定登录成功/失败的关键证据
             emit(.log("登录后收到未识别的报文（可能是成功/失败的变体）："

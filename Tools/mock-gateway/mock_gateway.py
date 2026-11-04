@@ -34,6 +34,8 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__fi
 DEFAULT_FIXTURES = os.path.join(REPO_ROOT, "Fixtures", "session_sanitized.json")
 
 CLIENT_PORT = 61440
+VENDOR = "LIYUANYUAN"
+SERVICE_PACK = "3dc79f5212e8170acfa9ec95f1d74916542be7b1"
 VERSION = "25.6.0"
 TOKEN = "56c68373463f4cd5b73dd3ac5e3673000a5fdd7e"
 
@@ -93,7 +95,10 @@ class MockGateway:
         if not self.args.assert_mode:
             return
         kind = payload[0] if payload else -1
-        expected_len = {1: 20, 3: 342, 0xFF: 38, 7: 40, 6: 80}.get(kind)
+        # 登录包长度随密码长度变化（338 + 额外段），只校验下界
+        expected_len = {1: 20, 0xFF: 38, 7: 40, 6: 80}.get(kind)
+        if kind == 0x03 and len(payload) < 300:
+            self.state.fail(f"登录包过短：{len(payload)} 字节")
         if expected_len and len(payload) != expected_len:
             self.state.fail(f"类型 0x{kind:02x} 的长度是 {len(payload)}，应为 {expected_len}")
         if kind == 0x01:
@@ -104,21 +109,29 @@ class MockGateway:
         if kind == 0x03:
             if payload[1] != 0x01:
                 self.state.fail("登录包子类型应为 0x01")
-            if payload[2:4] != b"\x00\x1f":
-                self.state.fail(f"登录包 0x002 应为 001f，实际 {payload[2:4].hex()}")
-            account = payload[0x14:0x34].split(b"\x00")[0]
+            account = payload[0x14:0x38].split(b"\x00")[0]
             if self.args.account and account.decode(errors="replace") != self.args.account:
                 self.state.fail(f"账号不对：{account!r}")
+            # 当前 JLU 登录包：0x38=0x20, 0x39=0x03, 0x50=0x01,
+            # 0x6E 起为 "LIYUANYUAN"，0xB6 起为 DrCOM 魔数，0xF6 起 40 字节服务包
+            if payload[0x38:0x3A] != b"\x20\x03":
+                self.state.fail(f"0x38 控制位不对：{payload[0x38:0x3A].hex()}")
+            if payload[0x50] != 0x01:
+                self.state.fail(f"0x50 网卡数应为 1，实际 {payload[0x50]}")
+            if payload[0x6E:0x78] != VENDOR.encode():
+                self.state.fail(f"0x6E 应为 {VENDOR}，实际 {payload[0x6E:0x78]!r}")
             if payload[0xB6:0xBB] != b"DrCOM":
-                self.state.fail(f"登录包 0xB6 魔数应为 DrCOM，实际 {payload[0xB6:0xBB]!r}")
-            if payload[0xC0:0xC6] != VERSION.encode():
-                self.state.fail(f"版本串应为 {VERSION}，实际 {payload[0xC0:0xC6]!r}")
-            if payload[0xF6:0x11E] != TOKEN.encode():
-                self.state.fail("40 位静态令牌不对")
-            if payload[0x136:0x13A] != b"\x31\x00\x00\x0a":
-                self.state.fail(f"0x136 常量不对：{payload[0x136:0x13A].hex()}")
-            if payload[0x144:0x146] != b"\x02\x0c":
-                self.state.fail(f"0x144 常量不对：{payload[0x144:0x146].hex()}")
+                self.state.fail(f"0xB6 魔数应为 DrCOM，实际 {payload[0xB6:0xBB]!r}")
+            if payload[0xF6:0x11E] != SERVICE_PACK.encode():
+                self.state.fail("40 字节服务包不对")
+            if payload[310] != 0x68:
+                self.state.fail(f"0x136 常量应为 0x68，实际 {payload[310]:#x}")
+            pass_len = len(self.args.password.encode()) if self.args.password else payload[313]
+            if payload[313] != pass_len:
+                self.state.fail(f"0x139 密码长度应为 {pass_len}，实际 {payload[313]}")
+            counter = 314 + pass_len
+            if payload[counter:counter + 2] != b"\x02\x0c":
+                self.state.fail(f"密码段后常量不对：{payload[counter:counter + 2].hex()}")
             if self.args.password:
                 digest = hashlib.md5(b"\x03\x01" + self.state.salt
                                      + self.args.password.encode()).digest()
@@ -186,6 +199,7 @@ class MockGateway:
         if kind == 0x01:
             return [self.challenge_reply()]
         if kind == 0x03:
+            self.state.login_ok = True          # 登录包长度随密码变化，这里只看类型
             return [self.login_reply(payload)]
         if kind == 0xFF:
             return [self.keepalive_a_reply()] if self.state.login_ok else []

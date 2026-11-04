@@ -157,7 +157,15 @@ public enum DrcomError: Error, Sendable, Equatable {
     }
 
     /// 服务器拒绝原因的分类。原因串**原样保留**，只用来决定要不要自动重试。
-    public static func classifyRejection(_ reason: String) -> DrcomError {
+    /// 服务器拒绝：带上错误码（0x15 = 需要升级客户端 等）。
+    public static func classifyRejection(_ reason: String, code: UInt8? = nil) -> DrcomError {
+        if let code, let mapped = JLULoginError.from(code: code) {
+            let combined = "\(mapped.title)：\(mapped.advice)（服务器原文：\(reason)）"
+            switch mapped {
+            case .mustUseDHCP: return .dhcpAssigned(interface: "服务端要求 DHCP")
+            default: return .rejected(reason: combined)
+            }
+        }
         let lowered = reason.lowercased()
         let mentionsMAC = lowered.contains("mac")
 

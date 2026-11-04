@@ -29,6 +29,12 @@ struct Options {
     var ip = "192.0.2.10"
     /// `--proxy host:port`：带宽测试里"套了一层住宅代理"那一档
     var proxy: String?
+    /// `--variant legacy|current`：选择登录报文版本
+    var variant = "current"
+    /// `--link-local 169.254.x.y`：登录包里的第二 IP
+    var linkLocal: String?
+    /// `--nonce2 aabb`：覆盖尾部随机字节（调试/黄金复现）
+    var nonce2: String?
     var gatewayPort = 61441
     var gatewayPath = "Tools/mock-gateway/mock_gateway.py"
     var portalPort = 18080
@@ -66,6 +72,9 @@ func parseOptions(_ arguments: [String]) -> Options {
         case "--frame": options.framePath = value()
         case "--ip": options.ip = value()
         case "--proxy": options.proxy = value()
+        case "--variant": options.variant = value()
+        case "--link-local": options.linkLocal = value()
+        case "--nonce2": options.nonce2 = value()
         case "--gateway-port": options.gatewayPort = Int(value()) ?? options.gatewayPort
         case "--portal-port": options.portalPort = Int(value()) ?? options.portalPort
         case "--dns": options.dnsServers = value().split(separator: ",").map(String.init)
@@ -191,11 +200,13 @@ func runDumpLogin(_ options: Options) {
         password: options.password,
         salt: hexBytes(options.salt),
         clientIP: ip,
-        linkLocalIP: IPv4Address("169.254.1.1"),
+        linkLocalIP: options.linkLocal.flatMap(IPv4Address.init),
         hostname: options.hostname,
-        mac: mac)
+        mac: mac,
+        nonceOverrides: NonceOverrides(nonce2: options.nonce2.flatMap(hexBytes)))
     do {
-        let frame = try DrcomCodec().makeLogin(context)
+        let variant: LoginVariant = options.variant == "legacy" ? .legacy : .current
+        let frame = try DrcomCodec().makeLogin(context, variant: variant)
         print("长度: \(frame.count)")
         for offset in stride(from: 0, to: frame.count, by: 16) {
             let chunk = [UInt8](frame[offset..<min(offset + 16, frame.count)])

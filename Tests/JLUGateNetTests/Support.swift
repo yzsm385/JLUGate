@@ -150,11 +150,11 @@ enum RecordedGateway {
     }
 
     static func loginSuccess() -> Data { Data(session.reply(length: 45)!) }
-    static func loginFailure(reason: String = "ldap auth error") -> Data {
+    static func loginFailure(reason: String = "ldap auth error", code: UInt8 = 0x00) -> Data {
         var bytes = [UInt8](repeating: 0, count: 37)
         bytes[0] = 0x05
         bytes[3] = 0x05
-        bytes[4] = 0x15
+        bytes[4] = code
         let reasonBytes = Array(reason.utf8).prefix(37 - 0x14 - 2)
         bytes.replaceSubrange(0x14..<(0x14 + reasonBytes.count), with: reasonBytes)
         return Data(bytes)

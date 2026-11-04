@@ -72,77 +72,76 @@ public enum PacketLayout {
     // MARK: 登录包（C→S，342 字节）
 
     public enum Login {
+        // 依据 jlu-drcom-ng v2.0.0（社区维护的 JLU 实现）与 JKDrcom 交叉验证：
+        // 基础长度 338，密码段从 312 开始，长度随密码长度增长。
+        public static let baseLength = 338
+        public static let passwordSectionOffset = 312
+
         public static let kind: UInt8 = 0x03
         public static let subtype: UInt8 = 0x01
-        public static let magicOffset = 0x002
-        public static let magicValue: UInt16 = 0x001F
 
         public static let digestAOffset = 0x004
         public static let digestALength = 16
-
         public static let accountOffset = 0x014
-        public static let accountLength = 32
+        public static let accountLength = 36
 
-        /// 未知区 ①：22 字节，两次登录完全不同 → 先填随机（CHECKLIST §11）。
-        public static let nonce22Offset = 0x03A
-        public static let nonce22Length = 22
+        public static let controlOffset = 0x038       // 0x20
+        public static let adapterOffset = 0x039       // 0x03
+        public static let xorOffset = 0x03A
+        public static let xorLength = 6
+        public static let md5bOffset = 0x040
+        public static let md5bLength = 16
 
-        public static let addressFamilyOffset = 0x050
-        public static let addressFamilyValue: UInt8 = 0x02
-        public static let clientIPOffset = 0x051
-        /// 接口的链路本地 IPv4（实测 `169.254.1.1` = `a9 fe 7a 5b`），没有则全 0。
-        public static let linkLocalIPOffset = 0x055
-        public static let ipLength = 4
+        public static let ipCountOffset = 0x050       // 0x01
+        public static let md5cOffset = 0x061
+        public static let md5cLength = 8
+        public static let md5cProbe: [UInt8] = [0x14, 0x00, 0x07, 0x0B]
+        public static let ipDogOffset = 0x069         // 0x01
 
-        /// 未知区 ②：8 字节，两次登录完全不同（CHECKLIST 写作 0x066，实测起点是 0x061）。
-        public static let nonce8Offset = 0x061
-        public static let nonce8Length = 8
-        /// 0x069 恒为 0x01（两次登录一致）。
-        public static let flag1Offset = 0x069
-        public static let flag1Value: UInt8 = 0x01
+        /// 0x6E..0x78 = "LIYUANYUAN"（官方客户端的固定串）
+        public static let vendorOffset = 0x06E
+        public static let vendor = "LIYUANYUAN"
+        /// 主机名上限（当前版本的登录包不携带主机名，保留常量供截断逻辑使用）
+        public static let hostnameLength = 26
 
-        public static let hostnameOffset = 0x06E
-        /// 主机名区到 0x088 为止（26 字节，含结尾 NUL）。
-        public static let hostnameLength = 0x088 - 0x06E
+        public static let dnsOffset = 0x08E
+        public static let dnsValue: [UInt8] = [10, 10, 10, 10]
 
-        public static let flag2Offset = 0x0B5
-        public static let flag2Value: UInt8 = 0x02
+        public static let osFieldOffset = 0x0A2
+        public static let osFields: [(offset: Int, value: UInt32)] = [
+            (0x0A2, 0x94), (0x0A6, 6), (0x0AA, 2), (0x0AE, 0x23F0), (0x0B2, 2),
+        ]
 
-        public static let magicOffset2 = 0x0B6
-        public static let magic2Length = 5
+        /// 0xB6..0xBF：`DrCOM\0\xCF\x07\x68`
+        public static let hostBlobOffset = 0x0B6
+        public static let hostBlob: [UInt8] = [0x44, 0x72, 0x43, 0x4F, 0x4D, 0x00, 0xCF, 0x07, 0x68]
 
-        /// `00 cf 07 31 00`，两次一致。
-        public static let fixed0BB: [UInt8] = [0x00, 0xCF, 0x07, 0x31, 0x00]
-        public static let fixed0BBOffset = 0x0BB
+        /// 0xF6..0x11E：40 字节服务包标识
+        public static let servicePackOffset = 0x0F6
+        public static let servicePack = "3dc79f5212e8170acfa9ec95f1d74916542be7b1"
 
-        public static let versionOffset = 0x0C0
-        public static let versionLength = 6
+        public static let tailMarkerOffset = 310
+        public static let tailMarker: UInt8 = 0x68
+        public static let passwordLengthOffset = 313
+        public static let rorOffset = 314
+        public static let separatorAfterROR: [UInt8] = [0x02, 0x0C]
+        public static let checksumPlaceholder: [UInt8] = [0x01, 0x26, 0x07, 0x11, 0x00, 0x00]
+        public static let macOffsetAfterROR = 8
+        public static let tailFoot: [UInt8] = [0x60, 0xA2]
 
-        public static let tokenOffset = 0x0F6
-        public static let tokenLength = 40
+        /// 登录包长度 = 338 + extra（<=8 字符不加长）。
+        public static func padding(passwordLength: Int) -> (extra: Int, rorPadding: Int) {
+            guard passwordLength > 8 else {
+                return (0, 8 - passwordLength)          // 短密码：尾部补到 8 字节再放脚标
+            }
+            let rorPadding = passwordLength == 16 ? 0 : passwordLength / 4
+            return (28 + passwordLength - 8 + rorPadding, rorPadding)
+        }
 
-        /// `31 00 00 0a`
-        public static let fixed136: [UInt8] = [0x31, 0x00, 0x00, 0x0A]
-        public static let fixed136Offset = 0x136
-
-        /// 未知区 ③：随机段。实测 0x13A–0x143 与 0x146–0x149 随机，
-        /// 中间 0x144–0x145 恒为 `02 0c`（两次登录一致）。
-        public static let nonce10Offset = 0x13A
-        public static let nonce10Length = 10
-        public static let fixed144: [UInt8] = [0x02, 0x0C]
-        public static let fixed144Offset = 0x144
-        public static let nonce4Offset = 0x146
-        public static let nonce4Length = 4
-
-        public static let macOffset = 0x14C
-        public static let macLength = 6
-        public static let trailingOffset = 0x152        // `00 00`
-        /// 未知区 ④：2 字节。CHECKLIST 允许先填 `00 00`；默认仍随机（见 `Randomness`）。
-        public static let nonce2Offset = 0x154
-        public static let nonce2Length = 2
+        public static func length(passwordLength: Int) -> Int {
+            baseLength + padding(passwordLength: passwordLength).extra
+        }
     }
-
-    // MARK: 登录结果
 
     public enum LoginResult {
         public static let successKind: UInt8 = 0x04
