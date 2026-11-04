@@ -25,6 +25,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popover: NSPopover?
     private var iconTask: Task<Void, Never>?
 
+    /// 在访达里双击已在运行的 App：系统不会重新启动进程，只会发 reopen。
+    /// 用户此时想要的通常是"连上"，所以顺手触发一次连接。
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        if let model, !model.state.isOnline, !model.state.isBusy {
+            FileLogger.shared.log("访达再次打开 App：触发自动连接")
+            model.retry()
+        }
+        return true
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         CrashReporter.install()
         NSApplication.shared.setActivationPolicy(.accessory)
