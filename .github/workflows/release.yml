@@ -26,8 +26,21 @@ jobs:
         run: |
           set -eux
           mkdir -p out
-          cp "dist/JLU Gate 0.1.0.zip" "out/JLU-Gate-${{ github.ref_name }}.zip"
+          # 版本号由脚本决定，不能写死（写死 0.1.0 就是前几次 Release 失败的原因）
+          asset=$(ls -t dist/"JLU Gate "*.zip | head -n 1)
+          test -n "$asset"
+          cp "$asset" "out/JLU-Gate-${{ github.ref_name }}.zip"
           ls -lh out
+
+      - name: 清理已废弃的旧版 Release（0.1.x 连不上，不对外发布）
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eux
+          for tag in v0.1.0 v0.1.1 v0.1.2 v0.1.3 v0.1.4; do
+            gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+          done
 
       - name: 创建 / 更新 Release
         uses: softprops/action-gh-release@v2
