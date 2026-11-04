@@ -56,10 +56,7 @@ struct InspectPanel: View {
             module("人机验证", timingKey: "captcha", value: captchaValue, hint: captchaHint)
 
             // IP 纯净度：住宅 or 机房
-            module("出口 IP 纯净度",
-                   value: (CountryFlag.emoji(for: model.ipReputation?.country).map { $0 + " " } ?? "")
-                          + (model.ipReputation?.summary ?? ""),
-                   hint: purityHint)
+            purityModule
             if let consensus = model.geoConsensus {
                 ForEach(consensus.samples) { sample in
                     HStack(spacing: 6) {
@@ -236,6 +233,57 @@ struct InspectPanel: View {
         } ?? false
         return InspectionVerdict.ipHint(country: model.inspection.cloudflare?.location,
                                         sameAsLocal: same)
+    }
+
+    /// 纯净度：分行展示，不要全挤成一行
+    @ViewBuilder
+    private var purityModule: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text("出口 IP 纯净度").font(.caption).bold()
+                Spacer(minLength: 0)
+            }
+            if let reputation = model.ipReputation {
+                HStack(spacing: 6) {
+                    if let flag = CountryFlag.emoji(for: reputation.country) { Text(flag) }
+                    Text(reputation.kindTitle).font(.caption)
+                    if reputation.proxy == true {
+                        Text("已被标记为代理").font(.system(size: 9)).foregroundStyle(.orange)
+                    }
+                }
+                let place = [reputation.city, reputation.region, reputation.country]
+                    .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " / ")
+                if !place.isEmpty {
+                    purityLine("位置", place)
+                }
+                if let who = [reputation.isp, reputation.org].compactMap({ $0 }).first {
+                    purityLine("归属", who)
+                }
+                if let asn = reputation.asn { purityLine("ASN", asn) }
+                purityLine("类型", reputation.kindTitle + (reputation.hosting == true ? " · 机房标记" : ""))
+                ForEach(Array(reputation.notes.enumerated()), id: \.offset) { _, note in
+                    purityLine("旁证", note)
+                }
+            } else {
+                Text(model.inspectionRunning ? "检测中…" : "尚未获取").font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+            Text(purityHint).font(.system(size: 9)).foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func purityLine(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(label).font(.system(size: 9)).foregroundStyle(.tertiary)
+                .frame(width: 30, alignment: .leading)
+            Text(value).font(.system(size: 10)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var cloudflareValue: String {

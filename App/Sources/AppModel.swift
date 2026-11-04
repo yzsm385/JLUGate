@@ -1063,6 +1063,10 @@ final class AppModel {
             }
             self.inspectionRunning = false
             FileLogger.shared.log("体检：完成，出口 \(ips.first?.ip ?? "-")")
+            // 体检顺带把带宽也测了（只测一次；重试按钮会重新跑）
+            if self.speedResults.isEmpty, !self.speedRunning {
+                self.runSpeedAll()
+            }
         }
     }
 
