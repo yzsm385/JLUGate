@@ -69,6 +69,14 @@ struct WizardView: View {
         .onAppear {
             Task { @MainActor in
                 load()
+                if model.wizardStartsAtNetwork {
+                    step = .network
+                    link = "wired"
+                    model.wizardStartsAtNetwork = false
+                }
+                if step == .network, ip.isEmpty, mask.isEmpty {
+                    fillFromSystem()
+                }
                 if DevOverrides.wizardStartsAtNetwork {
                     account = "20230001"
                     password = "test-pass-2024"

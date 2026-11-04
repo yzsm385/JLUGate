@@ -443,6 +443,11 @@ final class AppModel {
         }
     }
 
+    /// 向导要直接停在"网络参数"这一步（有线没地址时）
+    var wizardStartsAtNetwork = false
+    /// 向导顶部提示（说明为什么要用户填参数）
+    var wizardNotice: String?
+
     /// 首次启动 / 换账号时的向导窗口（PLAN §9.1）。
     func presentWizard() {
         showWizard = true
@@ -1220,7 +1225,13 @@ final class AppModel {
     // MARK: 自动填入静态参数（仅在系统是手动配置时可信）
 
     func parameterSuggestionForCurrentInterface() -> NetworkParameterSuggestion {
-        let interface = interfaces.first(where: \.isUsableForAuthentication) ?? interfaces.first
+        // 不能随便拿"第一块能用的网卡"——那多半是 Wi‑Fi。
+        // 顺序：正在用的 → 有线且有地址 → 任一块有地址 → 第一块。
+        let usable = interfaces.filter(\.isUsableForAuthentication)
+        let interface = activeInterfaceName.flatMap { name in usable.first { $0.name == name } }
+            ?? usable.first { !$0.isWireless }
+            ?? usable.first
+            ?? interfaces.first
         let provider = SystemInterfaceProvider()
         let method = interface.flatMap { provider.configMethod(of: $0.name) }
         let gateway = provider.defaultGateway()
@@ -1453,6 +1464,12 @@ final class AppModel {
                     password = ""
                     recentLog.insert("服务器回了 ldap auth error（账号验证没过）。常见原因：账号在别的设备在线、服务器忙，或密码确实要重输。点「重新输入密码」可重来。", at: 0)
                     FileLogger.shared.log("凭据被拒（保留已保存密码），已提示用户")
+                }
+                // 有线插着但没填静态参数：直接打开向导的网络参数页，而不是丢一句"连接失败"
+                if case .interfaceHasNoIPv4(let interfaceName) = error {
+                    wizardNotice = "有线网卡 \(interfaceName) 还没有 IP 地址。把学校分的静态参数填进来（或把网卡改成 DHCP）再连。"
+                    presentWizard()
+                    wizardStartsAtNetwork = true
                 }
                 if case .officialClientRunning = error { portHeldByOfficialClient = true }
                 if case .localPortInUse = error { portHeldByOfficialClient = true }
