@@ -41,7 +41,7 @@ struct InspectionTests {
         #expect(same.summary.contains("一致"))
 
         let different = DNSLeakSample(systemResolver: "10.0.0.1", systemEgress: "1.2.3.4",
-                                      publicEgress: "5.6.7.8", hijackSuspected: false)
+                                      publicEgress: "192.0.2.61", hijackSuspected: false)
         #expect(different.summary.contains("两套路"))
 
         let none = DNSLeakSample(systemResolver: nil, systemEgress: nil,

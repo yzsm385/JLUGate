@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    # 与 CI 一致：macOS 26 才有本项目使用的 SwiftUI 新 API
+    runs-on: macos-26
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 构建便携包（App + 卸载脚本 + 说明）
+        run: make package
+
+      - name: 组装资产名（去掉空格，方便下载）
+        run: |
+          mkdir -p out
+          cp "dist/JLU Gate 0.1.0.zip" "out/JLU-Gate-${{ github.ref_name }}.zip"
+          ls -lh out
+
+      - name: 创建 / 更新 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: JLU Gate ${{ github.ref_name }}
+          files: out/JLU-Gate-${{ github.ref_name }}.zip
+          body_path: docs/releases/${{ github.ref_name }}.md
+          draft: false
+          prerelease: false
+          generate_release_notes: false
