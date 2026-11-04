@@ -57,6 +57,14 @@ struct SettingsView: View {
                     LabeledAddressField(title: "IP", kind: .ipv4, text: $draft.ip,
                                         hint: "学校分给你的固定地址，按通知单照抄（不是 DHCP 分到的）",
                                         onSubmit: focusNextField)
+                        .onChange(of: draft.ip) { _, newValue in
+                            let parts = newValue.split(separator: "·").map(String.init)
+                            guard parts.count == 4 else { return }
+                            if draft.mask.isEmpty { draft.mask = "255·255·255·0" }
+                            if draft.gateway.isEmpty {
+                                draft.gateway = "\(parts[0])·\(parts[1])·\(parts[2])·254"
+                            }
+                        }
                     LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $draft.mask,
                                         hint: "一般是 255.255.255.0",
                                         onSubmit: focusNextField)
@@ -168,7 +176,12 @@ struct SettingsView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
                             Button("读系统值") {
+                                model.refreshDiagnostics()
                                 let suggestion = model.applySystemParameters()
+                                if draft.registeredMAC.isEmpty,
+                                   let hardware = model.hardwareMACForCurrentInterface() {
+                                    draft.registeredMAC = hardware
+                                }
                                 if suggestion.hasUsableValues { load(); saved = true }
                                 else { model.recentLog.insert(suggestion.reason, at: 0) }
                             }

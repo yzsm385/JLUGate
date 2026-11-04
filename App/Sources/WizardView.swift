@@ -66,6 +66,11 @@ struct WizardView: View {
         }
         .padding(22)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: step) { _, newStep in
+            if newStep == .network, ip.isEmpty, mask.isEmpty {
+                fillFromSystem()
+            }
+        }
         .onAppear {
             Task { @MainActor in
                 load()
@@ -289,6 +294,9 @@ struct WizardView: View {
                 LabeledAddressField(title: "IP", kind: .ipv4, text: $ip,
                                     hint: "学校分给你的固定地址（通知单上那串）",
                                     onSubmit: focusNextField)
+                    .onChange(of: ip) { _, newValue in
+                        autofillNeighbours(from: newValue)
+                    }
                 LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $mask,
                                     hint: "一般是 255.255.255.0",
                                     onSubmit: focusNextField)
@@ -389,13 +397,18 @@ struct WizardView: View {
 
     /// 只有当系统这块网卡是"手动配置"时，读数才可信（DHCP 的绝不能抄）。
     private func fillFromSystem() {
+        model.refreshDiagnostics()          // 先拿到最新网卡列表，否则 MAC 可能为空
         let suggestion = model.parameterSuggestionForCurrentInterface()
         suggestionNote = suggestion.reason
         isSuggestionTrustworthy = suggestion.isTrustworthy
+        // MAC 与 IP 是否 DHCP 无关：这块网卡的出厂 MAC 就是学校登记的那个，永远可以填
+        if mac.isEmpty, let hardware = model.hardwareMACForCurrentInterface() {
+            mac = hardware
+        }
         guard suggestion.hasUsableValues else { return }
         ip = suggestion.ip ?? ""
         mask = suggestion.mask ?? ""
-        gateway = suggestion.gateway ?? ""
+        gateway = suggestion.gateway ?? Self.gatewayGuess(from: ip) ?? ""
         dns = suggestion.dns.joined(separator: ", ")
         // 登记 MAC 用**出厂 MAC**（系统可能套了私有地址，直接抄当前值会认证失败）
         mac = model.config.interfaceLock
@@ -403,6 +416,24 @@ struct WizardView: View {
             .macForAuthentication
             ?? model.interfaceCandidates.first(where: { $0.ipv4 != nil })?.macForAuthentication
             ?? suggestion.mac ?? ""
+    }
+
+    /// IP 填完后：掩码空着就补 255.255.255.0；网关空着就按同网段补 .254
+    private func autofillNeighbours(from address: String) {
+        let parts = address.split(separator: "·").map(String.init)
+        guard parts.count == 4 else { return }
+        if mask.isEmpty { mask = "255·255·255·0" }
+        if gateway.isEmpty {
+            gateway = "\(parts[0])·\(parts[1])·\(parts[2])·254"
+            suggestionNote = "网关按同网段推测为 \(gateway)，不对就改。"
+        }
+    }
+
+    /// 同网段网关的常见值：x.x.x.254（仅用于预填，可改）
+    static func gatewayGuess(from address: String) -> String? {
+        let parts = address.split(separator: "·").map(String.init)
+        guard parts.count == 4 else { return nil }
+        return "\(parts[0])·\(parts[1])·\(parts[2])·254"
     }
 
     /// Enter：把焦点交给下一个可输入的控件（macOS 的 key view 链）

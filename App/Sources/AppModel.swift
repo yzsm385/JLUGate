@@ -1224,6 +1224,15 @@ final class AppModel {
 
     // MARK: 自动填入静态参数（仅在系统是手动配置时可信）
 
+    /// 当前该用哪块网卡的"出厂 MAC"（学校登记的就是它）
+    func hardwareMACForCurrentInterface() -> String? {
+        let usable = interfaceCandidates
+        let chosen = activeInterfaceName.flatMap { name in usable.first { $0.name == name } }
+            ?? usable.first { $0.ipv4 != nil }
+            ?? usable.first
+        return chosen?.macForAuthentication
+    }
+
     func parameterSuggestionForCurrentInterface() -> NetworkParameterSuggestion {
         // 不能随便拿"第一块能用的网卡"——那多半是 Wi‑Fi。
         // 顺序：正在用的 → 有线且有地址 → 任一块有地址 → 第一块。

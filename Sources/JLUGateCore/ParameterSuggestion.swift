@@ -15,8 +15,9 @@ public struct NetworkParameterSuggestion: Sendable, Equatable {
     public var isTrustworthy: Bool
     public var reason: String
 
+    /// 只要系统里读到地址，就允许"预填"——不可信时界面用橙色提示，而不是干脆不填。
     public var hasUsableValues: Bool {
-        isTrustworthy && !(ip ?? "").isEmpty
+        !(ip ?? "").isEmpty
     }
 }
 

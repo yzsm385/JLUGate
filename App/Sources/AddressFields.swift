@@ -122,19 +122,25 @@ struct SegmentedAddressField: NSViewRepresentable {
 
         func controlTextDidChange(_ notification: Notification) {
             guard let field = notification.object as? NSTextField,
-                  let container, let index = container.index(of: field) else { return }
-            var value = field.stringValue.filter { parent.kind.isAllowed($0) }
-            if parent.kind.isHex { value = value.lowercased() }
-            value = String(value.prefix(parent.kind.maxLength))
-            if value != field.stringValue {
-                field.stringValue = value
-                field.currentEditor()?.selectedRange = NSRange(location: value.count, length: 0)
+                  let container, let index = container.index(of: field),
+                  let editor = field.currentEditor() as? NSTextView else { return }
+
+            // 必须读**字段编辑器**里的内容：正在编辑时 field.stringValue 可能是旧值，
+            // 拿它去截断会把刚敲的字符吞掉，还会引发跳格。
+            let typed = editor.string
+            var filtered = typed.filter { parent.kind.isAllowed($0) }
+            if parent.kind.isHex { filtered = filtered.lowercased() }
+            let value = String(filtered.prefix(parent.kind.maxLength))
+
+            if value != typed {
+                editor.string = value
+                editor.selectedRange = NSRange(location: value.count, length: 0)
             }
             container.commit(segment: index, value: value)
 
-            // 输满一段且光标在末尾 → 自动跳下一段
+            // 只有"刚好输满这一段、光标在末尾"才跳下一段（MAC 两字符、IP 三字符）
             if value.count == parent.kind.maxLength, index + 1 < parent.kind.count,
-               let editor = field.currentEditor(), editor.selectedRange.location >= value.count {
+               editor.selectedRange.location >= value.count {
                 container.focus(index + 1)
             }
         }
