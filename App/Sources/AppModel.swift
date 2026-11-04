@@ -35,6 +35,7 @@ final class AppModel {
         case settings
         case detail
         case status
+        case inspect
         case portal
         case portalLogin
     }
@@ -66,6 +67,17 @@ final class AppModel {
     var diagnosticsBusy = false
     /// 上次启动闪退后进入的安全模式（不自动连、不读密码）
     var isSafeMode = false
+    struct Inspection: Equatable {
+        var publicIPs: [PublicIPSample] = []
+        var cloudflare: CloudflareTrace?
+        var webRTC: WebRTCSample?
+        var dns: DNSLeakSample?
+        var captcha: [EndpointCheck] = []
+    }
+
+    var inspection = Inspection()
+    var inspectionRunning = false
+
     /// 官方 Dr.Com 客户端占着 61440（说明它可能在替你上网）
     var portHeldByOfficialClient = false
     /// 在线是由官方客户端维持的（端口在它手里）
@@ -693,6 +705,25 @@ final class AppModel {
 
     func closeConnectionStatus() {
         panel = .main
+    }
+
+    // MARK: 网络体检
+
+    func runInspection() {
+        guard !inspectionRunning else { return }
+        inspectionRunning = true
+        FileLogger.shared.log("体检：开始")
+        Task { @MainActor in
+            let service = InspectionService()
+            let ips = await service.publicIPs()
+            self.inspection.publicIPs = ips
+            self.inspection.cloudflare = await service.cloudflareTrace()
+            self.inspection.webRTC = await service.webRTC()
+            self.inspection.dns = await service.dnsLeak()
+            self.inspection.captcha = await service.captchaChecks()
+            self.inspectionRunning = false
+            FileLogger.shared.log("体检：完成，出口 \(ips.first?.ip ?? "-")")
+        }
     }
 
     // MARK: 网页认证（面板内）

@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "wizard": .wizard
         case "detail": .detail
         case "status": .status
+        case "inspect": .inspect
         case "portal": .portal
         default: nil
         }

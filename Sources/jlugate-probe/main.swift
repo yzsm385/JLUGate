@@ -114,6 +114,7 @@ func printHelp() {
       jlugate-probe --speed                                     # 下载测速：网口直连 vs 当前出口（含 VPN）
       jlugate-probe --auth-ping                                 # 认证通道往返延迟：直连 vs 经代理
       jlugate-probe --mac-check                                 # 三处 MAC 对照（排查"匹配不上"）
+      jlugate-probe --inspect                                   # 网络体检：出口 IP / WebRTC / DNS / 人机验证
       jlugate-probe --frame <hex文件>                            # 解析一个登录帧（和 --dump-login 对照）
       jlugate-probe --dump-login --account X --password Y       # 离线打印 342 字节登录包
       jlugate-probe --login --account X --password Y [--mac ..] # 真机认证（只能在环境 B 执行）
@@ -882,6 +883,8 @@ case "mac-check":
     exit(runMACCheck())
 case "frame":
     exit(runFrameDump(options))
+case "inspect":
+    exit(runInspect())
 case "dump-login":
     runDumpLogin(options)
 case "login":
@@ -930,6 +933,51 @@ func runFrameDump(_ options: Options) -> Int32 {
     }
     print("00 0c 标记（0x143/0x144）：\(Hex.string(Array(bytes[0x142..<0x146])))")
     print("末尾 8 字节：\(Hex.string(Array(bytes[(bytes.count - 8)...])))")
+    return 0
+}
+
+/// 网络体检：出口 IP / Cloudflare / WebRTC(STUN) / DNS 泄漏 / 人机验证可达性
+func runInspect() -> Int32 {
+    let service = InspectionService()
+    let semaphore = DispatchSemaphore(value: 0)
+    Task.detached {
+        print("== 出口 IP ==")
+        let ips = await service.publicIPs()
+        for sample in ips { print("  \(sample.source): \(sample.ip)") }
+        if ips.isEmpty { print("  （一个都没拿到：可能整条出网被拦）") }
+
+        print("\n== Cloudflare ==")
+        if let trace = await service.cloudflareTrace() {
+            print("  " + (trace.summary ?? "-"))
+            print("  TLS \(trace.tls ?? "-") · HTTP \(trace.http ?? "-") · WARP \(trace.warp ?? "-")")
+        } else {
+            print("  trace 不可用")
+        }
+
+        print("\n== WebRTC（STUN）==")
+        let rtc = await service.webRTC()
+        print("  \(rtc.server) → \(rtc.publicIP ?? "无回执") \(rtc.port.map { ":\($0)" } ?? "")"
+              + (rtc.latencyMilliseconds.map { "（\($0) ms）" } ?? ""))
+        print("  " + InspectionVerdict.webRTCHint(rtc, localIP: nil))
+
+        print("\n== DNS ==")
+        let dns = await service.dnsLeak()
+        print("  系统 DNS：\(dns.systemResolver ?? "-") → 出口 \(dns.systemEgress ?? "-")")
+        print("  8.8.8.8 → 出口 \(dns.publicEgress ?? "-")")
+        print("  疑似劫持：\(dns.hijackSuspected ? "是" : "否")")
+        print("  " + dns.summary)
+
+        print("\n== 人机验证 ==")
+        let checks = await service.captchaChecks()
+        for check in checks {
+            print("  \(check.name)：\(check.human)"
+                  + (check.latencyMilliseconds.map { "（\($0) ms）" } ?? "")
+                  + (check.detail.map { " \($0)" } ?? ""))
+        }
+        print("  " + InspectionVerdict.captchaHint(checks))
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 60)
     return 0
 }
 

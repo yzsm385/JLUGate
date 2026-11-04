@@ -18,6 +18,8 @@ struct MenuContent: View {
                 embedded { NetworkDetailView() }
             case .status:
                 embedded { ConnectionStatusView() }
+            case .inspect:
+                embedded { InspectPanel() }
             case .portal:
                 embedded { PortalViewerView(url: model.portalViewerURL) }
             case .portalLogin:
@@ -334,12 +336,12 @@ struct MenuContent: View {
                 footerButton("设置", "gearshape") { model.presentSettings() }
                 footerButton("状态", "info.circle") { model.presentConnectionStatus() }
                 footerButton("详情", "network") { model.presentNetworkDetail() }
-                footerButton("诊断", "doc.on.clipboard") { model.copyDiagnostics() }
+                footerButton("体检", "stethoscope") { model.show(.inspect) }
             }
             HStack(spacing: 2) {
                 footerButton("导出", "square.and.arrow.up") { model.exportDiagnostics() }
                 footerButton("参数卡", "qrcode") { model.exportConfigCard() }
-                footerButton("门户", "globe.asia.australia") { model.presentPortalViewer() }
+                footerButton("诊断", "doc.on.clipboard") { model.copyDiagnostics() }
                 footerButton("退出", "power") { NSApplication.shared.terminate(nil) }
             }
         }
