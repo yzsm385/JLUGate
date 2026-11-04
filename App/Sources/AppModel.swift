@@ -804,7 +804,14 @@ final class AppModel {
         let interfaceProvider: any InterfaceProvider = devServer != nil
             ? DevLoopbackProvider()
             : interfacesProvider
+        let campusDNS = (profile?.dns ?? []).compactMap(IPv4Address.init).first
         let livenessCheck: @Sendable (InterfaceSnapshot) async -> Bool = { interface in
+            // 先按"校内"确认：JLU 网络里 gstatic/cloudflare 经常不通，
+            // 用它们做存活判断会把"网络好好的"误判成断线（详见 CampusLiveness 注释）。
+            let campus = CampusLiveness()
+            if await campus.probe(interface: interface, server: server, dns: campusDNS) {
+                return true
+            }
             let outcome = await ConnectivityProbe().run(interface: interface,
                                                        dnsServers: ConnectivityProbe.fallbackDNSServers)
             if case .healthy = outcome { return true }
@@ -1542,6 +1549,9 @@ final class AppModel {
         FileLogger.shared.log("event \(event)")
         switch event {
         case .state(let next):
+            if state != next {
+                FileLogger.shared.log("状态：\(state) → \(next)")
+            }
             state = next
             switch next {
             case .online:
@@ -1683,6 +1693,9 @@ final class AppModel {
     }
 
     /// 用真实探测判断"现在到底通不通"（不依赖引擎内部状态）。
+    /// 连续探测失败次数：单次抖动不把界面打红（真机上出现过一两次失败就变红）
+    private var probeFailStreak = 0
+
     func probeReachable() async -> Bool {
         let interface = interfaces.first { $0.name == config.interfaceLock }
             ?? interfaces.first(where: \.isUsableForAuthentication)
@@ -1693,14 +1706,20 @@ final class AppModel {
         let outcome = await ConnectivityProbe().run(interface: interface,
                                                     dnsServers: ConnectivityProbe.fallbackDNSServers)
         if case .healthy = outcome {
+            probeFailStreak = 0
             lastHealthyProbeAt = Date()
             return true
         }
         if await httpReachable() {
+            probeFailStreak = 0
             lastHealthyProbeAt = Date()
             return true
         }
-        lastFailedProbeAt = Date()
+        probeFailStreak += 1
+        // 连续 2 次失败才记"失败时间"；一次抖动不改变结论
+        if probeFailStreak >= 2 {
+            lastFailedProbeAt = Date()
+        }
         return false
     }
 
