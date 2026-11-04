@@ -733,7 +733,7 @@ final class AppModel {
             password: password,
             hostname: SystemHostname.value,
             registeredMAC: profile?.registeredMAC.flatMap(MACAddress.init),
-            interfaceLock: devServer != nil ? "lo0" : effectiveInterfaceLock,
+            interfaceLock: devServer != nil ? "lo0" : config.interfaceLock,
             expectedIP: devServer != nil ? nil : profile?.ip.flatMap(IPv4Address.init),
             expectedMask: devServer != nil ? nil : profile?.mask,
             useRegisteredMACForAuth: config.useRegisteredMACForAuth,
@@ -791,7 +791,7 @@ final class AppModel {
             server: IPv4Endpoint(host: server, port: serverPort),
             localPort: UInt16(config.localPort),
             registeredMAC: profile?.registeredMAC.flatMap(MACAddress.init),
-            interfaceLock: effectiveInterfaceLock,
+            interfaceLock: config.interfaceLock,
             dnsServers: (profile?.dns ?? []).compactMap(IPv4Address.init),
             probeTimeout: .seconds(config.probe.timeout))
 
