@@ -21,6 +21,8 @@ struct WizardView: View {
     @State private var step: Step = .credentials
     @State private var account = ""
     @State private var password = ""
+    /// 重新输入密码时的第二次确认（避免输入法全角/多字符导致"看着一样其实不一样"）
+    @State private var passwordConfirm = ""
     @State private var link = "auto"
     @State private var ip = ""
     @State private var mask = ""
@@ -184,6 +186,19 @@ struct WizardView: View {
             SecureField("密码", text: $password)
                 .textFieldStyle(.roundedBorder)
                 .textContentType(.password)
+
+            if model.requirePasswordReentry, !password.isEmpty {
+                SecureField("再输一次（确认没有多打/全角）", text: $passwordConfirm)
+                    .textFieldStyle(.roundedBorder)
+                    .textContentType(.password)
+                if !passwordConfirm.isEmpty, passwordConfirm != password {
+                    Label("两次输入不一致，请检查输入法（全角/空格）",
+                          systemImage: "exclamationmark.triangle")
+                        .font(.caption2).foregroundStyle(.orange)
+                }
+                Text("本次密码指纹：\(PasswordFingerprint.describe(password))")
+                    .font(.system(size: 9)).foregroundStyle(.secondary)
+            }
 
             Label(keychainNote, systemImage: "lock.shield")
                 .font(.caption2)
@@ -465,6 +480,10 @@ struct WizardView: View {
                 return
             }
             account = normalized
+            if model.requirePasswordReentry, passwordConfirm != password {
+                errorText = "两次输入的密码不一致（检查输入法是否全角/多了空格）"
+                return
+            }
             guard !password.isEmpty else {
                 errorText = hasSavedPassword
                     ? "请选择：用已保存的密码，或重新输入一次"
