@@ -78,6 +78,79 @@ final class AppModel {
     var inspection = Inspection()
     var inspectionRunning = false
 
+    /// 「能不能上网」的分层排查结果
+    var reachability: [SiteResult] = []
+    var reachabilityDiagnosis: ReachabilityDiagnosis?
+    var reachabilityRunning = false
+
+    /// 出口 IP 纯净度（住宅 / 机房）
+    var ipReputation: IPReputation?
+    /// 带宽三档：直连、默认出口、本地代理（可选）
+    var speedDirect: SpeedResult?
+    var speedViaDefault: SpeedResult?
+    var speedViaProxy: SpeedResult?
+    var speedRunning = false
+    var speedProxy = ""          // 形如 127.0.0.1:7890
+
+    func runSpeedAll() {
+        guard !speedRunning else { return }
+        speedRunning = true
+        FileLogger.shared.log("带宽：开始，proxy=\(speedProxy.isEmpty ? "无" : speedProxy)")
+        Task { @MainActor in
+            let service = SpeedTestService()
+            let endpoint = SpeedEndpoint.defaults[0]
+            let interface = self.interfaces.first(where: \.isUsableForAuthentication)
+            self.speedDirect = await service.download(endpoint: endpoint, interface: interface)
+            self.speedViaDefault = await service.download(endpoint: endpoint, interface: nil)
+            if !self.speedProxy.isEmpty {
+                self.speedViaProxy = await service.download(endpoint: endpoint, interface: nil,
+                                                            proxy: self.speedProxy)
+            } else {
+                self.speedViaProxy = nil
+            }
+            self.speedRunning = false
+            FileLogger.shared.log("带宽：完成")
+        }
+    }
+
+    func lookupReputation() {
+        Task { @MainActor in
+            guard let trace = inspection.cloudflare, let ip = trace.ip else { return }
+            ipReputation = await IPReputationService().lookup(ip: ip,
+                                                              cloudflareCountry: trace.location)
+        }
+    }
+
+    func runReachability() {
+        guard !reachabilityRunning else { return }
+        reachabilityRunning = true
+        FileLogger.shared.log("排查：开始")
+        Task { @MainActor in
+            let results = await ReachabilityService().checkAll()
+            self.reachability = results
+            let interface = self.interfaces.first(where: \.isUsableForAuthentication)
+            let route = interface.flatMap { _ in
+                self.interfacesProvider.route(to: PacketLayout.defaultServer)
+            }
+            let needsCampus = self.config.link == "wired" || self.config.link == "jluPC"
+            let campusReachable: Bool? = needsCampus ? await self.campusServerReachable() : nil
+            self.reachabilityDiagnosis = ReachabilityDiagnosisEngine.diagnose(
+                sites: results,
+                campusAuthReachable: campusReachable,
+                hasUsableInterface: interface != nil,
+                proxyInUse: route?.isTunnel ?? false)
+            self.reachabilityRunning = false
+            FileLogger.shared.log("排查：\(self.reachabilityDiagnosis?.summary ?? "-")")
+        }
+    }
+
+    private func campusServerReachable() async -> Bool {
+        let interface = interfaces.first(where: \.isUsableForAuthentication)
+        let sample = await AuthLivenessProbe().measure(interface: interface, attempts: 1,
+                                                        timeout: .seconds(2))
+        return sample.direct.average != nil
+    }
+
     /// 官方 Dr.Com 客户端占着 61440（说明它可能在替你上网）
     var portHeldByOfficialClient = false
     /// 在线是由官方客户端维持的（端口在它手里）
@@ -721,6 +794,10 @@ final class AppModel {
             self.inspection.webRTC = await service.webRTC()
             self.inspection.dns = await service.dnsLeak()
             self.inspection.captcha = await service.captchaChecks()
+            if let ip = self.inspection.cloudflare?.ip {
+                self.ipReputation = await IPReputationService().lookup(
+                    ip: ip, cloudflareCountry: self.inspection.cloudflare?.location)
+            }
             self.inspectionRunning = false
             FileLogger.shared.log("体检：完成，出口 \(ips.first?.ip ?? "-")")
         }

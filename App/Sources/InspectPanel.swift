@@ -1,5 +1,6 @@
 import SwiftUI
 import JLUGateCore
+import JLUGateNet
 
 /// 「网络体检」：出口 IP、Cloudflare、WebRTC、DNS、人机验证——结论贴着每个模块写。
 struct InspectPanel: View {
@@ -10,6 +11,41 @@ struct InspectPanel: View {
             Text("体检的是**浏览器会走的那条路**：出口 IP、WebRTC、DNS 泄漏、人机验证可达性。")
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            // 快捷排查：能不能上网 + 到底哪一层坏了
+            VStack(alignment: .leading, spacing: 6) {
+                Text("能不能上网（快捷排查）").font(.caption).bold()
+                Button {
+                    model.runReachability()
+                } label: {
+                    Label(model.reachabilityRunning ? "排查中…" : "开始排查", systemImage: "bolt.horizontal")
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.reachabilityRunning)
+
+                ForEach(model.reachability) { result in
+                    HStack(spacing: 6) {
+                        Image(systemName: result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(result.ok ? .green : .orange)
+                        Text(result.host).font(.caption2.monospaced())
+                        Spacer()
+                        Text(result.display).font(.caption2).foregroundStyle(.secondary)
+                        if let ms = result.milliseconds {
+                            Text("\(ms) ms").font(.system(size: 9)).foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+                if let diagnosis = model.reachabilityDiagnosis {
+                    Text(diagnosis.summary).font(.caption2).bold()
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(diagnosis.action).font(.system(size: 10)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             Button {
                 model.runInspection()
@@ -25,6 +61,48 @@ struct InspectPanel: View {
             module("DNS", value: dnsValue, hint: dnsHint)
             module("人机验证", value: captchaValue, hint: captchaHint)
 
+            // IP 纯净度：住宅 or 机房
+            module("出口 IP 纯净度",
+                   value: model.ipReputation?.summary ?? "",
+                   hint: purityHint)
+            if let notes = model.ipReputation?.notes, !notes.isEmpty {
+                ForEach(notes, id: \.self) { note in
+                    Text("· " + note).font(.system(size: 10)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            // 带宽三档
+            VStack(alignment: .leading, spacing: 6) {
+                Text("带宽（三档对比）").font(.caption).bold()
+                if let direct = model.speedDirect {
+                    speedRow("直连", direct)
+                }
+                if let viaDefault = model.speedViaDefault {
+                    speedRow("默认出口（含代理）", viaDefault)
+                }
+                if let viaProxy = model.speedViaProxy {
+                    speedRow("本地代理", viaProxy)
+                }
+                HStack(spacing: 6) {
+                    TextField("本地代理 127.0.0.1:7890", text: Binding(
+                        get: { model.speedProxy },
+                        set: { model.speedProxy = $0 }))
+                        .textFieldStyle(.roundedBorder)
+                        .font(.caption2)
+                    Button(model.speedRunning ? "测速中…" : "测速") { model.runSpeedAll() }
+                        .buttonStyle(.bordered)
+                        .disabled(model.speedRunning)
+                }
+                Text("第三档用你本机住宅代理客户端的本地端口；只有直连/代理两档时留空即可。")
+                    .font(.system(size: 10)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
+                        in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
             if let url = model.portalViewerURL {
                 Button {
                     NSWorkspace.shared.open(url)
@@ -35,6 +113,27 @@ struct InspectPanel: View {
                 .buttonStyle(.borderless)
             }
         }
+    }
+
+    private func speedRow(_ label: String, _ result: SpeedResult) -> some View {
+        HStack {
+            Text(label).font(.caption2)
+            Spacer()
+            Text(Throughput.format(megabitsPerSecond: result.megabitsPerSecond))
+                .font(.caption2.monospacedDigit())
+        }
+    }
+
+    private var purityHint: String {
+        if let reputation = model.ipReputation {
+            switch reputation.kind {
+            case .residential: return "住宅/运营商 IP：对 Claude、流媒体这类站点最友好"
+            case .datacenter: return "机房 IP：很多站点会直接拒绝或要求人机验证"
+            case .mobile: return "移动网络 IP：一般也能通过，但可能被限速"
+            case .unknown: return "归属信息不足，无法判断类型"
+            }
+        }
+        return "点上面的「开始检测」，会查出口 IP 的归属与类型（住宅 / 机房）"
     }
 
     private func module(_ title: String, value: String, hint: String) -> some View {

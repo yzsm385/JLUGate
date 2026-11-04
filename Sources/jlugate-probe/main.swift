@@ -27,6 +27,8 @@ struct Options {
     var framePath: String?
     /// `--ip`：dump-login 时用的客户端 IP
     var ip = "192.0.2.10"
+    /// `--proxy host:port`：带宽测试里"套了一层住宅代理"那一档
+    var proxy: String?
     var gatewayPort = 61441
     var gatewayPath = "Tools/mock-gateway/mock_gateway.py"
     var portalPort = 18080
@@ -63,6 +65,7 @@ func parseOptions(_ arguments: [String]) -> Options {
         case "--salt": options.salt = value()
         case "--frame": options.framePath = value()
         case "--ip": options.ip = value()
+        case "--proxy": options.proxy = value()
         case "--gateway-port": options.gatewayPort = Int(value()) ?? options.gatewayPort
         case "--portal-port": options.portalPort = Int(value()) ?? options.portalPort
         case "--dns": options.dnsServers = value().split(separator: ",").map(String.init)
@@ -115,6 +118,9 @@ func printHelp() {
       jlugate-probe --auth-ping                                 # 认证通道往返延迟：直连 vs 经代理
       jlugate-probe --mac-check                                 # 三处 MAC 对照（排查"匹配不上"）
       jlugate-probe --inspect                                   # 网络体检：出口 IP / WebRTC / DNS / 人机验证
+      jlugate-probe --reach                                     # 能不能上网：逐站点分层排查 + 结论
+      jlugate-probe --reputation                                # 出口 IP 纯净度（住宅 or 机房）
+      jlugate-probe --speed3 [--proxy 127.0.0.1:7890]           # 带宽三档：直连 / 默认出口 / 本地代理
       jlugate-probe --frame <hex文件>                            # 解析一个登录帧（和 --dump-login 对照）
       jlugate-probe --dump-login --account X --password Y       # 离线打印 342 字节登录包
       jlugate-probe --login --account X --password Y [--mac ..] # 真机认证（只能在环境 B 执行）
@@ -885,6 +891,12 @@ case "frame":
     exit(runFrameDump(options))
 case "inspect":
     exit(runInspect())
+case "reach":
+    exit(runReach())
+case "reputation":
+    exit(runReputation())
+case "speed3":
+    exit(runSpeed3(options))
 case "dump-login":
     runDumpLogin(options)
 case "login":
@@ -933,6 +945,90 @@ func runFrameDump(_ options: Options) -> Int32 {
     }
     print("00 0c 标记（0x143/0x144）：\(Hex.string(Array(bytes[0x142..<0x146])))")
     print("末尾 8 字节：\(Hex.string(Array(bytes[(bytes.count - 8)...])))")
+    return 0
+}
+
+
+/// 能不能上网：逐站点、逐层排查（DNS / TCP / TLS / HTTP）
+func runReach() -> Int32 {
+    let semaphore = DispatchSemaphore(value: 0)
+    Task.detached {
+        let results = await ReachabilityService().checkAll()
+        for result in results {
+            print(String(format: "  %-18@ %-8@ %@",
+                         result.host as NSString,
+                         (result.milliseconds.map { "\($0) ms" } ?? "-") as NSString,
+                         result.display as NSString))
+        }
+        let provider = SystemInterfaceProvider()
+        let interface = provider.physicalInterfaces().first { $0.isUsableForAuthentication }
+        let route = interface.flatMap { _ in provider.route(to: PacketLayout.defaultServer) }
+        let diagnosis = ReachabilityDiagnosisEngine.diagnose(
+            sites: results,
+            campusAuthReachable: nil,   // 只有 Dr.Com 链路才需要校内认证服务器，这里不测
+            hasUsableInterface: interface != nil,
+            proxyInUse: route?.isTunnel ?? false)
+        print("")
+        print("结论：\(diagnosis.summary)")
+        print("建议：\(diagnosis.action)")
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 60)
+    return 0
+}
+
+/// IP 纯净度：住宅还是机房、有没有被标记代理
+func runReputation() -> Int32 {
+    let semaphore = DispatchSemaphore(value: 0)
+    Task.detached {
+        let trace = await InspectionService().cloudflareTrace()
+        guard let ip = trace?.ip else {
+            print("拿不到出口 IP")
+            semaphore.signal()
+            return
+        }
+        if let reputation = await IPReputationService().lookup(
+            ip: ip, cloudflareCountry: trace?.location) {
+            print("  " + reputation.summary)
+            for note in reputation.notes { print("  · " + note) }
+        } else {
+            print("  查不到归属（两个接口都不可用）")
+        }
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 30)
+    return 0
+}
+
+/// 带宽三档：直连 / 默认出口 / 指定本地代理
+func runSpeed3(_ options: Options) -> Int32 {
+    let semaphore = DispatchSemaphore(value: 0)
+    Task.detached {
+        let provider = SystemInterfaceProvider()
+        let interface = provider.physicalInterfaces().first { $0.isUsableForAuthentication }
+        let endpoint = SpeedEndpoint.defaults[0]
+        let service = SpeedTestService()
+        let interfaceName = interface?.name ?? "-"
+        if let direct = await service.download(endpoint: endpoint, interface: interface) {
+            print("  直连（\(interfaceName)）：\(Throughput.format(megabitsPerSecond: direct.megabitsPerSecond))")
+        } else {
+            print("  直连：不可用")
+        }
+        if let viaDefault = await service.download(endpoint: endpoint, interface: nil) {
+            print("  默认出口（含代理）：\(Throughput.format(megabitsPerSecond: viaDefault.megabitsPerSecond))")
+        } else {
+            print("  默认出口：不可用")
+        }
+        if let proxy = options.proxy, !proxy.isEmpty {
+            if let viaProxy = await service.download(endpoint: endpoint, interface: nil, proxy: proxy) {
+                print("  本地代理 \(proxy)：\(Throughput.format(megabitsPerSecond: viaProxy.megabitsPerSecond))")
+            } else {
+                print("  本地代理 \(proxy)：不可用")
+            }
+        }
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 120)
     return 0
 }
 

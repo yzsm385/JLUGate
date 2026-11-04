@@ -265,16 +265,20 @@ public struct SpeedTestService: Sendable {
     ///
     /// 优先用 `/usr/bin/curl` 量带宽：它能正确走 HTTPS、跟随跳转、处理拥塞窗口；
     /// 手写 recv 循环在这类测速上会低估一个数量级（实测 0.2 Mbps vs 真实 20 Mbps）。
+    /// - Parameter proxy: 形如 `127.0.0.1:7890`。传了就经这个本地代理测
+    ///   （用来量"套一层住宅代理之后"的带宽）。
     public func download(endpoint: SpeedEndpoint, interface: InterfaceSnapshot?,
+                         proxy: String? = nil,
                          maxBytes: Int = 3_000_000,
                          timeout: Duration = .seconds(10)) async -> SpeedResult? {
         // curl 失败（例如直连被网关限制）就如实返回 nil，让 UI 说"不可用"，
         // 不用手写 recv 循环兜底：实测它会低估一个数量级，反而误导用户。
-        return Self.measureWithCurl(endpoint: endpoint, interface: interface,
+        return Self.measureWithCurl(endpoint: endpoint, interface: interface, proxy: proxy,
                                     maxBytes: maxBytes, timeout: timeout)
     }
 
     static func measureWithCurl(endpoint: SpeedEndpoint, interface: InterfaceSnapshot?,
+                                proxy: String? = nil,
                                 maxBytes: Int, timeout: Duration) -> SpeedResult? {
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/curl") else { return nil }
         let url = "http://\(endpoint.host)\(endpoint.path)"
@@ -285,7 +289,9 @@ public struct SpeedTestService: Sendable {
                          "--max-time", "\(timeout.components.seconds)",
                          "-w", "%{size_download} %{time_total}",
                          url]
-        if let interface {
+        if let proxy, !proxy.isEmpty {
+            arguments.insert(contentsOf: ["-x", "http://\(proxy)"], at: 0)
+        } else if let interface {
             arguments.insert(contentsOf: ["--interface", interface.name], at: 0)
         }
 
@@ -308,7 +314,7 @@ public struct SpeedTestService: Sendable {
               bytes >= 64 * 1024, seconds > 0 else { return nil }
         return SpeedResult(label: endpoint.label,
                            endpoint: "\(endpoint.host)\(endpoint.path)",
-                           boundInterface: interface?.name,
+                           boundInterface: proxy.map { "via \($0)" } ?? interface?.name,
                            bytes: Int(bytes), seconds: seconds)
     }
 
