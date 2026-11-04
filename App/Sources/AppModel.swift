@@ -681,19 +681,26 @@ final class AppModel {
                 config.link = "wired"
             }
         }
-        // 密码框为空但本机存过 → 复用；但要弄清这份密码是否被服务器验证过
-        if password.isEmpty {
-            password = CredentialStore.password(for: config.account) ?? ""
-            if !password.isEmpty {
-                if CredentialStore.verifiedAt(account: config.account) != nil {
-                    passwordSource = .savedVerified
-                } else {
-                    passwordSource = .savedUnverified
-                }
-                FileLogger.shared.log("使用保存的密码（来源：\(passwordSource.rawValue)，"
-                                      + "\(PasswordFingerprint.describe(password))）")
+        // 密码框为空但本机存过 → 只有"曾经成功登录过"的那份才允许自动复用。
+        // 未验证的（从没成功过、或上次被拒）一律不静默使用：否则会拿着同一串错密码
+        // 反复撞服务器，用户看到的就是"怎么点都失败"。
+        if password.isEmpty, let stored = CredentialStore.password(for: config.account),
+           !stored.isEmpty {
+            if CredentialStore.verifiedAt(account: config.account) != nil {
+                password = stored
+                passwordSource = .savedVerified
+                FileLogger.shared.log("使用已验证的保存密码（\(PasswordFingerprint.describe(stored))）")
+            } else {
+                requirePasswordReentry = true
+                passwordSource = .savedUnverified
+                FileLogger.shared.log("保存的密码未验证过（\(PasswordFingerprint.describe(stored))）："
+                                      + "不自动使用，转去让用户重新输入")
+                recentLog.insert("本机保存的密码从未成功登录过（指纹 \(PasswordFingerprint.of(stored))）。"
+                                 + "为避免继续用错密码，请重新输入一次。", at: 0)
+                presentWizard()
+                return
             }
-        } else {
+        } else if !password.isEmpty {
             passwordSource = .typed
             FileLogger.shared.log("使用本次输入的密码（\(PasswordFingerprint.describe(password))）")
         }
