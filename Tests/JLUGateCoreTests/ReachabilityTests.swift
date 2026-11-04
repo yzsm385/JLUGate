@@ -65,6 +65,32 @@ struct ReachabilityTests {
         #expect(d.verdict == .siteRefused)
     }
 
+    @Test("校内系统全不通、公网正常 → 判定为不在校园网")
+    func campusUnreachable() {
+        let sites = [
+            SiteResult(host: "iedu.jlu.edu.cn", stage: .dns, isDomestic: true, isCampus: true),
+            SiteResult(host: "oa.jlu.edu.cn", stage: .dns, isDomestic: true, isCampus: true),
+            SiteResult(host: "mails.jlu.edu.cn", stage: .dns, isDomestic: true, isCampus: true),
+            site("baidu.com", .ok, status: 200, domestic: true),
+            site("bing.com", .ok, status: 200),
+        ]
+        let d = ReachabilityDiagnosisEngine.diagnose(sites: sites, campusAuthReachable: nil,
+                                                     hasUsableInterface: true, proxyInUse: true)
+        #expect(d.verdict == .campusUnreachable)
+        #expect(d.action.contains("WebVPN"))
+    }
+
+    @Test("校内系统正常、公网部分不通 → 仍然按公网归因")
+    func campusOkPublicFails() {
+        let sites = [
+            SiteResult(host: "oa.jlu.edu.cn", stage: .ok, httpStatus: 200, isDomestic: true, isCampus: true),
+            site("google.com", .tcp), site("baidu.com", .ok, status: 200, domestic: true),
+        ]
+        let d = ReachabilityDiagnosisEngine.diagnose(sites: sites, campusAuthReachable: nil,
+                                                     hasUsableInterface: true, proxyInUse: true)
+        #expect(d.verdict == .proxyBroken)
+    }
+
     @Test("国内通、国外全断：有无代理给不同结论")
     func overseas() {
         let sites = [site("baidu.com", .ok, domestic: true),

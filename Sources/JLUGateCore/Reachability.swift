@@ -27,17 +27,20 @@ public struct SiteResult: Sendable, Equatable, Identifiable {
     public let httpStatus: Int?
     public let milliseconds: Int?
     public let isDomestic: Bool
+    /// 校内系统（教务/通知/邮箱）：不通通常说明"不在校园网"
+    public let isCampus: Bool
 
     public var id: String { host }
     public var ok: Bool { stage == .ok }
 
     public init(host: String, stage: ProbeStage, httpStatus: Int? = nil,
-                milliseconds: Int? = nil, isDomestic: Bool) {
+                milliseconds: Int? = nil, isDomestic: Bool, isCampus: Bool = false) {
         self.host = host
         self.stage = stage
         self.httpStatus = httpStatus
         self.milliseconds = milliseconds
         self.isDomestic = isDomestic
+        self.isCampus = isCampus
     }
 
     public var display: String {
@@ -62,6 +65,8 @@ public enum NetworkVerdict: Sendable, Equatable {
     case blockedOverseas
     case tlsRejected
     case siteRefused
+    /// 校内系统不通，但公网正常 → 多半不在校园网内（或需要 WebVPN）
+    case campusUnreachable
     case unknown
 }
 
@@ -134,6 +139,15 @@ public enum ReachabilityDiagnosisEngine {
                          summary: "国内网站通、国外全不通，而且没有代理在跑——这就是典型的「没开代理」。",
                          action: "需要访问境外站点时打开代理；只想校内上网则无需处理。")
         }
+        // 校内系统全挂、公网正常 → 不是代理问题，是不在校园网
+        let campus = sites.filter(\.isCampus)
+        let publicSites = sites.filter { !$0.isCampus }
+        if !campus.isEmpty, campus.allSatisfy({ !$0.ok }), publicSites.contains(where: \.ok) {
+            return .init(verdict: .campusUnreachable,
+                         summary: "公网站点能上，但教务/通知/邮箱全不通——这些系统只对校内网开放。",
+                         action: "如果在校外，用学校 WebVPN 再访问；在校内则先确认认证是否成功（有线/JLU.PC）。")
+        }
+
         if tcpFails >= 2 {
             return .init(verdict: .proxyBroken,
                          summary: "多个站点连 TCP 都失败：出口这一段断了（代理或上游）。",

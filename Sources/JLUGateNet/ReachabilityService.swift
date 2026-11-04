@@ -5,6 +5,7 @@ import JLUGateCore
 ///
 /// 用 `URLSessionTaskMetrics` 拿到每阶段耗时；错误码用于判断卡在哪一层。
 public struct ReachabilityService: Sendable {
+    /// 公网站点
     public static let targets: [(host: String, domestic: Bool)] = [
         ("google.com", false),
         ("brave.com", false),
@@ -13,19 +14,39 @@ public struct ReachabilityService: Sendable {
         ("baidu.com", true),
     ]
 
+    /// 校内系统：它们只对校园网开放，用来判断"到底在不在校内"
+    public static let campusTargets: [String] = [
+        "iedu.jlu.edu.cn",     // 教务
+        "oa.jlu.edu.cn",       // 通知 / OA
+        "mails.jlu.edu.cn",    // 邮箱
+    ]
+
     public init() {}
 
     public func checkAll(timeout: Duration = .seconds(8)) async -> [SiteResult] {
         await withTaskGroup(of: SiteResult.self) { group in
             for target in Self.targets {
-                group.addTask { await check(host: target.host, domestic: target.domestic, timeout: timeout) }
+                group.addTask {
+                    await check(host: target.host, domestic: target.domestic, timeout: timeout)
+                }
+            }
+            for host in Self.campusTargets {
+                group.addTask { await checkCampus(host: host, timeout: timeout) }
             }
             var results: [SiteResult] = []
             for await result in group { results.append(result) }
-            // 保持固定顺序，便于阅读
-            let order = Self.targets.map(\.host)
-            return results.sorted { order.firstIndex(of: $0.host)! < order.firstIndex(of: $1.host)! }
+            // 公网在前、校内系统在后，保持固定顺序便于阅读
+            let order = Self.targets.map(\.host) + Self.campusTargets
+            return results.sorted {
+                (order.firstIndex(of: $0.host) ?? 999) < (order.firstIndex(of: $1.host) ?? 999)
+            }
         }
+    }
+
+    public func checkCampus(host: String, timeout: Duration = .seconds(6)) async -> SiteResult {
+        let result = await check(host: host, domestic: true, timeout: timeout)
+        return SiteResult(host: host, stage: result.stage, httpStatus: result.httpStatus,
+                          milliseconds: result.milliseconds, isDomestic: true, isCampus: true)
     }
 
     public func check(host: String, domestic: Bool, timeout: Duration = .seconds(8)) async -> SiteResult {
@@ -52,7 +73,8 @@ public struct ReachabilityService: Sendable {
             let (_, response) = try await session.data(for: request)
             let elapsed = Self.milliseconds(from: started)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            if (200..<400).contains(status) {
+            // 校内系统常见 401/403/404（要登录或路径不对），只要服务器应答就算"通"
+            if status < 500, status > 0 {
                 return SiteResult(host: host, stage: .ok, httpStatus: status,
                                   milliseconds: elapsed, isDomestic: domestic)
             }

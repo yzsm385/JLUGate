@@ -954,11 +954,20 @@ func runReach() -> Int32 {
     let semaphore = DispatchSemaphore(value: 0)
     Task.detached {
         let results = await ReachabilityService().checkAll()
-        for result in results {
+        for result in results where !result.isCampus {
             print(String(format: "  %-18@ %-8@ %@",
                          result.host as NSString,
                          (result.milliseconds.map { "\($0) ms" } ?? "-") as NSString,
                          result.display as NSString))
+        }
+        if results.contains(where: \.isCampus) {
+            print("  校内系统：")
+            for result in results where result.isCampus {
+                print(String(format: "  %-18@ %-8@ %@",
+                             result.host as NSString,
+                             (result.milliseconds.map { "\($0) ms" } ?? "-") as NSString,
+                             result.display as NSString))
+            }
         }
         let provider = SystemInterfaceProvider()
         let interface = provider.physicalInterfaces().first { $0.isUsableForAuthentication }

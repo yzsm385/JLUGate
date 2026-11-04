@@ -23,17 +23,12 @@ struct InspectPanel: View {
                 .buttonStyle(.bordered)
                 .disabled(model.reachabilityRunning)
 
-                ForEach(model.reachability) { result in
-                    HStack(spacing: 6) {
-                        Image(systemName: result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(result.ok ? .green : .orange)
-                        Text(result.host).font(.caption2.monospaced())
-                        Spacer()
-                        Text(result.display).font(.caption2).foregroundStyle(.secondary)
-                        if let ms = result.milliseconds {
-                            Text("\(ms) ms").font(.system(size: 9)).foregroundStyle(.tertiary)
-                        }
-                    }
+                ForEach(model.reachability.filter { !$0.isCampus }) { reachRow($0) }
+                if model.reachability.contains(where: \.isCampus) {
+                    Text("校内系统（只在校园网内可访问）")
+                        .font(.system(size: 10)).foregroundStyle(.tertiary)
+                        .padding(.top, 2)
+                    ForEach(model.reachability.filter(\.isCampus)) { reachRow($0) }
                 }
                 if let diagnosis = model.reachabilityDiagnosis {
                     Text(diagnosis.summary).font(.caption2).bold()
@@ -111,6 +106,19 @@ struct InspectPanel: View {
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
+            }
+        }
+    }
+
+    private func reachRow(_ result: SiteResult) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: result.ok ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(result.ok ? Color.green : Color.orange)
+            Text(result.host).font(.caption2.monospaced())
+            Spacer()
+            Text(result.display).font(.caption2).foregroundStyle(.secondary)
+            if let ms = result.milliseconds {
+                Text("\(ms) ms").font(.system(size: 9)).foregroundStyle(.tertiary)
             }
         }
     }
