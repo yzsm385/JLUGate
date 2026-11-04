@@ -367,6 +367,16 @@ final class AppModel {
         // 现在内存里只有"这次真的输入过"的密码；保存的那份只在连接时按需取，并标好来源。
         password = (DevOverrides.isEnabled && !safeMode) ? "test-pass-2024" : ""
 
+        // 配置里的账号为空、但本机还存过密码 → 把账号找回来（换机/重置不至于让用户重填）
+        if loaded.account.trimmingCharacters(in: .whitespaces).isEmpty {
+            let known = CredentialStore.knownAccounts()
+            if known.count == 1, let only = known.first {
+                config.account = only
+                ConfigStore.save(config)
+                FileLogger.shared.log("配置里的账号为空：已从凭据库恢复账号 \(Redact.account(only))")
+            }
+        }
+
         let profile = loaded.currentProfile
         let needsStatic = WizardPolicy.requiresStaticAddresses(link: loaded.link)
         let profileComplete = WizardPolicy.profileIsComplete(

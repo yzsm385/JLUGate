@@ -57,6 +57,15 @@ enum CredentialStore {
         }
     }
 
+    /// 本机存过密码的账号列表（文件后端可枚举；Keychain 后端返回空）。
+    /// 用途：配置被清空时，至少把账号找回来，不用用户重填。
+    static func knownAccounts() -> [String] {
+        switch backend {
+        case .file: return Array(loadFile().keys)
+        case .keychain: return []
+        }
+    }
+
     static func password(for account: String) -> String? {
         guard !account.isEmpty else { return nil }
         switch backend {
