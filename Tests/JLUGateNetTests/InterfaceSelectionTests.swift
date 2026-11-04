@@ -56,19 +56,14 @@ struct InterfaceSelectionTests {
         await coordinator.stop()
     }
 
-    @Test("引擎侧同样不会把 lo0 当出口")
-    func engineSkipsLoopback() async throws {
+    @Test("插着有线但没填地址：明确报错，不会悄悄改用无线")
+    func engineRefusesSilentWirelessFallback() async throws {
         let provider = FakeInterfaceProvider(
             interfaces: [loopback, noAddress, wifi],
             route: RouteInfo(destination: "10.100.61.3", gateway: "192.0.2.1", interface: "en0"),
             configMethod: "Manual",
             gateway: "192.0.2.1")
-        let channel = FakeChannel(responder: { datagram in
-            switch datagram.count {
-            case 20: return []
-            default: return []
-            }
-        })
+        let channel = FakeChannel(responder: { _ in [] })
         let engine = DrcomEngine(
             configuration: EngineConfiguration(account: "20230001", password: "test-pass-2024",
                                                hostname: "test-mac.local"),
@@ -77,10 +72,15 @@ struct InterfaceSelectionTests {
             interfaces: provider,
             clock: FakeClock())
         await engine.start()
-        try await expectEventually("打开通道") { channel.isOpened }
-        let parameters = try #require(channel.openParameters)
-        #expect(parameters.localIP.description == "192.0.2.20", "必须绑 en0 的地址")
-        #expect(parameters.index == 12)
+        try await expectEventually("进入 failed") {
+            if case .failed = await engine.currentState() { true } else { false }
+        }
+        guard case .failed(let error) = await engine.currentState() else {
+            Issue.record("应当失败而不是用无线连上")
+            return
+        }
+        #expect(error.userMessage.contains("en2"), "应指向那块有线网卡：\(error.userMessage)")
+        #expect(!channel.isOpened, "不允许在没地址的有线网卡/无线之间乱选")
         await engine.stop()
     }
 }
@@ -187,6 +187,35 @@ struct MACSelectionTests {
         await engine.start()
         try await expectEventually("打开通道（说明 MAC 校验通过）") { channel.isOpened }
         #expect(channel.isOpened)
+        await engine.stop()
+    }
+}
+
+@Suite("自动选口：有线优先，绝不悄悄改用无线")
+struct AutoInterfacePreferenceTests {
+    private func snapshot(_ name: String, _ index: UInt32, ipv4: String?,
+                          wireless: Bool) -> InterfaceSnapshot {
+        InterfaceSnapshot(name: name, index: index, ipv4: ipv4, mac: "02:00:00:00:00:01",
+                          isWireless: wireless, isUp: true)
+    }
+
+    @Test("有线和无线都在：选有线")
+    func prefersWired() async throws {
+        let provider = FakeInterfaceProvider(
+            interfaces: [snapshot("en0", 1 as UInt32, ipv4: "192.0.2.50", wireless: true),
+                         snapshot("en7", 2 as UInt32, ipv4: "192.0.2.10", wireless: false)],
+            route: RouteInfo(destination: "10.100.61.3", gateway: "192.0.2.1", interface: "en7"),
+            configMethod: "Manual", gateway: "192.0.2.1")
+        let engine = DrcomEngine(configuration: EngineConfiguration(
+            account: "20230001", password: "test-pass-2024", hostname: "test-mac.local",
+            registeredMAC: nil, keepAliveInterval: .seconds(10)),
+            codec: DrcomCodec(randomness: SeededRandomSource(seed: 1)),
+            channelFactory: RecordingChannelFactory(channel: FakeChannel { _ in [] }),
+            interfaces: provider, clock: FakeClock(), backoff: Backoff())
+        await engine.start()
+        try await expectEventually("报错/进入失败前先记录选口") {
+            await engine.currentState() != .idle
+        }
         await engine.stop()
     }
 }
