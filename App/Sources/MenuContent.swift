@@ -72,6 +72,7 @@ struct MenuContent: View {
             }
 
             offCampusAssist
+            campusAdRow
             footer
         }
         .padding(14)
@@ -338,6 +339,27 @@ struct MenuContent: View {
             return JLUAccessPolicy.macMismatchHint(expected: expected, actual: actual)
         default:
             return nil
+        }
+    }
+
+    /// 校园广告/门户：主面板直接给入口（以前只藏在体检页，等于没有）
+    private var campusAdRow: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Button {
+                    model.openCampusAd()
+                } label: {
+                    Label("看校园广告 / 门户", systemImage: "megaphone")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Spacer()
+            }
+            if let status = model.campusAdStatus {
+                Text(status).font(.system(size: 9)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 

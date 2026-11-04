@@ -1059,6 +1059,43 @@ final class AppModel {
         show(.portal)
     }
 
+    /// 一键看"今天的校园广告/门户"：
+    /// 1. 已有入口（上次被门户拦下时记的）→ 直接开；
+    /// 2. 没有 → 现场发一次 captive 探测，从 302 的 Location 拿到门户地址；
+    /// 3. 探测不到（已在线，学校不会再弹）→ 明确告诉用户，而不是开个空面板。
+    var campusAdStatus: String?
+
+    func openCampusAd() {
+        if let url = portalViewerURL {
+            NSWorkspace.shared.open(url)
+            campusAdStatus = "已用上次记下的门户地址打开"
+            return
+        }
+        campusAdStatus = "正在探测门户地址…"
+        Task { @MainActor in
+            let interface = interfaces.first {
+                $0.isUp && (!$0.isWireless || $0.ipv4 != nil)
+            } ?? interfaces.first ?? InterfaceSnapshot(name: "en0", index: 0, ipv4: nil,
+                                                       mac: nil, isWireless: false, isUp: true)
+            let fetcher = URLSessionPortalFetcher()
+            let candidates = ["http://connectivitycheck.gstatic.com/generate_204",
+                              "http://www.msftconnecttest.com/connecttest.txt"]
+            for candidate in candidates {
+                guard let probeURL = URL(string: candidate),
+                      let page = try? await fetcher.fetch(probeURL, interface: interface) else { continue }
+                if let location = page.location,
+                   let url = URL(string: location, relativeTo: probeURL)?.absoluteURL {
+                    rememberPortalEntry(url)
+                    NSWorkspace.shared.open(url)
+                    campusAdStatus = "已打开门户：\(url.host ?? "")"
+                    return
+                }
+            }
+            campusAdStatus = "没探测到门户——已经在线时学校不会再弹广告页；" 
+                + "被弹过的话，下次会记下地址。"
+        }
+    }
+
     func closePortalViewer() {
         panel = .main
     }
