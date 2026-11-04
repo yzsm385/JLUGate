@@ -212,6 +212,15 @@ struct MenuContent: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                if error.isCredentialRejection {
+                    Button {
+                        model.presentWizard()
+                    } label: {
+                        Label("重新输入密码", systemImage: "key")
+                            .font(.caption2)
+                    }
+                    .buttonStyle(.link)
+                }
                 if case .macRejected = error { macFixButtons }
                 if case .macMismatch = error { macFixButtons }
             }

@@ -160,3 +160,19 @@ struct DrcomErrorTests {
         #expect(messages.contains { $0.contains("utun4") })
     }
 }
+
+@Suite("凭据被拒（LDAP）要能识别出来")
+struct CredentialRejectionTests {
+    @Test("ldap auth error / 密码错误 / 账号不存在 都算凭据问题")
+    func detect() {
+        for reason in ["ldap auth error", "LDAP auth error", "密码错误", "账号不存在", "password invalid"] {
+            #expect(DrcomError.rejected(reason: reason).isCredentialRejection, "\(reason) 应判为凭据问题")
+        }
+    }
+
+    @Test("其它拒绝不算凭据问题")
+    func others() {
+        #expect(!DrcomError.rejected(reason: "user blocked").isCredentialRejection)
+        #expect(!DrcomError.accountInUse(reason: "账号在别处登录").isCredentialRejection)
+    }
+}

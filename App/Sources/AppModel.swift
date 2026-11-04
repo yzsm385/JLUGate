@@ -205,6 +205,8 @@ final class AppModel {
     var portHeldByOfficialClient = false
     /// 在线是由官方客户端维持的（端口在它手里）
     var onlineViaOfficialClient = false
+    /// 最近一次服务器拒绝凭据的时间（用于界面提示）
+    var credentialRejectedAt: Date?
     /// 最近一次真实探测成功 / 失败的时间（用于状态粘性）
     var lastHealthyProbeAt: Date?
     var lastFailedProbeAt: Date?
@@ -434,6 +436,7 @@ final class AppModel {
         watchTask?.cancel()
         watchTask = Task { @MainActor [weak self] in
             var wasOnline = false
+            var unreachableStreak = 0
             while !Task.isCancelled {
                 guard let self else { return }
                 // 每轮都重新枚举一次网卡：启动时可能还没拿到，插拔后也会变
@@ -455,6 +458,17 @@ final class AppModel {
                 case .captivePortal(let code, let location):
                     .needsAuthentication(statusCode: code, location: location)
                 case .unreachable(let reason): .unreachable(reason: reason)
+                }
+
+                // 连续 2 次不可达才判离线：单次探测抖动不该让界面变红
+                if case .unreachable = observation {
+                    unreachableStreak += 1
+                    if unreachableStreak < 2 {
+                        try? await Task.sleep(for: .seconds(5))
+                        continue
+                    }
+                } else {
+                    unreachableStreak = 0
                 }
 
                 switch PassiveMonitor.decide(observation) {
@@ -1252,6 +1266,18 @@ final class AppModel {
             }
             if case .failed(let error) = next {
                 lastError = error
+                // 服务器说账号/密码不对：清掉保存的密码并请用户重新输入，
+                // 否则会拿着同一个错密码一直重试（真机上就这样"怎么点都失败"）。
+                if error.isCredentialRejection {
+                    credentialRejectedAt = Date()
+                    if !config.account.isEmpty {
+                        CredentialStore.delete(account: config.account)
+                    }
+                    password = ""
+                    recentLog.insert("服务器说账号或密码不对（服务器原文：\(error.userMessage)）。已清除保存的密码，请重新输入。", at: 0)
+                    FileLogger.shared.log("凭据被拒：已清除保存的密码，等待用户重新输入")
+                    presentWizard()
+                }
                 if case .officialClientRunning = error { portHeldByOfficialClient = true }
                 if case .localPortInUse = error { portHeldByOfficialClient = true }
                 Notifier.notifyFailure(error)

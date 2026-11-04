@@ -110,6 +110,16 @@ public enum DrcomError: Error, Sendable, Equatable {
     }
 
     /// 是否值得自动重试。账号冲突 / DHCP / MAC 不匹配这类必须等用户动作。
+    /// 服务器是否在说"账号或密码不对"（LDAP 验证失败）。
+    /// 这类错误重试多少次都一样，必须请用户重新输入密码。
+    public var isCredentialRejection: Bool {
+        guard case .rejected(let reason) = self else { return false }
+        let lowered = reason.lowercased()
+        return lowered.contains("ldap") || lowered.contains("auth")
+            || lowered.contains("password") || reason.contains("密码")
+            || reason.contains("账号不存在")
+    }
+
     public var isRetryable: Bool {
         switch self {
         case .unexpectedPacket, .accountInUse, .macInUse, .macRejected, .dhcpAssigned,
