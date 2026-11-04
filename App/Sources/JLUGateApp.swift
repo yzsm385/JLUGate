@@ -126,10 +126,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         iconTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
                 self?.updateIcon(model: model)
-                try? await Task.sleep(for: .milliseconds(600))
+                try? await Task.sleep(for: .seconds(1))
             }
         }
     }
+
+    private var lastIconName: String?
 
     private func updateIcon(model: AppModel) {
         guard let button = statusItem?.button else { return }
@@ -141,6 +143,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             name = model.statusSymbol
         }
+        guard name != lastIconName else { return }   // 没变化就别重建 NSImage
+        lastIconName = name
         button.image = NSImage(systemSymbolName: name, accessibilityDescription: "JLU Gate")
         button.image?.isTemplate = true
     }
@@ -216,11 +220,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        model.isPanelVisible = true
         NSApp.activate(ignoringOtherApps: true)
         FileLogger.shared.log("面板：已显示")
     }
 
     func closePanel() {
         popover?.performClose(nil)
+        model?.isPanelVisible = false
     }
 }

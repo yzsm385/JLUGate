@@ -81,7 +81,10 @@ struct MenuContent: View {
         }
         .padding(14)
         .frame(width: 348)
-        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { now = $0 }
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { tick in
+            // 只有"在线 + 面板可见"时才需要每秒刷新，其余时候不动，省 CPU
+            if model.state.isOnline, model.isPanelVisible { now = tick }
+        }
     }
 
     private var statusCard: some View {

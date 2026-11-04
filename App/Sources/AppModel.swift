@@ -25,6 +25,8 @@ final class AppModel {
     var routeSummary: String = "未检测"
     var routeGuarantee: RouteGuarantee?
     var showWizard = false
+    /// 菜单栏面板当前是否展开（关闭时不跑每秒刷新）
+    var isPanelVisible = false
 
     /// 面板内容：**所有界面都放在菜单栏面板里**，不再自建 NSWindow。
     /// 真机崩溃栈（AppKit display cycle + objc_exception_rethrow）指向自建窗口的布局，
@@ -396,6 +398,9 @@ final class AppModel {
         refreshDiagnostics()
         observeSleepWake()
         observeNetworkPaths()
+        FileLogger.shared.log("启动决策：账号=\(hasAccount) 密码=\(hasPassword)"
+                              + "（已验证保存=\(savedVerifiedPassword)） 静态参数完整=\(profileComplete)"
+                              + " 需要向导=\(showWizard) 自动连接=\(shouldAutoConnectOnLaunch)")
         if showWizard, !DevOverrides.autostart {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(600))
