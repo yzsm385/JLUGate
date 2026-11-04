@@ -58,6 +58,25 @@ final class AppModel {
     var updateStatus: UpdateStatus = .idle
     private var updateChecker = UpdateChecker()
 
+    /// 一键更新状态文案
+    var updateInstallMessage: String?
+
+    func installAvailableUpdate(page: URL?, asset: URL?) {
+        guard let asset else {
+            if let page { NSWorkspace.shared.open(page) }
+            updateInstallMessage = "这个版本没有 zip 资产，已打开下载页"
+            return
+        }
+        UpdateInstaller.install(from: asset) { message in
+            Task { @MainActor in self.updateInstallMessage = message }
+        } onReadyToQuit: {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(300))
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
     func checkForUpdates(force: Bool = false) {
         guard updateStatus != .checking else { return }
         updateStatus = .checking

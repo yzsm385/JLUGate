@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="0.3.17"
+VERSION="1.0.0"
 APP="dist/JLU Gate.app"
 DMG="dist/JLU Gate ${VERSION}.dmg"
 
@@ -91,10 +91,17 @@ JLU Gate 0.1.0（便携版）
   · 端口 61440 被占用：先退出官方 DrClientNS；仍有占用说明它的后台组件在跑。
 README
 
-echo "==> 打包（优先 DMG；--skip-dmg 或做不出来则退回 ZIP）"
+# DMG 里给一个 /Applications 软链，用户可以直接把 App 拖进去
+ln -sfn /Applications "$STAGE_ROOT/Applications" 2>/dev/null || true
+
+echo "==> 打包（ZIP 用于一键更新；DMG 用于首次安装）"
 rm -f "$DMG"
 ZIP="dist/JLU Gate ${VERSION}.zip"
 rm -f "$ZIP"
+
+# ZIP 始终产出：应用内"下载并安装"用它
+ditto -c -k --sequesterRsrc --keepParent "$STAGE_ROOT" "$ZIP"
+echo "OK -> $ZIP"
 
 made=0
 if [ "${JLUGATE_SKIP_DMG:-0}" != "1" ]; then
@@ -110,7 +117,5 @@ if [ "${JLUGATE_SKIP_DMG:-0}" != "1" ]; then
 fi
 
 if [ "$made" = "0" ]; then
-    ditto -c -k --sequesterRsrc --keepParent "$STAGE_ROOT" "$ZIP"
-    echo "OK -> $ZIP"
-    ls -lh "$ZIP"
+    echo "  ⚠️ 没有生成 DMG（当前环境不支持）；ZIP 已生成，可用于一键更新。"
 fi

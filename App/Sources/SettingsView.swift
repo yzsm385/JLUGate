@@ -266,11 +266,20 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Label("有新版本 \(tag)", systemImage: "arrow.down.circle")
                     .font(.caption).foregroundStyle(.orange)
-                Button("下载 \(name)") {
-                    if let url = asset ?? page { NSWorkspace.shared.open(url) }
+                HStack(spacing: 8) {
+                    Button("下载并安装") {
+                        model.installAvailableUpdate(page: page, asset: asset)
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.small)
+                    Button("仅下载") {
+                        if let url = asset ?? page { NSWorkspace.shared.open(url) }
+                    }
+                    .buttonStyle(.link).font(.caption)
                 }
-                .buttonStyle(.link).font(.caption)
-                .lineLimit(2)
+                if let message = model.updateInstallMessage {
+                    Text(message).font(.system(size: 9)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             .fixedSize(horizontal: false, vertical: true)
         case .failed(let message):

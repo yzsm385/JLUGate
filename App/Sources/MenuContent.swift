@@ -395,12 +395,9 @@ struct MenuContent: View {
             HStack(spacing: 2) {
                 footerButton("设置", "gearshape") { model.presentSettings() }
                 footerButton("站点", "link") { model.show(.sites) }
-
                 footerButton("详情", "network") { model.presentNetworkDetail() }
-                footerButton("体检", "stethoscope") { model.show(.inspect) }
-            }
-            HStack(spacing: 2) {
                 footerButton("诊断", "stethoscope.circle") { model.show(.developer) }
+                footerButton("体检", "stethoscope") { model.show(.inspect) }
                 footerButton("退出", "power") { NSApplication.shared.terminate(nil) }
             }
         }
