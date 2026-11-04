@@ -21,7 +21,7 @@ struct AddressField: View {
         var count: Int { self == .ipv4 ? 4 : 6 }
         var maxLength: Int { self == .ipv4 ? 3 : 2 }
         var separator: String { self == .ipv4 ? "·" : ":" }
-        var segmentWidth: CGFloat { self == .ipv4 ? 44 : 32 }
+        var segmentWidth: CGFloat { self == .ipv4 ? 52 : 34 }
         var isHex: Bool { self == .mac }
 
         func isAllowed(_ character: Character) -> Bool {
@@ -207,16 +207,19 @@ final class SegmentedContainer: NSView {
 
     override func layout() {
         super.layout()
+        // 绝不在 layout() 里修改**自己**的 frame：那会让窗口再次 needsLayout，
+        // 触发 AppKit 的 "more Layout Window passes than there are views" 异常
+        // （这就是点设置闪退的原因）。
         var x: CGFloat = 0
+        let height = max(bounds.height, 24)
         for (index, field) in fields.enumerated() {
-            field.frame = NSRect(x: x, y: 1, width: kind.segmentWidth, height: 22)
+            field.frame = NSRect(x: x, y: (height - 22) / 2, width: kind.segmentWidth, height: 22)
             x += kind.segmentWidth
             if index < labels.count {
-                labels[index].frame = NSRect(x: x, y: 3, width: 12, height: 18)
+                labels[index].frame = NSRect(x: x, y: (height - 18) / 2, width: 12, height: 18)
                 x += 12
             }
         }
-        frame.size.width = x
     }
 
     override var intrinsicContentSize: NSSize {
