@@ -25,6 +25,8 @@ struct MenuContent: View {
                 embedded { InspectPanel() }
             case .sites:
                 embedded { SitesPanel() }
+            case .developer:
+                embedded { DeveloperPanel() }
             case .portal:
                 embedded { PortalViewerView(url: model.portalViewerURL) }
             case .portalLogin:
@@ -394,9 +396,7 @@ struct MenuContent: View {
                 footerButton("体检", "stethoscope") { model.show(.inspect) }
             }
             HStack(spacing: 2) {
-                footerButton("导出", "square.and.arrow.up") { model.exportDiagnostics() }
-                footerButton("参数卡", "qrcode") { model.exportConfigCard() }
-                footerButton("诊断", "doc.on.clipboard") { model.copyDiagnostics() }
+                footerButton("诊断", "stethoscope.circle") { model.show(.developer) }
                 footerButton("退出", "power") { NSApplication.shared.terminate(nil) }
             }
         }

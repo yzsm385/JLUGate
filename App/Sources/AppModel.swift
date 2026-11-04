@@ -37,6 +37,7 @@ final class AppModel {
         case status
         case inspect
         case sites
+        case developer
         case portal
         case portalLogin
     }

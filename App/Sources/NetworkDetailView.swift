@@ -19,7 +19,6 @@ struct NetworkDetailView: View {
                     authLivenessSection
                     pingSection
                     speedSection
-                    glossarySection
                 }
                 .padding(18)
             }
@@ -280,17 +279,15 @@ struct NetworkDetailView: View {
         }
     }
 
-    // MARK: 术语解释
+    // MARK: 字段含义（内联到各卡片，不再单独列一块）
 
-    private var glossarySection: some View {
-        card("这些字段是什么意思") {
-            ForEach(FieldGuide.entries) { entry in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.term).font(.caption.bold())
-                    Text(entry.explanation).font(.caption2).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(.vertical, 3)
+    private func footnote(_ id: String) -> some View {
+        Group {
+            if let text = FieldGuide.explanation(for: id) {
+                Text(text)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
