@@ -128,3 +128,20 @@ struct AddressParsingCompatTests {
         #expect(MACAddress("02-00-00-00-00-01")?.description == "02:00:00:00:00:01")
     }
 }
+
+@Suite("校验：界面里用中间点填的地址必须能过")
+struct ValidationWithMiddleDotTests {
+    @Test("255·255·255·0 这类输入不再被判格式错误")
+    func middleDotPasses() {
+        let issues = NetworkValidation.issues(ip: "203·0·113·11", mask: "255·255·255·0",
+                                             gateway: "203·0·113·254", mac: "02:00:00:00:00:01")
+        #expect(issues.isEmpty, "实际：\(issues.map(\.message))")
+    }
+
+    @Test("网关不在同网段仍然要报出来")
+    func wrongSubnetStillReported() {
+        let issues = NetworkValidation.issues(ip: "203·0·113·11", mask: "255·255·255·0",
+                                             gateway: "203·0·114·254", mac: nil)
+        #expect(issues.contains { if case .gatewayNotInSubnet = $0 { true } else { false } })
+    }
+}

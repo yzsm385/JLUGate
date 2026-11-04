@@ -323,12 +323,13 @@ struct SettingsView: View {
         config.compatibilityMode = draft.compatibilityMode
 
         let profile = AppConfig.NetworkProfile(
-            ip: draft.ip.isEmpty ? nil : draft.ip,
-            mask: draft.mask.isEmpty ? nil : draft.mask,
-            gateway: draft.gateway.isEmpty ? nil : draft.gateway,
+            ip: draft.ip.isEmpty ? nil : NetworkValidation.canonical(draft.ip),
+            mask: draft.mask.isEmpty ? nil : NetworkValidation.canonical(draft.mask),
+            gateway: draft.gateway.isEmpty ? nil : NetworkValidation.canonical(draft.gateway),
             dns: draft.dns.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
                 .filter { !$0.isEmpty },
-            registeredMAC: draft.registeredMAC.isEmpty ? nil : draft.registeredMAC,
+            registeredMAC: draft.registeredMAC.isEmpty
+                ? nil : NetworkValidation.canonicalMAC(draft.registeredMAC),
             interfaceHint: config.accounts[draft.account]?.interfaceHint,
             configuredAt: config.accounts[draft.account]?.configuredAt
                 ?? ISO8601DateFormatter().string(from: .now))

@@ -520,12 +520,13 @@ struct WizardView: View {
         let trimmedAccount = account.trimmingCharacters(in: .whitespaces)
         let capturedLink = link
         let capturedPassword = password
-        let capturedIP = ip.isEmpty ? nil : ip
-        let capturedMask = mask.isEmpty ? nil : mask
-        let capturedGateway = gateway.isEmpty ? nil : gateway
+        // 界面用中间点显示，落盘统一成标准点分十进制
+        let capturedIP = ip.isEmpty ? nil : NetworkValidation.canonical(ip)
+        let capturedMask = mask.isEmpty ? nil : NetworkValidation.canonical(mask)
+        let capturedGateway = gateway.isEmpty ? nil : NetworkValidation.canonical(gateway)
         let capturedDNS = dns.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-        let capturedMAC = mac.isEmpty ? nil : mac
+        let capturedMAC = mac.isEmpty ? nil : NetworkValidation.canonicalMAC(mac)
         let previousHint = model.config.accounts[trimmedAccount]?.interfaceHint
         let previousConfiguredAt = model.config.accounts[trimmedAccount]?.configuredAt
 

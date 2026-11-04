@@ -26,6 +26,16 @@ public enum NetworkValidation {
         }
     }
 
+    /// 把界面里的写法（可能带中间点 `·`）转成标准点分十进制再落盘。
+    /// UI 用中间点只是显示习惯，配置里统一存 `203.0.113.11`，避免以后任何字符串比较出错。
+    public static func canonical(_ text: String) -> String {
+        IPv4Address(text)?.description ?? text
+    }
+
+    public static func canonicalMAC(_ text: String) -> String {
+        MACAddress(text)?.description ?? text
+    }
+
     /// 校验一份静态参数；返回全部问题（一次列全，别让用户试三遍）。
     public static func issues(ip: String?, mask: String?, gateway: String?, mac: String?) -> [Issue] {
         var issues: [Issue] = []
