@@ -18,6 +18,12 @@ let package = Package(
         .executableTarget(name: "AppCompileCheck",
                           dependencies: ["JLUGateCore", "JLUGateNet"],
                           path: "App/Sources"),
+        // 旧版适配（macOS 14）：和 AppCompileCheck 同源，但 AppearanceCompat 走普通材质、
+        // 不用 Liquid Glass。产物由 scripts/make-app-bundle-compat.sh 装成
+        // dist/JLU Gate (Compat).app。和新版分别发布。
+        .executableTarget(name: "AppCompatCompileCheck",
+                          dependencies: ["JLUGateCore", "JLUGateNet"],
+                          path: "App-Compat/Sources"),
         .testTarget(name: "JLUGateCoreTests", dependencies: ["JLUGateCore"]),
         .testTarget(name: "JLUGateNetTests", dependencies: ["JLUGateNet", "JLUGateCore"]),
     ],

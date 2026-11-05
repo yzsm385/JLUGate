@@ -6,11 +6,14 @@
 
 JLU Gate 想把这三个门并成一个闸口。账号密码填一次，三种接入共用；该走哪条路它自己认，掉了线替你悄悄重连。顺手把教务、OA、邮箱、WebVPN 这些散落各处的入口也拢到一处，点一下就开；再配一套网络体检，断网时一层一层替你查到底卡在哪、出口那扇门后面干不干净。
 
-> 只在校园网环境里有意义；只跑在 macOS 26 及以上。
+> 只在校园网环境里有意义；主包跑在 macOS 26 及以上（Liquid Glass 界面），老系统（macOS 14/15）用 Compat 包。
 
 ## 下载与安装
 
-1. 去 [Releases](https://github.com/yzsm385/JLUGate/releases) 下最新版的 **ZIP**（DMG 暂时做不出来，目前只有 ZIP）。
+1. 去 [Releases](https://github.com/yzsm385/JLUGate/releases) 下最新版的 **ZIP**：
+   - **macOS 26 及以上** → 下主包 `JLU Gate x.x.x.zip`（Liquid Glass 界面）；
+   - **macOS 14 / 15** → 下 `JLU Gate x.x.x (Compat).zip`（普通材质，功能一样，不会崩）。
+   - 两个包同名同 bundle id，**别同时装**——启动守卫会把同 id 的旧进程顶掉。
 2. 解压后，把里面的 **JLU Gate.app** 拖进「应用程序」。
 3. 第一次打开，系统会拦一下，提示"无法验证开发者"或"没认证"——因为这个程序没有 Apple 开发者签名。别慌，按下面走：
    - 打开「系统设置 → 隐私与安全性」，一直拉到最底下；
@@ -94,7 +97,8 @@ make release-probe        # universal 二进制
 | `Sources/JLUGateCore` | 编解码 / 摘要 / 状态 / 退避 / 错误（纯协议，没有 I/O） |
 | `Sources/JLUGateNet` | BSD 与 NW 两套 UDP 通道、网卡与路由解析、`DrcomEngine` actor |
 | `Sources/jlugate-probe` | 诊断 + 离线自测的命令行工具 |
-| `App/` | SwiftUI 菜单栏应用（XcodeGen 工程描述在 `App/project.yml`） |
+| `App/` | SwiftUI 菜单栏应用（macOS 26，Liquid Glass；XcodeGen 工程描述在 `App/project.yml`） |
+| `App-Compat/` | 旧版适配（macOS 14，普通材质、无 Liquid Glass；和 `App/` 同源，只换 `AppearanceCompat`） |
 | `Tools/mock-gateway` | 按帧表应答的 Dr.Com 模拟网关（支持丢包 / 延迟 / 拒绝） |
 | `Tools/mock-portal` | 模拟校园网页认证（302 → 登录页 → POST → 204） |
 | `Fixtures/` | 抓包样本（含凭据摘要，**不要公开**） |
@@ -105,15 +109,19 @@ make release-probe        # universal 二进制
 没有开发者账号也能在本机跑起来（ad-hoc 签名，不能分发、不能公证）：
 
 ```bash
-make app-bundle     # → dist/JLU Gate.app（菜单栏常驻）
+make app-bundle     # → dist/JLU Gate.app（菜单栏常驻，macOS 26，Liquid Glass）
 open "dist/JLU Gate.app"
+
+make app-compat      # → dist/JLU Gate (Compat).app（macOS 14，普通材质，老系统用）
+open "dist/JLU Gate (Compat).app"
 ```
 
-有账号、要签名和公证时，走 XcodeGen：
+有账号、要签名和公证时，走 XcodeGen（新版在 `App/`，旧版在 `App-Compat/`）：
 
 ```bash
 brew install xcodegen
-cd App && xcodegen generate && open JLUGate.xcodeproj
+cd App && xcodegen generate && open JLUGate.xcodeproj        # 新版
+cd App-Compat && xcodegen generate && open JLUGate.xcodeproj # 旧版适配
 ```
 
 ## 隐私

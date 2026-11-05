@@ -16,10 +16,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: 构建便携包（App + 卸载脚本 + 说明；CI 上跳过 DMG）
+      - name: 构建便携包（新版 App + 卸载脚本 + 说明；CI 上跳过 DMG）
         run: |
           set -eux
           ./scripts/make-portable-package.sh
+          ls -lh dist
+
+      - name: 构建便携包（旧版适配 macOS 14，无 Liquid Glass）
+        run: |
+          set -eux
+          ./scripts/make-portable-package-compat.sh
           ls -lh dist
 
       - name: 组装资产名（去掉空格，方便下载）
@@ -27,11 +33,15 @@ jobs:
           set -eux
           mkdir -p out
           # 版本号由脚本决定，不能写死（写死 0.1.0 就是前几次 Release 失败的原因）
-          zip=$(ls -t dist/"JLU Gate "*.zip | head -n 1)
+          zip=$(ls -t dist/"JLU Gate "*.zip | grep -v Compat | head -n 1)
           test -n "$zip"
           cp "$zip" "out/JLU-Gate-${{ github.ref_name }}.zip"
           dmg=$(ls -t dist/"JLU Gate "*.dmg 2>/dev/null | head -n 1 || true)
           if [ -n "$dmg" ]; then cp "$dmg" "out/JLU-Gate-${{ github.ref_name }}.dmg"; fi
+          # 旧版适配包
+          compat=$(ls -t dist/"JLU Gate "*Compat*.zip | head -n 1)
+          test -n "$compat"
+          cp "$compat" "out/JLU-Gate-${{ github.ref_name }}-Compat.zip"
           ls -lh out
 
       - name: 清理已废弃的旧版 Release（0.1.x 连不上，不对外发布）
@@ -49,7 +59,10 @@ jobs:
         with:
           name: JLU Gate ${{ github.ref_name }}
           # 用通配符：DMG 做不出来时也不至于让整个 Release 失败
-          files: out/JLU-Gate-${{ github.ref_name }}.*
+          # 含两份 zip：新版（macOS 26，Liquid Glass）+ 旧版适配（macOS 14，普通材质）
+          files: |
+            out/JLU-Gate-${{ github.ref_name }}.*
+            out/JLU-Gate-${{ github.ref_name }}-Compat.zip
           fail_on_unmatched_files: false
           body_path: docs/releases/${{ github.ref_name }}.md
           draft: false

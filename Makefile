@@ -1,4 +1,4 @@
-.PHONY: test core-test self-test portal-self-test build release release-probe dump-login app ci clean
+.PHONY: test core-test self-test portal-self-test build release release-probe dump-login app ci clean app-compat run-app-compat package-compat
 
 # 本工作区跑在受限沙箱里，需要把 SwiftPM 缓存/临时目录指到仓库内。
 # 在普通 Mac 上这些变量是可选的（不会造成副作用）。
@@ -44,6 +44,18 @@ app-bundle:
 # 构建并直接运行（调试用）
 run-app: app-bundle
 	open "dist/JLU Gate.app"
+
+# 旧版适配（macOS 14，无 Liquid Glass）：SwiftPM 产物 + ad-hoc 签名 → dist/JLU Gate (Compat).app
+app-compat:
+	./scripts/make-app-bundle-compat.sh
+
+# 旧版构建并直接运行（调试用）
+run-app-compat: app-compat
+	open "dist/JLU Gate (Compat).app"
+
+# 旧版便携分发包（App + 卸载脚本 + 说明，ZIP）
+package-compat:
+	./scripts/make-portable-package-compat.sh
 
 # 便携分发包（App + 卸载脚本 + 说明，DMG）
 package:
