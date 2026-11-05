@@ -67,6 +67,13 @@ struct DormScheduleTests {
         #expect(DormSchedule.care(at: morning)?.kind == .morningClass)
     }
 
+    @Test("放学提醒：工作日 17:00–18:00")
+    func afterSchool() {
+        #expect(DormSchedule.care(at: beijing("2026-11-09T17:30:00+08:00"))?.kind == .afterSchool)
+        #expect(DormSchedule.care(at: beijing("2026-11-09T19:30:00+08:00")) == nil)
+        #expect(DormSchedule.care(at: beijing("2026-11-14T17:30:00+08:00")) == nil)  // 周六
+    }
+
     @Test("下午不打扰")
     func daytimeQuiet() {
         #expect(DormSchedule.care(at: beijing("2026-11-09T15:00:00+08:00")) == nil)

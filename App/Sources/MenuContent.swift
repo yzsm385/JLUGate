@@ -121,12 +121,14 @@ struct MenuContent: View {
         case .afterBlackout: Copy.t("R04")
         case .morningClass: Copy.t("R05")
         case .sleepIn: Copy.t("R06")
+        case .afterSchool: Copy.t("R07")
         }
     }
 
     private func careTint(_ care: DormSchedule.Care) -> Color {
         switch care.kind {
         case .morningClass, .sleepIn: .orange
+        case .afterSchool: .teal
         case .blackoutSoon, .blackoutImminent, .afterBlackout: .indigo
         case .weekendFree: .purple
         }
@@ -197,8 +199,6 @@ struct MenuContent: View {
             if model.state.isOnline {
                 detailRow(Copy.t("M07"), timeText, hint: Copy.t("M08"), mono: true)
             }
-            detailRow(Copy.t("M09"), model.routeSummary,
-                      hint: Copy.t("M10"), small: true)
         }
     }
 
@@ -439,10 +439,10 @@ struct MenuContent: View {
     private var footer: some View {
         // 380 宽放不下一行 7 个按钮：改成两行、等宽网格，图标在上文字在下
         HStack(spacing: 6) {
+            footerButton(Copy.t("M35"), "stethoscope.circle") { model.show(.developer) }
             footerButton(Copy.t("M32"), "gearshape") { model.presentSettings() }
             footerButton(Copy.t("M33"), "link") { model.show(.sites) }
             footerButton(Copy.t("M34"), "network") { model.presentNetworkDetail() }
-            footerButton(Copy.t("M35"), "stethoscope.circle") { model.show(.developer) }
             footerButton(Copy.t("M36"), "stethoscope") { model.show(.inspect) }
             footerButton(Copy.t("M37"), "power") { NSApplication.shared.terminate(nil) }
         }

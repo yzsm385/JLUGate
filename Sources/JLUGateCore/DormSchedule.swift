@@ -30,6 +30,8 @@ public enum DormSchedule {
         case morningClass
         /// 早上没有早八：可以睡个懒觉
         case sleepIn
+        /// 放学：工作日 17:00–18:00
+        case afterSchool
     }
 
     public struct Care: Sendable, Equatable {
@@ -61,6 +63,11 @@ public enum DormSchedule {
                 return Care(kind: .sleepIn)
             }
             return Care(kind: .morningClass)
+        }
+
+        // 放学：工作日 17:00–18:00
+        if (2...6).contains(weekday), minutes >= 17 * 60, minutes < 18 * 60 {
+            return Care(kind: .afterSchool)
         }
 
         // 00:00–01:30 属于"前一天晚上"

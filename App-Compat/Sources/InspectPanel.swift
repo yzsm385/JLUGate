@@ -61,6 +61,9 @@ struct InspectPanel: View {
             module("DNS", timingKey: "dns", value: dnsValue, hint: dnsHint)
             module(Copy.t("P08"), timingKey: "captcha", value: captchaValue, hint: captchaHint)
 
+            // 网络诊断：认证通道 / Ping / 测速（测量入口从「详情」页挪到这里）
+            diagnosticsTools
+
             // IP 纯净度：住宅 or 机房
             purityModule
             if let consensus = model.geoConsensus {
@@ -190,6 +193,93 @@ struct InspectPanel: View {
             }
         }
         return Copy.t("P26")
+    }
+
+    // MARK: 网络诊断（测速 / 认证通道 / Ping）
+
+    private var diagnosticsTools: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(Copy.t("R08")).font(.caption).bold()
+
+            // 认证通道延迟
+            VStack(alignment: .leading, spacing: 4) {
+                Text(Copy.t("D29")).font(.caption2).bold()
+                Text(Copy.t("D30"))
+                    .font(.system(size: 9)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let sample = model.authLiveness {
+                    Text(sample.direct.description).font(.caption.monospaced())
+                    Text(sample.viaDefault.description).font(.caption.monospaced())
+                    Label(sample.verdict, systemImage: "info.circle")
+                        .font(.caption2).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Button {
+                    model.measureAuthLiveness()
+                } label: {
+                    Label(model.diagnosticsBusy ? Copy.t("D31") : Copy.t("D32"),
+                          systemImage: "waveform.path.ecg.rectangle")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.diagnosticsBusy)
+            }
+
+            Divider().opacity(0.4)
+
+            // Ping
+            VStack(alignment: .leading, spacing: 4) {
+                Text(Copy.t("D33")).font(.caption2).bold()
+                if model.pingResults.isEmpty {
+                    Text(Copy.t("D34")).font(.system(size: 9)).foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.pingResults, id: \.host) { summary in
+                        Text(summary.description).font(.caption.monospaced())
+                    }
+                }
+                Button {
+                    model.runPing()
+                } label: {
+                    Label(model.diagnosticsBusy ? Copy.t("P17") : Copy.t("D35"),
+                          systemImage: "waveform.path.ecg")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.diagnosticsBusy)
+            }
+
+            Divider().opacity(0.4)
+
+            // 测速
+            VStack(alignment: .leading, spacing: 4) {
+                Text(Copy.t("D36")).font(.caption2).bold()
+                if model.speedResults.isEmpty {
+                    Text(Copy.t("D37")).font(.system(size: 9)).foregroundStyle(.secondary)
+                } else {
+                    ForEach(model.speedResults, id: \.self) { result in
+                        Text(result.description).font(.caption.monospaced())
+                    }
+                    if !model.speedResults.contains(where: { $0.boundInterface != nil }) {
+                        Label(Copy.t("D38"), systemImage: "info.circle")
+                            .font(.caption2).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Button {
+                    model.runSpeedTest()
+                } label: {
+                    Label(model.diagnosticsBusy ? Copy.t("D39") : Copy.t("D40"),
+                          systemImage: "speedometer")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(model.diagnosticsBusy)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
+                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
     private func module(_ title: String, timingKey: String? = nil,

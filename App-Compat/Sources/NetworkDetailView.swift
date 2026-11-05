@@ -220,13 +220,7 @@ struct NetworkDetailView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Button {
-                model.measureAuthLiveness()
-            } label: {
-                Label(model.diagnosticsBusy ? Copy.t("D31") : Copy.t("D32"), systemImage: "waveform.path.ecg.rectangle")
-            }
-            .buttonStyle(.bordered)
-            .disabled(model.diagnosticsBusy)
+            // 测量入口统一挪到「体检」页，这里只显示结果
         }
     }
 
@@ -242,13 +236,7 @@ struct NetworkDetailView: View {
                     Text(summary.description).font(.caption.monospaced())
                 }
             }
-            Button {
-                model.runPing()
-            } label: {
-                Label(model.diagnosticsBusy ? "测量中…" : Copy.t("D35"), systemImage: "waveform.path.ecg")
-            }
-            .buttonStyle(.bordered)
-            .disabled(model.diagnosticsBusy)
+            // 测量入口统一挪到「体检」页，这里只显示结果
         }
     }
 
@@ -269,13 +257,7 @@ struct NetworkDetailView: View {
                         .font(.caption2).foregroundStyle(.secondary)
                 }
             }
-            Button {
-                model.runSpeedTest()
-            } label: {
-                Label(model.diagnosticsBusy ? Copy.t("D39") : Copy.t("D40"), systemImage: "speedometer")
-            }
-            .buttonStyle(.bordered)
-            .disabled(model.diagnosticsBusy)
+            // 测速按钮挪到「体检」页，这里只显示最近一次结果
         }
     }
 
