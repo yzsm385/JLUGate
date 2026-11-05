@@ -24,6 +24,51 @@ trap 'rm -rf "$(dirname "$STAGE_ROOT")"' EXIT
 echo "==> 组装便携目录"
 cp -R "$APP" "$STAGE/"
 
+cat > "$STAGE/Install JLU Gate.command" <<'INSTALL'
+#!/bin/bash
+# 一键安装/覆盖：先结束正在运行的旧副本（包括卡死、在访达里删不掉的那种），
+# 再替换到 /Applications，清掉隔离标记并启动。
+set -u
+HERE="$(cd "$(dirname "$0")" && pwd)"
+SRC="$HERE/JLU Gate (Compat).app"
+DEST="/Applications/JLU Gate (Compat).app"
+
+if [ ! -d "$SRC" ]; then
+  echo "找不到 $SRC"
+  echo "请把本脚本和「JLU Gate (Compat).app」放在同一个文件夹里再双击。"
+  exit 1
+fi
+
+echo "==> 结束正在运行的 JLU Gate（卡死也能杀掉）"
+pkill -f "Contents/MacOS/JLUGate" 2>/dev/null || true
+sleep 1
+pkill -9 -f "Contents/MacOS/JLUGate" 2>/dev/null || true
+for _ in $(seq 1 20); do
+  pgrep -f "Contents/MacOS/JLUGate" >/dev/null 2>&1 || break
+  sleep 0.5
+done
+
+echo "==> 替换 $DEST"
+rm -rf "$DEST" 2>/dev/null || true
+if [ -e "$DEST" ]; then
+  echo "旧版本删不掉（进程可能卡在内核里）。请重启 Mac 后再双击本脚本。"
+  exit 1
+fi
+if ! ditto "$SRC" "$DEST"; then
+  echo "复制失败。请确认当前用户有 /Applications 的写权限。"
+  exit 1
+fi
+xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
+codesign --verify --strict "$DEST" >/dev/null 2>&1 || echo "注意：签名校验没过（ad-hoc 包一般也还能跑）"
+
+echo "==> 启动"
+open "$DEST"
+echo
+echo "完成。右上角菜单栏会出现盾牌图标，并自动弹一次面板；"
+echo "如果还是没有，把上面的输出和 ~/Library/Logs/JLUGate/agent.log 发给我。"
+INSTALL
+chmod +x "$STAGE/Install JLU Gate.command"
+
 cat > "$STAGE/Uninstall JLU Gate.command" <<'UNINSTALL'
 #!/bin/bash
 # 把 JLU Gate 从这台机器上彻底清掉：应用、配置、日志、钥匙串条目。
@@ -38,8 +83,9 @@ read -r -p "确认继续？[y/N] " answer
 [[ "$answer" == "y" || "$answer" == "Y" ]] || { echo "已取消。"; exit 1; }
 
 osascript -e 'tell application id "dev.jlugate.app" to quit' >/dev/null 2>&1 || true
-pkill -f "JLU Gate.app/Contents/MacOS/JLUGate" 2>/dev/null || true
-pkill -f "JLU Gate (Compat).app/Contents/MacOS/JLUGate" 2>/dev/null || true
+pkill -f "Contents/MacOS/JLUGate" 2>/dev/null || true
+sleep 1
+pkill -9 -f "Contents/MacOS/JLUGate" 2>/dev/null || true
 sleep 1
 
 APP_PATH_OF_THIS_SCRIPT="$(cd "$(dirname "$0")" && pwd)"
@@ -71,9 +117,13 @@ JLU Gate 1.0.0（旧版适配，macOS 14+）
 一、系统要求
   macOS 14 (Sonoma) 及以上。更低版本不保证能跑。
 
-二、安装
-  把「JLU Gate.app」拖进 /Applications 即可。首次打开若提示"无法验证开发者"，
-  右键 → 打开；或到「系统设置 → 隐私与安全性」里点「仍要打开」。
+二、安装（推荐）
+  双击同目录下的「Install JLU Gate.command」：它会先结束正在运行的旧版本
+  （包括卡死、在访达里删不掉的那种），再替换到 /Applications 并启动。
+
+  也可以手动拖：把「JLU Gate (Compat).app」拖进 /Applications。
+  首次打开若提示"无法验证开发者"，右键 → 打开；或到
+  「系统设置 → 隐私与安全性」里点「仍要打开」。
 
 三、第一次使用
   1. 菜单栏出现盾牌图标 → 点开 → 「设置」或「重新设置…」；

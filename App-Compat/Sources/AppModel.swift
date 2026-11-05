@@ -431,7 +431,7 @@ final class AppModel {
             linkRequiresStaticAddresses: needsStatic, profileIsComplete: profileComplete,
             everConnected: loaded.lastSuccessfulLogin != nil,
             autoConnectEnabled: loaded.autoConnect)
-        refreshDiagnostics()
+        scheduleInitialDiagnostics()
         observeSleepWake()
         observeNetworkPaths()
         FileLogger.shared.log("启动决策：账号=\(hasAccount) 密码=\(hasPassword)"
@@ -519,6 +519,8 @@ final class AppModel {
         launchConnectTask?.cancel()
         launchConnectTask = Task { @MainActor [weak self] in
             guard let self else { return }
+            // 等网卡枚举完再连：启动时诊断在后台跑，太早 connect 会拿到空列表
+            await self.refreshDiagnosticsAsync()
             for attempt in 1...5 {
                 let delay: Duration = attempt == 1 ? .seconds(1) : .seconds(2)
                 try? await Task.sleep(for: delay)
@@ -623,8 +625,9 @@ final class AppModel {
             var unreachableStreak = 0
             while !Task.isCancelled {
                 guard let self else { return }
-                // 每轮都重新枚举一次网卡：启动时可能还没拿到，插拔后也会变
-                self.refreshDiagnostics()
+                // 每轮都重新枚举一次网卡：启动时可能还没拿到，插拔后也会变。
+                // 走后台版：子进程卡住也不能卡 main（否则图标/面板全出不来）。
+                await self.refreshDiagnosticsAsync()
                 guard let interface = self.interfaces.first(where: \.isUsableForAuthentication)
                         ?? self.interfaces.first else {
                     try? await Task.sleep(for: .seconds(5))
@@ -1539,15 +1542,70 @@ final class AppModel {
         return text
     }
 
+    // MARK: 诊断
+
+    /// 枚举网卡/路由要起 `ifconfig` / `networksetup` 子进程。个别机器上（VPN、
+    /// 虚拟网卡多）这些命令会卡住不返回，所以**绝不能放在启动路径或主线程上**：
+    /// 主线程一卡，菜单栏图标和面板就永远出不来——用户看到的就是"双击没反应、
+    /// 退也退不掉"。启动和被动监测都走后台，只有"点重试/进向导"这种必须当场
+    /// 拿到最新网卡的路径才用同步版（并带 4 秒上限）。
+    nonisolated private static func computeDiagnostics(server: String)
+        -> (interfaces: [InterfaceSnapshot], route: RouteInfo?) {
+        let provider = SystemInterfaceProvider()
+        let interfaces = provider.physicalInterfaces()
+        guard let address = IPv4Address(server) else { return (interfaces, nil) }
+        return (interfaces, provider.route(to: address))
+    }
+
+    /// 启动时：后台算，算完回主线程更新，不阻塞启动。
+    private func scheduleInitialDiagnostics() {
+        let server = config.server
+        Task { @MainActor [weak self] in
+            let started = ContinuousClock.now
+            let result = await Task.detached(priority: .utility) {
+                Self.computeDiagnostics(server: server)
+            }.value
+            guard let self, self.config.server == server else { return }
+            self.applyDiagnostics(result)
+            FileLogger.shared.log("诊断：后台完成，用时 \(started.duration(to: .now))")
+        }
+    }
+
+    /// 被动监测循环：同样走后台，别让主线程等子进程。
+    private func refreshDiagnosticsAsync() async {
+        let server = config.server
+        let result = await Task.detached(priority: .utility) {
+            Self.computeDiagnostics(server: server)
+        }.value
+        guard config.server == server else { return }
+        applyDiagnostics(result)
+    }
+
+    /// 同步版：重试/向导/设置里需要立刻拿到网卡列表，但最多等 4 秒。
     func refreshDiagnostics() {
-        interfaces = interfacesProvider.physicalInterfaces()
-        guard let server = IPv4Address(config.server) else {
+        let server = config.server
+        let box = DiagnosticsResultBox()
+        let done = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .utility).async {
+            box.result = Self.computeDiagnostics(server: server)
+            done.signal()
+        }
+        if done.wait(timeout: .now() + 4) == .timedOut {
+            FileLogger.shared.log("诊断：同步刷新超时 4s，先沿用上次结果")
+            return
+        }
+        guard let result = box.result, config.server == server else { return }
+        applyDiagnostics(result)
+    }
+
+    private func applyDiagnostics(_ result: (interfaces: [InterfaceSnapshot], route: RouteInfo?)) {
+        interfaces = result.interfaces
+        guard IPv4Address(config.server) != nil else {
             routeSummary = "服务器地址不合法"
             routeGuarantee = .noRoute
             return
         }
-        let route = interfacesProvider.route(to: server)
-        if let route {
+        if let route = result.route {
             routeInterfaceName = route.interface
             routeSummary = "\(config.server) → \(route.interface ?? "?")（网关 \(route.gateway ?? "-")）"
                 + (route.isTunnel ? "  ⚠️ 被代理接管" : "")
@@ -1557,7 +1615,7 @@ final class AppModel {
         if let chosen = interfaces.first(where: { $0.ipv4 != nil })
             ?? interfaces.first {
             routeGuarantee = RouteGuard(registeredGateway: config.currentProfile?.gateway)
-                .evaluate(route: route, interface: chosen,
+                .evaluate(route: result.route, interface: chosen,
                           helperAuthorized: config.routeGuard.helperAuthorized == true)
         }
     }
@@ -1791,6 +1849,11 @@ final class AppModel {
             }
         }
     }
+}
+
+/// 同步刷新诊断时用来跨线程带结果的小盒子（信号量保证可见性）。
+private final class DiagnosticsResultBox: @unchecked Sendable {
+    var result: (interfaces: [InterfaceSnapshot], route: RouteInfo?)?
 }
 
 enum SystemHostname {
