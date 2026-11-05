@@ -44,6 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var placementAttempt = 0
     private var placementProbeCount = 0
     private var baselineIconX: CGFloat?
+    private var lastLoggedIconX: CGFloat = -1
     private var devHealUsed = false
 
     /// 在访达里双击已在运行的 App：系统不会重新启动进程，只会发 reopen。
@@ -69,6 +70,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 不会双击半天以为没反应；日志也能区分"没启动"和"卡在初始化"。
         buildStatusItem()
         FileLogger.shared.log("启动：菜单栏图标已就绪")
+
+        // 登录项拉起时屏幕可能还锁着，那一刻量不到图标窗口；等 App 真正激活（用户回来）
+        // 再补量一次。只测量、不猜，位置本来就对的话这里什么都不会发生。
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(appDidBecomeActive),
+            name: NSApplication.didBecomeActiveNotification,
+            object: nil
+        )
 
         _ = SingleInstance.claim { NSApp.terminate(nil) }
 
@@ -238,6 +248,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// App 被激活（用户点图标、解锁后回来）时补量一次：
+    /// 登录项拉起的那一刻屏幕可能还锁着，图标窗口量不到，启动那轮就白跑了。
+    @objc private func appDidBecomeActive() {
+        guard placementAttempt < placementValues.count else { return }
+        placementProbeCount = 0
+        schedulePlacementCheck(after: .milliseconds(300))
+    }
+
     /// 图标是不是真的在屏幕右半边（用户说的"右上角"）。
     /// 不猜坐标、不信任 AppKit 的默认摆放——只量按钮此刻在屏幕上的真实位置。
     private func checkStatusItemPlacement() {
@@ -255,8 +273,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let mid = screen.frame.midX
-        FileLogger.shared.log("图标：位置 x=\(Int(frame.minX))…\(Int(frame.maxX))，"
-                              + "屏宽 \(Int(screen.frame.width))，中线 \(Int(mid))")
+        if abs(frame.minX - lastLoggedIconX) > 4 {   // 每次激活都测，但只有位置变了才写日志
+            lastLoggedIconX = frame.minX
+            FileLogger.shared.log("图标：位置 x=\(Int(frame.minX))…\(Int(frame.maxX))，"
+                                  + "屏宽 \(Int(screen.frame.width))，中线 \(Int(mid))")
+        }
         var misplaced = frame.midX < mid
         if DevOverrides.healPlacementOnLaunch && !devHealUsed {
             devHealUsed = true
