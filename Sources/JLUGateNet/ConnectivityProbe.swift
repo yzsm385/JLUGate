@@ -43,6 +43,14 @@ public struct ProbeTarget: Sendable, Equatable {
     public static let cloudflare = ProbeTarget(
         host: "cp.cloudflare.com",
         fallbackIPs: [IPv4Address("104.16.132.229")!])
+
+    /// 国内 204 探测点（小米的联网检测地址）。
+    /// gstatic / cloudflare 在吉大网络里常被拦或解析失败，用它们判断"会话还在不在"会误判；
+    /// 这个在国内基本稳定，被 captive portal 拦时会返回 302/200，正好能识别"会话没了"。
+    public static let cn204 = ProbeTarget(
+        host: "connect.rom.miui.com",
+        path: "/generate_204",
+        fallbackIPs: [])
 }
 
 /// 探针依赖的最小传输面（真实实现走 BSD，单测用假的）。

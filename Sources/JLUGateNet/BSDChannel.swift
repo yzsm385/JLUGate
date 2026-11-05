@@ -31,6 +31,12 @@ public final class BSDChannel: DatagramChannel, @unchecked Sendable {
         PortOccupancy.inspect(port: port)
     }
 
+    /// 诊断用：把"自己占着"认出来（在线时本来就是自己占着 61440）
+    public static func diagnosePortExcludingSelf(_ port: UInt16) -> PortOccupancy {
+        PortOccupancy.inspect(port: port,
+                              selfPID: Int32(ProcessInfo.processInfo.processIdentifier))
+    }
+
     public func open(localIP: IPv4Address, localPort: UInt16,
                      remote: IPv4Endpoint, interfaceIndex: UInt32) async throws {
         let fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
@@ -68,6 +74,9 @@ public final class BSDChannel: DatagramChannel, @unchecked Sendable {
                     throw DrcomError.officialClientRunning(process: process, pid: pid)
                 case .other(let process):
                     throw DrcomError.localPortInUse(port: localPort, process: process)
+                case .appItself:
+                    // 本进程里已经有另一条通道占着 61440（切换链路时偶发）
+                    throw DrcomError.localPortInUse(port: localPort, process: "JLU Gate（本进程）")
                 case .unknown:
                     throw DrcomError.localPortInUse(port: localPort, process: nil)
                 }
@@ -159,25 +168,32 @@ public final class BSDChannel: DatagramChannel, @unchecked Sendable {
 public enum PortOccupancy: Sendable, Equatable {
     case officialClient(process: String, pid: Int32?)
     case other(process: String)
+    /// 是 JLU Gate 自己占着（认证通道开着，正常）——诊断里别吓唬用户
+    case appItself
     case unknown
 
     private static let officialNames = ["drcomauth", "DrClientNS", "DrClient", "DrCom"]
 
-    public static func inspect(port: UInt16) -> PortOccupancy {
+    public static func inspect(port: UInt16, selfPID: Int32? = nil) -> PortOccupancy {
         #if canImport(Darwin)
         let output = shell("/usr/sbin/lsof", ["-nP", "-iUDP:\(port)"])
         guard !output.isEmpty else { return .unknown }
+        var sawSelf = false
         for line in output.split(separator: "\n").dropFirst() {
             let columns = line.split(separator: " ", omittingEmptySubsequences: true)
             guard columns.count >= 2 else { continue }
             let process = String(columns[0])
             let pid = Int32(columns[1])
+            if let selfPID, pid == selfPID {
+                sawSelf = true
+                continue
+            }
             if officialNames.contains(where: { process.hasPrefix($0) }) {
                 return .officialClient(process: process, pid: pid)
             }
             return .other(process: process)
         }
-        return .unknown
+        return sawSelf ? .appItself : .unknown
         #else
         return .unknown
         #endif

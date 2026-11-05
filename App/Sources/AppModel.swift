@@ -404,6 +404,11 @@ final class AppModel {
 
     @ObservationIgnored private var coordinator: AuthCoordinator?
     @ObservationIgnored private var coordinatorTask: Task<Void, Never>?
+    /// 掉线自动重连：连续第几次、以及等待中的任务
+    @ObservationIgnored private var autoReconnectAttempt = 0
+    @ObservationIgnored private var autoReconnectTask: Task<Void, Never>?
+    /// 在线巡检：每 25 秒确认一次"外网真的还在"，连续两次被门户拦下就重新认证
+    @ObservationIgnored private var onlineWatchTask: Task<Void, Never>?
     @ObservationIgnored private lazy var portalBrowser = WKPortalBrowser(model: self)
     @ObservationIgnored private let interfacesProvider = SystemInterfaceProvider()
     @ObservationIgnored private let activityKeeper = ActivityKeeper()
@@ -863,16 +868,24 @@ final class AppModel {
             : interfacesProvider
         let campusDNS = (profile?.dns ?? []).compactMap(IPv4Address.init).first
         let livenessCheck: @Sendable (InterfaceSnapshot) async -> Bool = { interface in
-            // 先按"校内"确认：JLU 网络里 gstatic/cloudflare 经常不通，
-            // 用它们做存活判断会把"网络好好的"误判成断线（详见 CampusLiveness 注释）。
-            let campus = CampusLiveness()
-            if await campus.probe(interface: interface, server: server, dns: campusDNS) {
+            // 只认 204：拿到 204 才算"已认证、真能上网"。
+            // 被门户拦下（302/200）= 会话没了——这时校内 DNS / 网关仍然应达，
+            // 以前拿它们当证据，就会把"断网"判成"在线"，然后永远不重登。
+            let probe = ConnectivityProbe(targets: [.cn204, .cloudflare, .gstatic],
+                                          timeout: .seconds(2))
+            var servers: [IPv4Address] = []
+            if let campusDNS { servers.append(campusDNS) }
+            servers.append(contentsOf: ConnectivityProbe.fallbackDNSServers)
+            let outcome = await probe.run(interface: interface, dnsServers: servers)
+            switch SessionLiveness.verdict(outcome) {
+            case .online:
                 return true
+            case .offline:
+                return false
+            case .inconclusive:
+                // 探针目标全被拦：退回校内探测，别把"网络好好的"误判成断线
+                return await CampusLiveness().probe(interface: interface, server: server, dns: campusDNS)
             }
-            let outcome = await ConnectivityProbe().run(interface: interface,
-                                                       dnsServers: ConnectivityProbe.fallbackDNSServers)
-            if case .healthy = outcome { return true }
-            return false
         }
         let engineConfiguration = EngineConfiguration(
             account: config.account,
@@ -958,6 +971,10 @@ final class AppModel {
     }
 
     func disconnect() {
+        autoReconnectTask?.cancel()
+        autoReconnectTask = nil
+        onlineWatchTask?.cancel()
+        onlineWatchTask = nil
         stopPassiveWatch()
         activityKeeper.end()
         coordinatorTask?.cancel()
@@ -977,6 +994,76 @@ final class AppModel {
         FileLogger.shared.log("重试：接口数=\(interfaces.count)，状态=\(state)")
         disconnect()
         connect()
+    }
+
+    /// 在线巡检：保活还回着、但外网已经不通的情况（真机上见过）也得能发现。
+    ///
+    /// 每 25 秒走一次真实 204 探针：
+    /// - 204：正常；
+    /// - 被门户拦下（302/200 门户页）：会话没了 → 连续两次就重新认证；
+    /// - 完全探不到：只记日志（可能只是探测目标被拦，不轻易判死刑）。
+    private func startOnlineWatch() {
+        onlineWatchTask?.cancel()
+        onlineWatchTask = Task { @MainActor [weak self] in
+            var intercepted = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(25))
+                guard let self, !Task.isCancelled else { return }
+                guard self.state.isOnline else { return }
+                let interface = self.interfaces.first { $0.name == self.config.interfaceLock }
+                    ?? self.interfaces.first(where: \.isUsableForAuthentication)
+                guard let interface else { continue }
+                var servers: [IPv4Address] = []
+                if let dns = self.config.currentProfile?.dns.compactMap(IPv4Address.init).first {
+                    servers.append(dns)
+                }
+                servers.append(contentsOf: ConnectivityProbe.fallbackDNSServers)
+                let probe = ConnectivityProbe(targets: [.cn204, .cloudflare, .gstatic],
+                                              timeout: .seconds(2))
+                let outcome = await probe.run(interface: interface, dnsServers: servers)
+                if Task.isCancelled || !self.state.isOnline { return }
+                switch SessionLiveness.verdict(outcome) {
+                case .online:
+                    intercepted = 0
+                case .offline:
+                    intercepted += 1
+                    FileLogger.shared.log("在线巡检：外网被门户拦下（第 \(intercepted) 次）")
+                    if intercepted >= 2 {
+                        self.recentLog.insert("外网断了（会话已失效），正在自动重连", at: 0)
+                        FileLogger.shared.log("在线巡检：连续 \(intercepted) 次被拦，重新认证")
+                        self.retry()
+                        return
+                    }
+                case .inconclusive:
+                    FileLogger.shared.log("在线巡检：探针不通（不算断线，只记录）")
+                }
+            }
+        }
+    }
+
+    /// 掉线后自己重连：用户不用盯着面板点「登录」。
+    ///
+    /// 只在网络类失败（超时、网关无应答、通道异常）上重试；密码错、MAC 不符、
+    /// 端口被占这些重试也没用，交给用户处理。最多 6 次，之后停下来等手动操作。
+    private func scheduleAutoReconnect(after error: DrcomError) {
+        guard config.autoConnect else { return }
+        guard ReconnectPolicy.shouldAutoReconnect(error, attempt: autoReconnectAttempt) else {
+            if autoReconnectAttempt > 0 {
+                FileLogger.shared.log("掉线自动重连：已重试 \(autoReconnectAttempt) 次，暂停等用户处理")
+            }
+            return
+        }
+        autoReconnectAttempt += 1
+        let attempt = autoReconnectAttempt
+        autoReconnectTask?.cancel()
+        autoReconnectTask = Task { @MainActor in
+            try? await Task.sleep(for: ReconnectPolicy.delay(attempt: attempt))
+            guard !Task.isCancelled else { return }
+            guard case .failed = state else { return }
+            FileLogger.shared.log("掉线自动重连：第 \(attempt) 次（\(error.userMessage)）")
+            recentLog.insert("掉线了，正在自动重连（第 \(attempt) 次）", at: 0)
+            retry()
+        }
     }
 
     /// JLU.WIFI 被挤下线时给用户的说明（三台上限 + 重进代价）。
@@ -1668,6 +1755,11 @@ final class AppModel {
             switch next {
             case .online:
                 lastOnlineAt = Date()
+                // 连上了就把"自动重连"计数清零，下次掉线重新从 3s 开始等
+                autoReconnectAttempt = 0
+                autoReconnectTask?.cancel()
+                autoReconnectTask = nil
+                startOnlineWatch()
                 if portHeldByOfficialClient { onlineViaOfficialClient = true }
                 // 在线期间别被 App Nap 挂起（不然 10s 心跳会被延迟成几十秒）
                 activityKeeper.begin()
@@ -1675,6 +1767,8 @@ final class AppModel {
                 markSuccessfulLogin()
             case .idle, .failed:
                 activityKeeper.end()
+                onlineWatchTask?.cancel()
+                onlineWatchTask = nil
             default:
                 break
             }
@@ -1726,6 +1820,7 @@ final class AppModel {
                     recentLog.insert("认证没有明确成功，但网络实际可用：按已连接处理（服务器原话：\(error.userMessage)）", at: 0)
                     FileLogger.shared.log("probe healthy after failure -> online; server said: \(error.userMessage)")
                 }
+                scheduleAutoReconnect(after: error)
             }
         case .link(let next):
             link = next
@@ -1815,8 +1910,8 @@ final class AppModel {
         guard let interface else { return false }
         // 先走 UDP DNS 探针（快），失败再补一次 HTTP：
         // 代理把 UDP 接管掉时 DNS 探针会失败，但网络其实是通的。
-        let outcome = await ConnectivityProbe().run(interface: interface,
-                                                    dnsServers: ConnectivityProbe.fallbackDNSServers)
+        let outcome = await ConnectivityProbe(targets: [.cn204, .cloudflare, .gstatic])
+            .run(interface: interface, dnsServers: ConnectivityProbe.fallbackDNSServers)
         if case .healthy = outcome {
             probeFailStreak = 0
             lastHealthyProbeAt = Date()
@@ -1836,25 +1931,34 @@ final class AppModel {
     }
 
     /// 走默认路由的一次轻量 HTTP 检查（代理下也能通）。
+    /// 真的能上网才算。
+    ///
+    /// 以前是"状态码 < 500 就算通"——被门户拦下时 URLSession 会跟到 login.jlu.edu.cn，
+    /// 最后拿到的也是 200，于是"会话没了"被当成"网络可达"，永远不会重登。
     private func httpReachable() async -> Bool {
-        for urlString in ["http://connect.rom.miui.com/generate_204",
-                          "https://www.baidu.com/"] {
-            guard let url = URL(string: urlString) else { continue }
-            var request = URLRequest(url: url)
-            request.timeoutInterval = 3
-            request.httpMethod = "GET"
-            let configuration = URLSessionConfiguration.ephemeral
-            configuration.timeoutIntervalForRequest = 3
-            configuration.waitsForConnectivity = false
-            let session = URLSession(configuration: configuration)
-            defer { session.invalidateAndCancel() }
-            if let (_, response) = try? await session.data(for: request),
-               let status = (response as? HTTPURLResponse)?.statusCode,
-               status < 500 {
-                return true
-            }
+        // 明文 204 必须真的是 204：200/3xx 都说明被门户拦了
+        if await statusCode(of: "http://connect.rom.miui.com/generate_204") == 204 {
+            return true
+        }
+        // HTTPS 能完成 TLS 且正常返回，才算真的通（门户拦截/证书替换都会失败）
+        if let code = await statusCode(of: "https://www.baidu.com/"), (200..<400).contains(code) {
+            return true
         }
         return false
+    }
+
+    private func statusCode(of urlString: String) async -> Int? {
+        guard let url = URL(string: urlString) else { return nil }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 3
+        request.httpMethod = "GET"
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 3
+        configuration.waitsForConnectivity = false
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+        guard let (_, response) = try? await session.data(for: request) else { return nil }
+        return (response as? HTTPURLResponse)?.statusCode
     }
 
     /// 是否正卡在"等网络变化"的失败态（拔网线 / 网卡没地址）。

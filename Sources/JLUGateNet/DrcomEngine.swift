@@ -125,6 +125,8 @@ public actor DrcomEngine {
     private var serialCounter: UInt16 = 0
     /// challenge 应答里服务器给的会话别名（保活 B 要带回去）。
     private var serverSessionID: UInt16 = 0
+    /// 已经记过的"未知报文"签名：同一种只记一次，避免每 20 秒刷一行 hex
+    private var loggedUnknownSignatures: Set<String> = []
     private var ticket: SessionTicket?
     private var continuations: [UUID: AsyncStream<Event>.Continuation] = [:]
     private var lastError: DrcomError?
@@ -561,8 +563,16 @@ public actor DrcomEngine {
             let remaining = deadline - clock.now()
             let datagram = try await channel.receive(timeout: remaining)
             let frame = codec.classify(datagram)
-            if case .unknown(let type, _, let length) = frame {
-                emit(.log("忽略未知报文 type=\(type) len=\(length)"))
+            if case .unknown(let type, let subtype, let length) = frame {
+                // 网关有时会发帧表里没有的包（真机见过 type=7 len=272）。
+                // 第一次遇到时把前 32 字节记进日志/诊断，下次看诊断就能推断它是什么；
+                // 同一种包只记一次，别把日志刷爆。
+                let signature = "\(type)/\(subtype)/\(length)"
+                if !loggedUnknownSignatures.contains(signature) {
+                    loggedUnknownSignatures.insert(signature)
+                    let head = datagram.prefix(32).map { String(format: "%02x", $0) }.joined(separator: " ")
+                    emit(.log("忽略未知报文 type=\(type) sub=\(subtype) len=\(length) head=\(head)"))
+                }
                 continue
             }
             if predicate(frame) { return IncomingFrame(frame: frame, payload: datagram) }

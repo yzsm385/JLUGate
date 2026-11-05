@@ -64,11 +64,13 @@ enum DiagnosticsReport {
         lines.append(CredentialStore.backendDescription)
 
         lines.append("== 端口占用 ==")
-        switch BSDChannel.diagnosePort(PacketLayout.localPort) {
+        switch BSDChannel.diagnosePortExcludingSelf(PacketLayout.localPort) {
         case .officialClient(let process, let pid):
             lines.append("61440 被官方客户端占用：\(process)（PID \(pid.map(String.init) ?? "?")）")
         case .other(let process):
             lines.append("61440 被其它进程占用：\(process)")
+        case .appItself:
+            lines.append("61440 由 JLU Gate 自己占用（认证通道，正常）")
         case .unknown:
             lines.append("61440 当前没有看见占用者（或需要管理员权限才能看到）")
         }

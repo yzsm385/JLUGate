@@ -42,8 +42,8 @@ JLU Gate 想把这三个门并成一个闸口 🚪✨。账号密码填一次，
 
 ⚠️ 两个坑先说清楚：
 
-- **macOS 14 / 15 的同学**：1.0.0 的适配包是按 macOS 26 编译的，在 14/15 上根本打不开（会提示"不能与此版本的 macOS 配合使用"）。所以旧系统要**手动装一次 1.0.1 的 Compat 包**，从 1.0.1 起才能用面板上的「更新」自动升级。
-- **macOS 26 的同学**：1.0.0 可以一键更新，但旧更新器拿到的是 Release 里排第一的 Compat 包（没有 Liquid Glass）。想要新界面，手动下 `JLU-Gate-v1.0.1.zip` 或 `.dmg`。
+- **macOS 14 / 15 的同学**：1.0.0 的适配包是按 macOS 26 编译的，在 14/15 上根本打不开（会提示"不能与此版本的 macOS 配合使用"）。所以旧系统要**手动装一次 1.0.1（或更新）的 Compat 包**，从那以后才能用面板上的「更新」自动升级。
+- **macOS 26 的同学**：1.0.0 可以一键更新，但旧更新器拿到的是 Release 里排第一的 Compat 包（没有 Liquid Glass）。想要新界面，手动下最新主包（`JLU-Gate-vx.y.z.zip` 或 `.dmg`）。
 
 装好 1.0.1 之后，更新只需要一步：面板上点「更新」→ 自动查最新 → 下载 → 退出替换 → 重新打开，安装包会自动删掉，不占空间。
 
@@ -210,8 +210,8 @@ Auto-update only exists from **1.0.0** onward:
 
 ⚠️ Two caveats:
 
-- **macOS 14 / 15**: the 1.0.0 Compat build was compiled against macOS 26 and won't launch on 14/15. Install the **1.0.1 Compat** build once by hand; from 1.0.1 on, the in-app **Update** button works.
-- **macOS 26**: 1.0.0 can update itself, but the old updater grabs the first ZIP in the release—the Compat build (no Liquid Glass). For the main build, download `JLU-Gate-v1.0.1.zip` or `.dmg` manually.
+- **macOS 14 / 15**: the 1.0.0 Compat build was compiled against macOS 26 and won't launch on 14/15. Install the **1.0.1 (or newer) Compat** build once by hand; from then on, the in-app **Update** button works.
+- **macOS 26**: 1.0.0 can update itself, but the old updater grabs the first ZIP in the release—the Compat build (no Liquid Glass). For the main build, download the latest `JLU-Gate-vx.y.z.zip` or `.dmg` manually.
 
 Once you're on 1.0.1, updating is one click: **Update** in the panel → check → download → quit & replace → relaunch, and the downloaded package is removed automatically.
 
