@@ -19,7 +19,16 @@ final class WKPortalBrowser: PortalBrowser, @unchecked Sendable {
 
     func presentLogin(url: URL) async -> PortalLoginResult {
         // 用系统浏览器完成网页认证：App 内不承载 WKWebView（真机上是崩溃来源）。
-        await MainActor.run { _ = NSWorkspace.shared.open(url) }
+        //
+        // 只替用户自动打开学校域名下的登录页。地址不是 *.jlu.edu.cn 的（比如某个人开个
+        // 热点、把门户页指向自己的站点）不自动打开——面板上会写明原因，让用户自己决定。
+        let trusted = PortalTrust.isTrusted(url)
+        if trusted {
+            await MainActor.run { _ = NSWorkspace.shared.open(url) }
+        } else {
+            FileLogger.shared.log("网页认证：入口不是 jlu.edu.cn（\(url.host ?? "-")），"
+                                  + "不自动打开，等用户在面板里确认")
+        }
         return await withCheckedContinuation { (continuation: CheckedContinuation<PortalLoginResult, Never>) in
             Task { @MainActor in
                 guard let model else {

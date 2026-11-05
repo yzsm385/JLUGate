@@ -56,23 +56,58 @@ final class AppModel {
         case failed(String)
     }
     var updateStatus: UpdateStatus = .idle
-    private var updateChecker = UpdateChecker()
+    private var updateChecker = UpdateChecker(wantsCompatAsset: BuildInfo.isCompatBuild)
 
     /// 一键更新状态文案
     var updateInstallMessage: String?
+    /// 正在下载/解压/准备替换（这时别再点「更新」）
+    var updateInstalling = false
 
     func installAvailableUpdate(page: URL?, asset: URL?) {
         guard let asset else {
             if let page { NSWorkspace.shared.open(page) }
-            updateInstallMessage = "这个版本没有 zip 资产，已打开下载页"
+            updateInstallMessage = "这个版本没有可用的安装包，已打开下载页"
             return
         }
+        updateInstalling = true
+        updateInstallMessage = "开始下载…"
         UpdateInstaller.install(from: asset) { message in
             Task { @MainActor in self.updateInstallMessage = message }
+        } onFailure: { message in
+            Task { @MainActor in
+                self.updateInstalling = false
+                self.updateInstallMessage = message
+            }
         } onReadyToQuit: {
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(300))
+                try? await Task.sleep(for: .milliseconds(400))
                 NSApp.terminate(nil)
+            }
+        }
+    }
+
+    /// 面板上那个「更新」：一步到位——查最新 → 有新版就下载替换，没新版就直说。
+    func updateNow() {
+        if case .available(_, _, let page, let asset) = updateStatus {
+            installAvailableUpdate(page: page, asset: asset)
+            return
+        }
+        guard updateStatus != .checking else { return }
+        updateStatus = .checking
+        updateInstallMessage = nil
+        Task { @MainActor in
+            let release = await updateChecker.latest(forceRefresh: true)
+            guard let release else {
+                updateStatus = .failed("查不到更新（网络或 GitHub 限流），稍后再试")
+                return
+            }
+            if UpdateVersion.isNewer(release.tag, than: BuildInfo.version) {
+                updateStatus = .available(tag: release.tag, name: release.name,
+                                          page: release.pageURL, asset: release.assetURL)
+                installAvailableUpdate(page: release.pageURL, asset: release.assetURL)
+            } else {
+                updateStatus = .upToDate
+                updateInstallMessage = "已经是最新版本（v\(BuildInfo.version)）"
             }
         }
     }

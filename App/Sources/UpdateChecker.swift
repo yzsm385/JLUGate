@@ -16,6 +16,13 @@ actor UpdateChecker {
 
     private let endpoint = URL(string: "https://api.github.com/repos/yzsm385/JLUGate/releases/latest")!
     private var cached: (date: Date, release: Release?)?
+    /// 同一份 Release 里有新版包和 macOS 14 适配包，装错了会打不开：
+    /// 适配包只认名字里带 Compat 的资产，绝不能用新包兜底。
+    private let wantsCompatAsset: Bool
+
+    init(wantsCompatAsset: Bool = false) {
+        self.wantsCompatAsset = wantsCompatAsset
+    }
 
     func latest(forceRefresh: Bool = false) async -> Release? {
         if !forceRefresh, let cached, Date().timeIntervalSince(cached.date) < 3600 {
@@ -29,13 +36,19 @@ actor UpdateChecker {
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let tag = json["tag_name"] as? String else { return nil }
-            let assets = json["assets"] as? [[String: Any]] ?? []
-            let zip = assets.first { ($0["name"] as? String)?.hasSuffix(".zip") == true }
+            let rawAssets = json["assets"] as? [[String: Any]] ?? []
+            let assets: [ReleaseAssetPicker.Asset] = rawAssets.compactMap { asset in
+                guard let name = asset["name"] as? String,
+                      let raw = asset["browser_download_url"] as? String,
+                      let url = URL(string: raw) else { return nil }
+                return ReleaseAssetPicker.Asset(name: name, url: url)
+            }
+            let zip = ReleaseAssetPicker.pick(from: assets, wantsCompat: wantsCompatAsset)
             let release = Release(
                 tag: tag,
                 name: json["name"] as? String ?? tag,
                 pageURL: (json["html_url"] as? String).flatMap(URL.init(string:)),
-                assetURL: (zip?["browser_download_url"] as? String).flatMap(URL.init(string:)),
+                assetURL: zip?.url,
                 body: json["body"] as? String ?? "")
             cached = (Date(), release)
             return release

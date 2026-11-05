@@ -197,4 +197,11 @@ enum BuildInfo {
     }
 
     static var display: String { "v\(version) (\(build))" }
+
+    /// 旧版适配包（macOS 14，无 Liquid Glass）。
+    /// 两个包同名同 bundle id，靠 `LSMinimumSystemVersion` 区分：新包是 26.0，适配包是 14.0。
+    /// 更新时用它来挑资产——给 macOS 14 的机器装新包会直接打不开。
+    static var isCompatBuild: Bool {
+        (Bundle.main.object(forInfoDictionaryKey: "LSMinimumSystemVersion") as? String) == "14.0"
+    }
 }

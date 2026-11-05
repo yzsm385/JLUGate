@@ -88,6 +88,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let model = AppModel()
         self.model = model
         observeIcon(model: model)
+        // 启动后安静地查一次有没有新版本：面板上会显示"有新版本 x.y.z"和「更新」按钮。
+        // GitHub 限流是每小时 60 次/IP，一次启动查一次完全够用。
+        Task { @MainActor [weak model] in
+            try? await Task.sleep(for: .seconds(5))
+            model?.checkForUpdates()
+        }
         FileLogger.shared.log("启动：初始化完成")
 
         if let start = DevOverrides.startPanelName, let panel = Self.panel(named: start) {

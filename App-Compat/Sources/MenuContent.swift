@@ -57,11 +57,11 @@ struct MenuContent: View {
             }
             // 关键：面板宽度固定、内容可滚动。
             // 之前子页面带着 540~640 的写死宽度塞进 360 的面板里，直接把布局撑爆。
-            ScrollView(.vertical, showsIndicators: true) {
+            // 高度**跟着内容走**（最多 520）：短页面不再留一大块空白。
+            FittingScrollView(maxHeight: 520) {
                 content()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(height: 520)
         }
         .frame(width: 380)
         .padding(12)
@@ -76,6 +76,7 @@ struct MenuContent: View {
                 actionButtons
             }
 
+            updateBar
             offCampusAssist
             footer
         }
@@ -417,5 +418,87 @@ struct MenuContent: View {
         }
         .buttonStyle(.plain)
         .foregroundStyle(.secondary)
+    }
+
+    // MARK: 更新
+
+    private var updateSummary: (icon: String, text: String, tint: Color) {
+        if model.updateInstalling, let message = model.updateInstallMessage {
+            return ("arrow.down.circle", message, .orange)
+        }
+        switch model.updateStatus {
+        case .idle:
+            return ("arrow.triangle.2.circlepath", "更新：从 GitHub 拉最新版本", .secondary)
+        case .checking:
+            return ("arrow.triangle.2.circlepath", "正在检查最新版本…", .secondary)
+        case .upToDate:
+            return ("checkmark.circle", "已是最新版本 v\(BuildInfo.version)", .green)
+        case .available(let tag, _, _, _):
+            return ("arrow.down.circle.fill", "有新版本 \(tag)：点「更新」自动下载并替换", .orange)
+        case .failed(let message):
+            return ("exclamationmark.triangle", message, .orange)
+        }
+    }
+
+    private var updateButtonTitle: String {
+        switch model.updateStatus {
+        case .available: "更新"
+        case .checking: "检查中"
+        case .failed: "重试"
+        case .upToDate: "再查一次"
+        case .idle: "更新"
+        }
+    }
+
+    /// 面板上的一行更新入口：查最新 → 下载 → 退出替换 → 重新打开（安装包会自己清掉）
+    private var updateBar: some View {
+        HStack(spacing: 6) {
+            Image(systemName: updateSummary.icon).font(.system(size: 10))
+            Text(updateSummary.text)
+                .font(.system(size: 10))
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            Button(updateButtonTitle) { model.updateNow() }
+                .controlSize(.mini)
+                .buttonStyle(.bordered)
+                .disabled(model.updateInstalling || model.updateStatus == .checking)
+        }
+        .foregroundStyle(updateSummary.tint)
+        .padding(.horizontal, 2)
+    }
+}
+
+/// 高度跟着内容走的滚动区：内容短就短，超过上限才开始滚动。
+/// 菜单栏面板的高度是内容撑出来的，写死 520 会在短页面下面留一大块空白。
+private struct FittingScrollView<Content: View>: View {
+    let maxHeight: CGFloat
+    private let content: Content
+    @State private var contentHeight: CGFloat = 0
+
+    init(maxHeight: CGFloat, @ViewBuilder content: () -> Content) {
+        self.maxHeight = maxHeight
+        self.content = content()
+    }
+
+    var body: some View {
+        ScrollView(.vertical, showsIndicators: contentHeight > maxHeight) {
+            content
+                .background(
+                    GeometryReader { proxy in
+                        Color.clear.preference(key: PanelContentHeightKey.self,
+                                               value: proxy.size.height)
+                    }
+                )
+        }
+        .frame(height: contentHeight == 0 ? maxHeight : min(contentHeight, maxHeight))
+        .onPreferenceChange(PanelContentHeightKey.self) { contentHeight = $0 }
+    }
+}
+
+private struct PanelContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

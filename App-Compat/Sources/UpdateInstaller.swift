@@ -27,16 +27,22 @@ enum UpdateInstaller {
     }
 
     /// 下载并安装。成功后调用 `onReadyToQuit`，由调用方退出 App。
+    /// 失败时调 `onFailure`（不要把错误塞进 progress，调用方要分清"进行中"和"失败了"）。
     static func install(from url: URL,
                         progress: @escaping @Sendable (String) -> Void,
+                        onFailure: @escaping @Sendable (String) -> Void,
                         onReadyToQuit: @escaping @Sendable () -> Void) {
         guard let target = installedAppURL else {
-            progress(Failure.notInstalledInApplications.localizedDescription)
+            onFailure(Failure.notInstalledInApplications.localizedDescription)
             return
         }
         let work = FileManager.default.temporaryDirectory
             .appendingPathComponent("JLU-Gate-update-\(UUID().uuidString)", isDirectory: true)
         try? FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+        // 安装脚本放在工作目录**外面**：装完要把 work 整个删掉（安装包 + 解压出来的副本），
+        // 别把正在执行的脚本一起删了。
+        let script = FileManager.default.temporaryDirectory
+            .appendingPathComponent("JLU-Gate-install-\(UUID().uuidString).sh")
 
         Task.detached(priority: .userInitiated) {
             progress("下载中…")
@@ -51,12 +57,13 @@ enum UpdateInstaller {
                 progress("解压中…")
                 let extracted = work.appendingPathComponent("extracted", isDirectory: true)
                 try run("/usr/bin/ditto", ["-xk", zip.path, extracted.path])
+                // zip 已经解开，先把安装包删掉，别白占几百 MB
+                try? FileManager.default.removeItem(at: zip)
                 guard let app = findApp(in: extracted) else {
                     throw Failure.unzipFailed("压缩包里没有 .app")
                 }
 
-                // 脚本：等旧进程退出 → 覆盖 → 清 quarantine → 重新打开
-                let script = work.appendingPathComponent("install.sh")
+                // 脚本：等旧进程退出 → 覆盖 → 清 quarantine → 重新打开 → 清理临时文件
                 let pid = ProcessInfo.processInfo.processIdentifier
                 let body = """
                 #!/bin/sh
@@ -66,6 +73,9 @@ enum UpdateInstaller {
                 ditto "\(app.path)" "\(target.path)"
                 xattr -dr com.apple.quarantine "\(target.path)" 2>/dev/null || true
                 open "\(target.path)"
+                # 装完把下载的 zip、解压出来的副本、这个脚本都清掉
+                rm -rf "\(work.path)"
+                rm -f "$0"
                 """
                 try body.write(to: script, atomically: true, encoding: .utf8)
                 try FileManager.default.setAttributes([.posixPermissions: 0o755],
@@ -78,7 +88,8 @@ enum UpdateInstaller {
                 progress("准备退出并替换…")
                 onReadyToQuit()
             } catch {
-                progress(error.localizedDescription)
+                try? FileManager.default.removeItem(at: work)
+                onFailure(error.localizedDescription)
             }
         }
     }
