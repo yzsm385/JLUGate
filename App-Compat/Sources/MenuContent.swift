@@ -120,12 +120,13 @@ struct MenuContent: View {
         case .weekendFree: Copy.t("R03")
         case .afterBlackout: Copy.t("R04")
         case .morningClass: Copy.t("R05")
+        case .sleepIn: Copy.t("R06")
         }
     }
 
     private func careTint(_ care: DormSchedule.Care) -> Color {
         switch care.kind {
-        case .morningClass: .orange
+        case .morningClass, .sleepIn: .orange
         case .blackoutSoon, .blackoutImminent, .afterBlackout: .indigo
         case .weekendFree: .purple
         }

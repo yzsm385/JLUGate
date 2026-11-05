@@ -48,6 +48,25 @@ struct DormScheduleTests {
         #expect(DormSchedule.care(at: beijing("2026-11-14T07:45:00+08:00")) == nil)
     }
 
+    @Test("接上课表之后：没早八就劝你睡懒觉")
+    func sleepIn() {
+        struct NoClass: TimetableLookup {
+            func hasClassAtEight(on day: Date) -> Bool? { false }
+        }
+        struct HasClass: TimetableLookup {
+            func hasClassAtEight(on day: Date) -> Bool? { true }
+        }
+        struct Unknown: TimetableLookup {
+            func hasClassAtEight(on day: Date) -> Bool? { nil }
+        }
+        let morning = beijing("2026-11-09T07:45:00+08:00")
+        #expect(DormSchedule.care(at: morning, timetable: NoClass())?.kind == .sleepIn)
+        #expect(DormSchedule.care(at: morning, timetable: HasClass())?.kind == .morningClass)
+        #expect(DormSchedule.care(at: morning, timetable: Unknown())?.kind == .morningClass)
+        // 还没接课表：保持原来的"工作日默认有早八"
+        #expect(DormSchedule.care(at: morning)?.kind == .morningClass)
+    }
+
     @Test("下午不打扰")
     func daytimeQuiet() {
         #expect(DormSchedule.care(at: beijing("2026-11-09T15:00:00+08:00")) == nil)

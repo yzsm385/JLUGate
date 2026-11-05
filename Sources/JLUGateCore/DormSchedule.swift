@@ -6,6 +6,13 @@ import Foundation
 /// 规则（吉林大学宿舍）：
 /// - 周日到周四：23:30 断电；
 /// - 周五、周六：不断电（下一段是 0 点，不用催）。
+/// 课表接入点：等课表功能做好之后，用真实数据回答「这天早上 8 点有没有课」。
+/// 还没接入时传 nil，就按"工作日默认有早八"来提醒。
+public protocol TimetableLookup: Sendable {
+    /// true = 有早八；false = 确定没课；nil = 不知道
+    func hasClassAtEight(on day: Date) -> Bool?
+}
+
 public enum DormSchedule {
     /// 北京时间的固定时区（中国没有夏令时，UTC+8 常年不变）
     public static let beijingTimeZone = TimeZone(secondsFromGMT: 8 * 3600)!
@@ -19,8 +26,10 @@ public enum DormSchedule {
         case weekendFree
         /// 已经熄灯（23:30 之后到 01:30）
         case afterBlackout
-        /// 早八：周一至周五 07:30–08:30
+        /// 早八：周一至周五 07:30–08:30（课表确认有课）
         case morningClass
+        /// 早上没有早八：可以睡个懒觉
+        case sleepIn
     }
 
     public struct Care: Sendable, Equatable {
@@ -37,7 +46,7 @@ public enum DormSchedule {
     private static func isBlackoutNight(_ weekday: Int) -> Bool { (1...5).contains(weekday) }
 
     /// 给定时刻该显示哪条提醒；没有就返回 nil。
-    public static func care(at date: Date) -> Care? {
+    public static func care(at date: Date, timetable: (any TimetableLookup)? = nil) -> Care? {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = beijingTimeZone
         let parts = calendar.dateComponents([.weekday, .hour, .minute], from: date)
@@ -46,8 +55,11 @@ public enum DormSchedule {
         }
         let minutes = hour * 60 + minute
 
-        // 早八：周一至周五 07:30–08:30
+        // 早八：周一至周五 07:30–08:30；课表确定没课就劝你睡懒觉
         if (2...6).contains(weekday), minutes >= 7 * 60 + 30, minutes < 8 * 60 + 30 {
+            if timetable?.hasClassAtEight(on: date) == false {
+                return Care(kind: .sleepIn)
+            }
             return Care(kind: .morningClass)
         }
 
