@@ -22,7 +22,7 @@ final class AppModel {
     var trafficStats: [UInt32] = []
     var recentLog: [String] = []
     var interfaces: [InterfaceSnapshot] = []
-    var routeSummary: String = "未检测"
+    var routeSummary: String = Copy.t("B501")
     var routeGuarantee: RouteGuarantee?
     var showWizard = false
     /// 菜单栏面板当前是否展开（关闭时不跑每秒刷新）
@@ -639,13 +639,13 @@ final class AppModel {
     }
 
     var linkTitle: String {
-        link?.displayName ?? (config.link == "auto" ? "自动（未探测）" : config.link)
+        link?.displayName ?? (config.link == "auto" ? Copy.t("B506") : config.link)
     }
 
     var detailLine: String {
         if case .failed(let error) = state { return error.userMessage }
-        if let clientIP { return "本机 \(clientIP)" }
-        if observingExistingSession { return "当前已在线上（未配置账号）" }
+        if let clientIP { return Copy.f("B507", clientIP) }
+        if observingExistingSession { return Copy.t("B508") }
         return "\(config.server):\(config.serverPort)"
     }
 
@@ -810,9 +810,9 @@ final class AppModel {
                 requirePasswordReentry = true
                 passwordSource = .savedUnverified
                 FileLogger.shared.log("保存的密码未验证过（\(PasswordFingerprint.describe(stored))）："
-                                      + "不自动使用，转去让用户重新输入")
+                                      + Copy.t("B509"))
                 recentLog.insert("本机保存的密码从未成功登录过（指纹 \(PasswordFingerprint.of(stored))）。"
-                                 + "为避免继续用错密码，请重新输入一次。", at: 0)
+                                 + Copy.t("B510"), at: 0)
                 presentWizard()
                 return
             }
@@ -826,7 +826,7 @@ final class AppModel {
             return
         }
         guard IPv4Address(config.server) != nil else {
-            state = .failed(.malformed("服务器地址不合法"))
+            state = .failed(.malformed(Copy.t("B511")))
             return
         }
         // 网线被拔掉时 interfaces 会变空：此时启动引擎只会立刻报错，
@@ -1344,10 +1344,10 @@ final class AppModel {
     func openCampusAd() {
         if let url = portalViewerURL {
             NSWorkspace.shared.open(url)
-            campusAdStatus = "已用上次记下的门户地址打开"
+            campusAdStatus = Copy.t("B512")
             return
         }
-        campusAdStatus = "正在探测门户地址…"
+        campusAdStatus = Copy.t("B513")
         Task { @MainActor in
             let interface = interfaces.first {
                 $0.isUp && (!$0.isWireless || $0.ipv4 != nil)
@@ -1608,7 +1608,7 @@ final class AppModel {
             for target in PingTarget.defaults(snapshot: snapshot) {
                 let pair = await service.compare(target, interface: interface)
                 results.append(pair.direct)
-                results.append(PingSummary(host: "经默认出口 " + pair.viaDefault.host,
+                results.append(PingSummary(host: Copy.t("B515") + pair.viaDefault.host,
                                            latencies: pair.viaDefault.latencies,
                                            attempted: pair.viaDefault.attempted))
             }
@@ -1749,7 +1749,7 @@ final class AppModel {
     private func applyDiagnostics(_ result: (interfaces: [InterfaceSnapshot], route: RouteInfo?)) {
         interfaces = result.interfaces
         guard IPv4Address(config.server) != nil else {
-            routeSummary = "服务器地址不合法"
+            routeSummary = Copy.t("B511")
             routeGuarantee = .noRoute
             return
         }
@@ -1817,7 +1817,7 @@ final class AppModel {
                 }
                 // 有线插着但没填静态参数：直接打开向导的网络参数页，而不是丢一句"连接失败"
                 if case .interfaceHasNoIPv4(let interfaceName) = error {
-                    wizardNotice = "有线网卡 \(interfaceName) 还没有 IP 地址。把学校分的静态参数填进来（或把网卡改成 DHCP）再连。"
+                    wizardNotice = Copy.f("B516", interfaceName)
                     presentWizard()
                     wizardStartsAtNetwork = true
                 }

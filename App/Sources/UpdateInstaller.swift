@@ -1,4 +1,5 @@
 import Foundation
+import JLUGateCore
 import AppKit
 
 /// 一键更新：下载 zip → 解压 → 退出 → 替换 /Applications 里的 App → 重新打开。
@@ -14,9 +15,9 @@ enum UpdateInstaller {
         var errorDescription: String? {
             switch self {
             case .notInstalledInApplications:
-                "当前 App 不在 /Applications 里，无法自动替换。请把 App 拖进应用程序文件夹后再用一键更新。"
-            case .downloadFailed(let reason): "下载失败：\(reason)"
-            case .unzipFailed(let reason): "解压失败：\(reason)"
+                Copy.t("N15")
+            case .downloadFailed(let reason): Copy.f("N16", reason)
+            case .unzipFailed(let reason): Copy.f("N17", reason)
             }
         }
     }
@@ -45,7 +46,7 @@ enum UpdateInstaller {
             .appendingPathComponent("JLU-Gate-install-\(UUID().uuidString).sh")
 
         Task.detached(priority: .userInitiated) {
-            progress("下载中…")
+            progress(Copy.t("N18"))
             do {
                 let (tmp, response) = try await URLSession.shared.download(from: url)
                 guard (response as? HTTPURLResponse)?.statusCode == 200 else {
@@ -54,13 +55,13 @@ enum UpdateInstaller {
                 let zip = work.appendingPathComponent("update.zip")
                 try FileManager.default.moveItem(at: tmp, to: zip)
 
-                progress("解压中…")
+                progress(Copy.t("N19"))
                 let extracted = work.appendingPathComponent("extracted", isDirectory: true)
                 try run("/usr/bin/ditto", ["-xk", zip.path, extracted.path])
                 // zip 已经解开，先把安装包删掉，别白占几百 MB
                 try? FileManager.default.removeItem(at: zip)
                 guard let app = findApp(in: extracted) else {
-                    throw Failure.unzipFailed("压缩包里没有 .app")
+                    throw Failure.unzipFailed(Copy.t("N20"))
                 }
 
                 // 脚本：等旧进程退出 → 覆盖 → 清 quarantine → 重新打开 → 清理临时文件
@@ -85,7 +86,7 @@ enum UpdateInstaller {
                 process.arguments = [script.path]
                 try process.run()
 
-                progress("准备退出并替换…")
+                progress(Copy.t("N21"))
                 onReadyToQuit()
             } catch {
                 try? FileManager.default.removeItem(at: work)

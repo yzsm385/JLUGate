@@ -45,17 +45,17 @@ public struct IPReputation: Sendable, Equatable {
 
     public var kindTitle: String {
         switch kind {
-        case .residential: "住宅 / 运营商 IP"
-        case .datacenter: "机房 IP（公有云/数据中心）"
-        case .mobile: "移动网络 IP"
-        case .unknown: "类型未知"
+        case .residential: Copy.t("P89")
+        case .datacenter: Copy.t("P90")
+        case .mobile: Copy.t("P91")
+        case .unknown: Copy.t("P92")
         }
     }
 
     /// 一句话结论 + 为什么
     public var summary: String {
         var head = kindTitle
-        if proxy == true { head += " · 已被标记为代理" }
+        if proxy == true { head += Copy.t("P93") }
         let place = [city, region, country].compactMap { $0 }.joined(separator: " / ")
         let who = [isp, org].compactMap { $0 }.first
         var parts = [head]
@@ -98,16 +98,16 @@ public enum IPPurityJudge {
 
         var notes: [String] = []
         if kind == .datacenter {
-            notes.append("机房 IP：访问 Claude / 银行 / 流媒体时被拒的概率更高")
+            notes.append(Copy.t("P94"))
         }
         if proxy == true {
-            notes.append("已有公开库把它标成代理/VPN 出口")
+            notes.append(Copy.t("P95"))
         }
         if let country, let cloudflareCountry, country.uppercased() != cloudflareCountry.uppercased() {
-            notes.append("IP 归属国家(\(country)) 与 Cloudflare 机房国家(\(cloudflareCountry)) 不一致，可能是广播/中转 IP")
+            notes.append(Copy.f("P96", country, cloudflareCountry))
         }
         if let country, country.uppercased() == "CN" {
-            notes.append("出口在中国大陆：境外站点可能直接按地区拒绝")
+            notes.append(Copy.t("P97"))
         }
 
         return IPReputation(ip: ip, country: country, region: region, city: city,

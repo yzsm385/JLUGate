@@ -191,7 +191,7 @@ struct AuthCoordinatorTests {
             return
         }
         #expect(error == .notCampusNetwork(detail: "全部超时"))
-        #expect(error.userMessage.contains("不是校园网"))
+        #expect(error.userMessage.contains(Copy.t("E16").split(separator: "{").first.map(String.init) ?? ""))
         #expect(spy.count == 0)
         await coordinator.stop()
     }

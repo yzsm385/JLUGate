@@ -18,11 +18,11 @@ public enum ProxyMode: String, Sendable, CaseIterable, Equatable {
 
     public var title: String {
         switch self {
-        case .direct: "直连（无代理接管）"
-        case .ruleSplit: "代理已接管公网（校内网段仍直连）"
-        case .global: "全局代理（校园网段被接管）"
-        case .tunnelIdle: "TUN 已开启但未接管默认路由"
-        case .unknown: "无法判断"
+        case .direct: Copy.t("B301")
+        case .ruleSplit: Copy.t("B302")
+        case .global: Copy.t("B303")
+        case .tunnelIdle: Copy.t("B304")
+        case .unknown: Copy.t("B305")
         }
     }
 }
@@ -37,11 +37,11 @@ public enum DeclaredProxyMode: String, Sendable, CaseIterable, Equatable {
 
     public var title: String {
         switch self {
-        case .unknown: "未设置"
-        case .config: "配置（规则分流）"
-        case .proxy: "代理（全局）"
-        case .direct: "直连"
-        case .scene: "场景"
+        case .unknown: Copy.t("B306")
+        case .config: Copy.t("B307")
+        case .proxy: Copy.t("B308")
+        case .direct: Copy.t("B309")
+        case .scene: Copy.t("B310")
         }
     }
 }
@@ -95,36 +95,36 @@ public enum ProxyModeAnalyzer {
 
     static func summary(for mode: ProxyMode, facts: ProxyFacts) -> String {
         let apps = facts.proxyAppNames.isEmpty ? nil : facts.proxyAppNames.joined(separator: "、")
-        let appText = apps.map { "（检测到：\($0)）" } ?? ""
+        let appText = apps.map { Copy.f("B311", $0) } ?? ""
         switch mode {
         case .direct:
-            return "所有流量都从物理网卡出去\(appText)，认证包不会被代理吞掉。"
+            return Copy.f("B312", appText)
         case .ruleSplit:
-            return "公网流量被代理接管，校内网段仍从 \(facts.campusRouteInterface ?? "物理网卡") 直接出去\(appText)。"
-                + "注意：小火箭/Clash 即使在「全局」模式下通常也会放行内网段，"
-                + "所以光看路由分不出「全局」还是「规则」——只要认证包没绕路，就是好事。"
+            return Copy.f("B313", facts.campusRouteInterface ?? "物理网卡", appText)
+                + Copy.t("B314")
+                + Copy.t("B315")
         case .global:
-            return "连校园网段也被虚拟网卡接管了\(appText)。认证包会绕一圈代理——能不能成功取决于这段绕路是否稳定："
-                + "延迟低、不丢包就照样能认证；一旦代理抖动/排队，认证或保活超时就会被服务器判为中断。"
+            return Copy.f("B316", appText)
+                + Copy.t("B317")
         case .tunnelIdle:
-            return "有 TUN 接口，但默认路由还没被它接管\(appText)；可能规则没命中，或代理未真正生效。"
+            return Copy.f("B318", appText)
         case .unknown:
-            return "拿不到路由信息，无法判断。"
+            return Copy.t("B319")
         }
     }
 
     static func advice(for mode: ProxyMode) -> String {
         switch mode {
         case .direct:
-            "无需改动。若你想通过代理上网，可以在小火箭里切到「配置」或「代理」。"
+            Copy.t("B320")
         case .ruleSplit:
-            "这个状态对认证最友好：不用改。若哪天掉线，先确认代理没有把 10.0.0.0/8 也接管掉。"
+            Copy.t("B321")
         case .global:
-            "全局模式下先测一下「认证通道延迟」：直连和经代理差得多、或经代理有丢包，就换成「配置」模式并把 10.0.0.0/8 设为 DIRECT（Clash: IP-CIDR,10.0.0.0/8,DIRECT）。延迟够低的话全局也能用，只是更容易被中断。"
+            Copy.t("B322")
         case .tunnelIdle:
-            "如果你希望走代理，检查小火箭的「配置」是否启用、规则是否命中；只想认证的话当前状态也可以。"
+            Copy.t("B323")
         case .unknown:
-            "到「网络详情」重新检测一次。"
+            Copy.t("B324")
         }
     }
 

@@ -61,51 +61,51 @@ public enum DrcomError: Error, Sendable, Equatable {
     public var userMessage: String {
         switch self {
         case .malformed(let detail):
-            return "报文格式错误（\(detail)）"
+            return Copy.f("E01", detail)
         case .unexpectedPacket(let type, let subtype, let length):
-            return "收到未知报文：类型 0x\(hex(type)) 子类型 0x\(hex(subtype))，长度 \(length)"
+            return Copy.f("E02", hex(type), hex(subtype), length)
         case .fieldTooLong(let field, let max):
-            return "\(field) 太长，最多 \(max) 字节"
+            return Copy.f("E03", field, max)
         case .rejected(let reason):
             return reason
         case .macMismatch(let expected, let actual):
-            let want = expected ?? "未登记"
+            let want = expected ?? Copy.t("E04")
             let got = actual ?? "无"
-            return "网卡 MAC 不匹配：档案登记 \(want)，当前接口 \(got)。换 USB 网卡后需要去学校平台登记新 MAC。"
+            return Copy.f("E05", want, got)
         case .interfaceHasNoIPv4(let name):
-            return "接口 \(name) 没有 IPv4 地址。请到系统设置给这块网卡配上静态地址（不能是 DHCP）。"
+            return Copy.f("E06", name)
         case .adapterUnplugged(let name):
-            return "网卡 \(name) 已断开（拔线或拔卡）。插回后会自动重连。"
+            return Copy.f("E07", name)
         case .dhcpAssigned(let name):
-            return "接口 \(name) 仍在使用 DHCP，未改成手动配置。静态认证不接受 DHCP 地址。"
+            return Copy.f("E08", name)
         case .staticConfigMismatch(let field, let expected, let actual):
-            return "\(field) 与档案不一致：应为 \(expected)，当前 \(actual)"
+            return Copy.f("E09", field, expected, actual)
         case .gatewayUnreachable(let host):
-            return "认证服务器 \(host) 无响应。请确认网线、静态 IP 与网关。"
+            return Copy.f("E10", host)
         case .capturedByTunnel(let name):
-            return "检测到代理接管了校园网段（出口 \(name)）。请在代理规则里把 10.0.0.0/8 设为直连，或关闭全局路由。"
+            return Copy.f("E11", name)
         case .officialClientRunning(let process, let pid):
             let pidText = pid.map { "（PID \($0)）" } ?? ""
-            return "官方 Dr.Com 客户端\(pidText)正握着认证通道（它先占了本地 61440）——通常说明它已经在替你上网。"
-                + "想让 JLU Gate 接管，先在它里面退出登录；若端口仍被占，关掉它的后台进程 DrClientNS。"
+            return Copy.f("E12", pidText)
+                + Copy.t("E13")
         case .localPortInUse(let port, let process):
             let who = process.map { "（\($0)）" } ?? ""
-            return "认证要用的那个「联系电话」（本地 61440）被别的程序先占了\(who)。"
-                + "如果是官方 Dr.Com 客户端，先退出它就对了。"
+            return Copy.f("E14", who)
+                + Copy.t("E15")
         case .accountInUse(let reason):
             return reason
         case .macInUse(let reason), .macRejected(let reason):
             return reason
         case .notCampusNetwork(let detail):
-            return "当前网络不是校园网（\(detail)）"
+            return Copy.f("E16", detail)
         case .unsupportedLink(let detail):
-            return "该接入方式尚未支持：\(detail)"
+            return Copy.f("E17", detail)
         case .timeout(let stage):
-            return "等待服务器回应超时（\(stage)）"
+            return Copy.f("E18", stage)
         case .channelFailure(let detail):
-            return "网络通道异常：\(detail)"
+            return Copy.f("E19", detail)
         case .cancelled:
-            return "已取消"
+            return Copy.t("E20")
         }
     }
 
@@ -163,7 +163,7 @@ public enum DrcomError: Error, Sendable, Equatable {
         if let code, let mapped = JLULoginError.from(code: code) {
             let combined = "\(mapped.title)：\(mapped.advice)（服务器原文：\(reason)）"
             switch mapped {
-            case .mustUseDHCP: return .dhcpAssigned(interface: "服务端要求 DHCP")
+            case .mustUseDHCP: return .dhcpAssigned(interface: Copy.t("E21"))
             default: return .rejected(reason: combined)
             }
         }

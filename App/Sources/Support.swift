@@ -71,7 +71,7 @@ enum SingleInstance {
                   build != currentBuild else { continue }
             let newer = build > currentBuild
             FileLogger.shared.log("磁盘上还有另一份 JLU Gate：\(url.path) build=\(build)"
-                                  + (newer ? "（比当前新）" : "（比当前旧，建议删掉）"))
+                                  + (newer ? Copy.t("N22") : Copy.t("N23")))
         }
     }
 
@@ -137,7 +137,7 @@ final class FileLogger: @unchecked Sendable {
                 }
                 FilePrivacy.secureFile(fileURL)
             } catch {
-                NSLog("JLUGate: 写日志失败 \(error.localizedDescription)")
+                NSLog(Copy.f("N24", error.localizedDescription))
             }
         }
     }

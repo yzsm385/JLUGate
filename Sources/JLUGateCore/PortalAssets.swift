@@ -7,10 +7,7 @@ import Foundation
 /// 但我们可以把那个页面**收进来**，做成 App 内可点开的"校园网门户"。
 public enum PortalAssets {
     /// 系统弹窗是"捕获门户助手"（Captive Network Assistant）的行为。
-    public static let systemPopupNote = """
-    连上新网络时弹出的网页是 macOS 的"捕获门户助手"，由系统触发，App 无法拦截。
-    如果它已经认证成功（本程序会尽快完成），它会自己关掉。
-    """
+    public static let systemPopupNote = Copy.t("B413")
 
     /// 想彻底关掉系统自动弹窗，需要管理员执行（会影响所有需要登录的网络）。
     public static let disableCaptiveAssistantCommand =

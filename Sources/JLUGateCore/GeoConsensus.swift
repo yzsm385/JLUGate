@@ -120,30 +120,30 @@ public enum DNSIPAlignmentEngine {
                              dnsEgress: String?, dnsCountry: String?) -> DNSIPAlignment {
         guard let dnsEgress else {
             return .init(verdict: .unknown, ipCountry: ipCountry, dnsCountry: nil,
-                         explanation: "拿不到 DNS 出口地址（可能 DNS 被代理接管或不可达），无法比对。")
+                         explanation: Copy.t("P114"))
         }
         // 198.18.x（代理 fake-ip）与私网地址不是真实的解析出口
         if dnsEgress.hasPrefix("198.18.") || dnsEgress.hasPrefix("127.")
             || dnsEgress.hasPrefix("10.") || dnsEgress.hasPrefix("192.168.")
             || dnsEgress.hasPrefix("172.16.") || dnsEgress.hasPrefix("169.254.") {
             return .init(verdict: .unknown, ipCountry: ipCountry, dnsCountry: dnsCountry,
-                         explanation: "系统 DNS 被代理接管（解析出口是 \(dnsEgress) 这个假地址），"
-                            + "所以不存在可比较的真实解析位置——这不是不一致，只是比不出来。")
+                         explanation: Copy.f("P115", dnsEgress)
+                            + Copy.t("P116"))
         }
         if dnsEgress == ip {
             return .init(verdict: .sameAddress, ipCountry: ipCountry, dnsCountry: dnsCountry,
-                         explanation: "DNS 出口与 IP 出口是同一个地址，风控看起来最自然。")
+                         explanation: Copy.t("P117"))
         }
         guard let ipCountry, let dnsCountry else {
             return .init(verdict: .unknown, ipCountry: ipCountry, dnsCountry: dnsCountry,
-                         explanation: "缺少国家信息，暂时比不出来。")
+                         explanation: Copy.t("P118"))
         }
         if ipCountry.uppercased() == dnsCountry.uppercased() {
             return .init(verdict: .sameCountry, ipCountry: ipCountry, dnsCountry: dnsCountry,
-                         explanation: "DNS 出口(\(dnsCountry)) 与 IP 出口(\(ipCountry)) 同国，风险较低。")
+                         explanation: Copy.f("P119", dnsCountry, ipCountry))
         }
         return .init(verdict: .differentCountry, ipCountry: ipCountry, dnsCountry: dnsCountry,
-                     explanation: "DNS 出自 \(dnsCountry)，IP 却在 \(ipCountry)——相距甚远，"
-                        + "风控系统很容易判定为代理/异常，比单纯的机房 IP 更容易被封。")
+                     explanation: Copy.f("P120", dnsCountry, ipCountry)
+                        + Copy.t("P121"))
     }
 }

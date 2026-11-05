@@ -13,7 +13,7 @@ final class ActivityKeeper {
 
     var isHolding: Bool { token != nil }
 
-    func begin(reason: String = "保持校园网在线") {
+    func begin(reason: String = Copy.t("N11")) {
         guard token == nil else { return }
         token = ProcessInfo.processInfo.beginActivity(
             options: [.userInitiatedAllowingIdleSystemSleep],
@@ -45,8 +45,8 @@ enum Notifier {
     /// 新版本接管旧版本时提示一次（否则用户会以为"双击没反应"）。
     static func postVersionTakeover(oldBuild: String, newBuild: String) {
         let content = UNMutableNotificationContent()
-        content.title = "已切换到新版本"
-        content.body = "旧版本（build \(oldBuild)）已退出，现在运行 build \(newBuild)。"
+        content.title = Copy.t("N12")
+        content.body = Copy.f("N13", oldBuild, newBuild)
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil))
     }
@@ -58,7 +58,7 @@ enum Notifier {
         lastKey = key
 
         let content = UNMutableNotificationContent()
-        content.title = "JLU Gate 需要你处理"
+        content.title = Copy.t("N14")
         content.body = error.userMessage
         content.sound = .default
         let request = UNNotificationRequest(identifier: UUID().uuidString,

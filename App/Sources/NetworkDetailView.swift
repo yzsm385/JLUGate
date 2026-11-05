@@ -39,27 +39,27 @@ struct NetworkDetailView: View {
                 .font(.title2)
                 .foregroundStyle((snapshot?.vpnIsActive ?? false) ? .orange : .secondary)
             VStack(alignment: .leading, spacing: 2) {
-                Text("网络详情").font(.headline)
+                Text(Copy.t("D01")).font(.headline)
                 Text(subtitle).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Button("刷新") { model.refreshNetworkDetail() }
+            Button(Copy.t("D02")) { model.refreshNetworkDetail() }
                 .buttonStyle(.bordered)
         }
         .padding(16)
     }
 
     private var subtitle: String {
-        guard let snapshot else { return "正在读取…" }
-        let vpn = snapshot.vpnIsActive ? "VPN/TUN 已接管" : "VPN/TUN 未接管"
-        let dns = snapshot.dnsLooksHijacked ? " · DNS 被代理劫持" : ""
+        guard let snapshot else { return Copy.t("D03") }
+        let vpn = snapshot.vpnIsActive ? Copy.t("D04") : Copy.t("D05")
+        let dns = snapshot.dnsLooksHijacked ? Copy.t("D06") : ""
         return "\(vpn)\(dns)"
     }
 
     // MARK: 代理模式
 
     private var proxyModeSection: some View {
-        card("代理模式（对照小火箭）") {
+        card(Copy.t("D07")) {
             if let analysis = model.proxyAnalysis {
                 HStack(spacing: 8) {
                     Image(systemName: icon(for: analysis.mode))
@@ -67,7 +67,7 @@ struct NetworkDetailView: View {
                     Text(analysis.mode.title).font(.subheadline.bold())
                     Spacer()
                     if let matches = analysis.matchesDeclared {
-                        Label(matches ? "与你的选择一致" : "与你的选择不一致",
+                        Label(matches ? Copy.t("D08") : Copy.t("D09"),
                               systemImage: matches ? "checkmark.circle" : "exclamationmark.triangle")
                             .font(.caption2)
                             .foregroundStyle(matches ? .green : .orange)
@@ -79,11 +79,11 @@ struct NetworkDetailView: View {
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
-                Text("正在判断…").font(.caption).foregroundStyle(.secondary)
+                Text(Copy.t("D10")).font(.caption).foregroundStyle(.secondary)
             }
 
             HStack {
-                Text("你在小火箭里选的是：").font(.caption2).foregroundStyle(.secondary)
+                Text(Copy.t("D11")).font(.caption2).foregroundStyle(.secondary)
                 Picker("", selection: Binding(
                     get: { model.config.declaredProxyMode },
                     set: { model.setDeclaredProxyMode($0) })) {
@@ -128,17 +128,17 @@ struct NetworkDetailView: View {
                     }
                 }
             } else {
-                Text("没有 utun 接口：当前没有代理/VPN 在抢路由。")
+                Text(Copy.t("D12"))
                     .font(.caption).foregroundStyle(.secondary)
             }
             if let route = snapshot?.defaultRoute {
-                LabeledContent("默认出口") {
+                LabeledContent(Copy.t("D13")) {
                     Text("\(route.interface ?? "?")\(route.isTunnel ? "（虚拟网卡）" : "")")
                         .font(.caption.monospaced())
                 }
             }
             if let route = snapshot?.campusRoute {
-                LabeledContent("认证流量出口") {
+                LabeledContent(Copy.t("D14")) {
                     Text("10.100.61.3 → \(route.interface ?? "?")\(route.isTunnel ? " ⚠️ 会被代理吞掉" : "")")
                         .font(.caption.monospaced())
                 }
@@ -149,55 +149,55 @@ struct NetworkDetailView: View {
     // MARK: 网口
 
     private var interfaceSection: some View {
-        card("网口") {
+        card(Copy.t("D15")) {
             ForEach(snapshot?.interfaces ?? []) { row in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
                         Text(row.name).font(.caption.bold().monospaced())
-                        if row.isWireless { tag("无线", .blue) }
+                        if row.isWireless { tag(Copy.t("D16"), .blue) }
                         if row.isUSB { tag("USB", .purple) }
                         if row.isDefaultRoute { tag("默认出口", .green) }
-                        if row.carriesCampusRoute { tag("认证流量", .orange) }
+                        if row.carriesCampusRoute { tag(Copy.t("D17"), .orange) }
                         Spacer()
-                        Text(row.isUp ? "已启用" : "未启用")
+                        Text(row.isUp ? Copy.t("D18") : Copy.t("D19"))
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                     Text("IPv4 \(row.ipv4 ?? "—") / \(row.mask ?? "—")　MAC \(row.mac ?? "—")")
                         .font(.caption2.monospaced()).foregroundStyle(.secondary)
                     if let hardware = row.hardwareMAC, hardware.lowercased() != (row.mac ?? "").lowercased() {
-                        Text("出厂 MAC \(hardware)　←　认证用的是这个（系统当前是私有/随机地址）")
+                        Text(Copy.f("D20", hardware))
                             .font(.caption2.monospaced()).foregroundStyle(.orange)
                     }
                     Text(explanationTitle(for: row)).font(.caption2).foregroundStyle(.secondary)
                     Text(explanationNote(for: row)).font(.caption2).foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                     if let linkLocal = row.linkLocal {
-                        Text("链路本地 \(linkLocal)").font(.caption2.monospaced()).foregroundStyle(.tertiary)
+                        Text(Copy.f("D21", linkLocal)).font(.caption2.monospaced()).foregroundStyle(.tertiary)
                     }
                 }
                 .padding(.vertical, 3)
             }
             if (snapshot?.interfaces ?? []).isEmpty {
-                Text("没有物理网口").font(.caption).foregroundStyle(.secondary)
+                Text(Copy.t("D22")).font(.caption).foregroundStyle(.secondary)
             }
         }
     }
 
     private var routeSection: some View {
-        card("路由与 DNS") {
+        card(Copy.t("D23")) {
             if let route = snapshot?.defaultRoute {
-                LabeledContent("默认路由") {
-                    Text("\(route.interface ?? "?")（网关 \(route.gateway ?? "—")）")
+                LabeledContent(Copy.t("D24")) {
+                    Text(Copy.f("D25", route.interface ?? "?", route.gateway ?? "—"))
                         .font(.caption.monospaced())
                 }
             }
             let dns = snapshot?.dnsServers ?? []
-            LabeledContent("系统 DNS") {
-                Text(dns.isEmpty ? "（读不到）" : dns.joined(separator: ", "))
+            LabeledContent(Copy.t("D26")) {
+                Text(dns.isEmpty ? Copy.t("D27") : dns.joined(separator: ", "))
                     .font(.caption.monospaced())
             }
             if snapshot?.dnsLooksHijacked == true {
-                Label("系统 DNS 是 198.18.x.x（代理的 fake-ip）。本程序的探针不用它，自己发 UDP 查询。",
+                Label(Copy.t("D28"),
                       systemImage: "exclamationmark.triangle")
                     .font(.caption2).foregroundStyle(.orange)
             }
@@ -207,8 +207,8 @@ struct NetworkDetailView: View {
     // MARK: 认证通道（不是模式，是实际延迟）
 
     private var authLivenessSection: some View {
-        card("认证通道延迟（UDP 61440 往返）") {
-            Text("全局代理能不能用，取决于这条路——不是看模式。直连与经代理各测 3 次真实 challenge。")
+        card(Copy.t("D29")) {
+            Text(Copy.t("D30"))
                 .font(.caption).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -223,7 +223,7 @@ struct NetworkDetailView: View {
             Button {
                 model.measureAuthLiveness()
             } label: {
-                Label(model.diagnosticsBusy ? "测量中…" : "测认证通道", systemImage: "waveform.path.ecg.rectangle")
+                Label(model.diagnosticsBusy ? Copy.t("D31") : Copy.t("D32"), systemImage: "waveform.path.ecg.rectangle")
             }
             .buttonStyle(.bordered)
             .disabled(model.diagnosticsBusy)
@@ -233,9 +233,9 @@ struct NetworkDetailView: View {
     // MARK: Ping
 
     private var pingSection: some View {
-        card("Ping（TCP 握手延迟）") {
+        card(Copy.t("D33")) {
             if model.pingResults.isEmpty {
-                Text("点下方「开始 Ping」测一下网关/公网的往返延迟；同时对比走 VPN 的额外延迟。")
+                Text(Copy.t("D34"))
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 ForEach(model.pingResults, id: \.host) { summary in
@@ -245,7 +245,7 @@ struct NetworkDetailView: View {
             Button {
                 model.runPing()
             } label: {
-                Label(model.diagnosticsBusy ? "测量中…" : "开始 Ping", systemImage: "waveform.path.ecg")
+                Label(model.diagnosticsBusy ? "测量中…" : Copy.t("D35"), systemImage: "waveform.path.ecg")
             }
             .buttonStyle(.bordered)
             .disabled(model.diagnosticsBusy)
@@ -255,16 +255,16 @@ struct NetworkDetailView: View {
     // MARK: 测速
 
     private var speedSection: some View {
-        card("测速（HTTP 下载，对比直连与 VPN）") {
+        card(Copy.t("D36")) {
             if model.speedResults.isEmpty {
-                Text("会分别用「网口直连」和「当前默认出口（含 VPN）」各下载一次，单位 Mbps。")
+                Text(Copy.t("D37"))
                     .font(.caption).foregroundStyle(.secondary)
             } else {
                 ForEach(model.speedResults, id: \.self) { result in
                     Text(result.description).font(.caption.monospaced())
                 }
                 if !model.speedResults.contains(where: { $0.boundInterface != nil }) {
-                    Label("网口直连测速不可用：可能被校园网关限制，或该端点只允许走代理。",
+                    Label(Copy.t("D38"),
                           systemImage: "info.circle")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
@@ -272,7 +272,7 @@ struct NetworkDetailView: View {
             Button {
                 model.runSpeedTest()
             } label: {
-                Label(model.diagnosticsBusy ? "测速中…" : "开始测速", systemImage: "speedometer")
+                Label(model.diagnosticsBusy ? Copy.t("D39") : Copy.t("D40"), systemImage: "speedometer")
             }
             .buttonStyle(.bordered)
             .disabled(model.diagnosticsBusy)
@@ -296,10 +296,10 @@ struct NetworkDetailView: View {
 
     private var footer: some View {
         HStack {
-            Button("复制全部") { model.copyNetworkDetail() }
+            Button(Copy.t("D41")) { model.copyNetworkDetail() }
                 .buttonStyle(.bordered)
             Spacer()
-            Button("关闭") { model.closeNetworkDetail() }
+            Button(Copy.t("D42")) { model.closeNetworkDetail() }
                 .buttonStyle(.bordered)
         }
         .padding(12)

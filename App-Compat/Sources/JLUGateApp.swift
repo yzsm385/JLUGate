@@ -1,4 +1,5 @@
 import SwiftUI
+import JLUGateCore
 import AppKit
 
 /// 菜单栏常驻应用（`LSUIElement = YES`）。
@@ -179,22 +180,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let model, let button = statusItem?.button else { return }
         let menu = NSMenu()
         let toggle = model.state.isOnline
-            ? NSMenuItem(title: "断开连接", action: #selector(disconnectFromMenu), keyEquivalent: "")
-            : NSMenuItem(title: "立即连接", action: #selector(connectFromMenu), keyEquivalent: "")
+            ? NSMenuItem(title: Copy.t("N01"), action: #selector(disconnectFromMenu), keyEquivalent: "")
+            : NSMenuItem(title: Copy.t("N02"), action: #selector(connectFromMenu), keyEquivalent: "")
         toggle.target = self
         menu.addItem(toggle)
         menu.addItem(.separator())
-        let status = NSMenuItem(title: "刷新状态", action: #selector(refreshFromMenu), keyEquivalent: "")
+        let status = NSMenuItem(title: Copy.t("N03"), action: #selector(refreshFromMenu), keyEquivalent: "")
         status.target = self
         menu.addItem(status)
-        let inspect = NSMenuItem(title: "网络体检", action: #selector(inspectFromMenu), keyEquivalent: "")
+        let inspect = NSMenuItem(title: Copy.t("N04"), action: #selector(inspectFromMenu), keyEquivalent: "")
         inspect.target = self
         menu.addItem(inspect)
-        let settings = NSMenuItem(title: "设置…", action: #selector(settingsFromMenu), keyEquivalent: ",")
+        let settings = NSMenuItem(title: Copy.t("N05"), action: #selector(settingsFromMenu), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "退出 JLU Gate", action: #selector(quitFromMenu), keyEquivalent: "q")
+        let quit = NSMenuItem(title: Copy.t("N06"), action: #selector(quitFromMenu), keyEquivalent: "q")
         quit.target = self
         menu.addItem(quit)
         // 直接把菜单弹在按钮下方：比"临时挂 menu + performClick"可靠
@@ -282,7 +283,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if abs(frame.minX - lastLoggedIconX) > 4 {   // 每次激活都测，但只有位置变了才写日志
             lastLoggedIconX = frame.minX
             FileLogger.shared.log("图标：位置 x=\(Int(frame.minX))…\(Int(frame.maxX))，"
-                                  + "屏宽 \(Int(screen.frame.width))，中线 \(Int(mid))")
+                                  + Copy.f("N07", Int(screen.frame.width), Int(mid)))
         }
         var misplaced = frame.midX < mid
         if DevOverrides.healPlacementOnLaunch && !devHealUsed {
@@ -298,11 +299,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // 写了位置偏好反而更靠左 → 这台系统不是"离右边多少点"的语义，
             // 再写小值只会更糟。撤回偏好，回到系统默认摆放，本轮到此为止。
             FileLogger.shared.log("图标：位置偏好反而把它推得更左（\(Int(baseline)) → \(Int(frame.midX))），"
-                                  + "撤回偏好、回默认摆放")
+                                  + Copy.t("N08"))
             revertStatusItemPlacement()
             return
         }
-        healStatusItemPlacement(reason: "图标落在屏幕左半边")
+        healStatusItemPlacement(reason: Copy.t("N09"))
     }
 
     /// 撤回位置偏好：换一个全新的 autosaveName、不写任何偏好，让系统按默认规则摆放。
@@ -383,7 +384,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenuItem = NSMenuItem()
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "关于 JLU Gate", action: nil, keyEquivalent: "")
+        appMenu.addItem(withTitle: Copy.t("N10"), action: nil, keyEquivalent: "")
         appMenu.addItem(.separator())
         let quit = NSMenuItem(title: "退出 JLU Gate", action: #selector(quitFromMenu), keyEquivalent: "q")
         quit.target = self

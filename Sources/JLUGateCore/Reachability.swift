@@ -12,11 +12,11 @@ public enum ProbeStage: String, Sendable, Equatable {
     public var human: String {
         switch self {
         case .ok: "通"
-        case .dns: "域名解析失败"
-        case .tcp: "连不上服务器"
-        case .tls: "加密握手被拒"
-        case .http: "服务器拒绝请求"
-        case .cancelled: "超时取消"
+        case .dns: Copy.t("B325")
+        case .tcp: Copy.t("B326")
+        case .tls: Copy.t("B327")
+        case .http: Copy.t("B328")
+        case .cancelled: Copy.t("B329")
         }
     }
 }
@@ -35,7 +35,7 @@ public struct SiteResult: Sendable, Equatable, Identifiable {
     /// 访问范围说明（界面用）：邮箱不是校内独有。
     public var accessNote: String {
         guard isCampus else { return "" }
-        return isCampusOnly ? "仅校内网" : "校内外都能开"
+        return isCampusOnly ? Copy.t("B330") : Copy.t("B331")
     }
 
     public var id: String { host }
@@ -56,9 +56,9 @@ public struct SiteResult: Sendable, Equatable, Identifiable {
     public var display: String {
         switch stage {
         case .ok:
-            return httpStatus.map { "通（HTTP \($0)）" } ?? "通"
+            return httpStatus.map { Copy.f("B332", $0) } ?? "通"
         case .http:
-            return httpStatus.map { "服务器回 \($0)" } ?? "服务器拒绝"
+            return httpStatus.map { Copy.f("B333", $0) } ?? Copy.t("B334")
         default:
             return stage.human
         }
@@ -96,24 +96,24 @@ public enum ReachabilityDiagnosisEngine {
                                 proxyInUse: Bool) -> ReachabilityDiagnosis {
         guard hasUsableInterface else {
             return .init(verdict: .noInterface,
-                         summary: "网卡没有可用地址，等于网线没插好。",
-                         action: "插好网线 / 确认这块网卡拿到了 IP。")
+                         summary: Copy.t("B335"),
+                         action: Copy.t("B336"))
         }
         guard !sites.isEmpty else {
-            return .init(verdict: .unknown, summary: "还没有检测结果。", action: "点「开始排查」。")
+            return .init(verdict: .unknown, summary: Copy.t("B337"), action: Copy.t("B338"))
         }
 
         // 先看结果：全都通的话，校内认证服务器没回执也不影响你上网
         let ok = sites.filter(\.ok)
         if ok.count == sites.count {
             return .init(verdict: .healthy,
-                         summary: "全部站点都通，网络正常。",
-                         action: "无需处理。")
+                         summary: Copy.t("B339"),
+                         action: Copy.t("B340"))
         }
         if campusAuthReachable == false {
             return .init(verdict: .campusAuthDown,
-                         summary: "有站点不通，同时连学校认证服务器都没有回执——问题更可能在校内这一段。",
-                         action: "先确认在校园网内（有线/JLU.PC），或稍等再试；若长时间如此，可能是学校认证服务器在维护。")
+                         summary: Copy.t("B341"),
+                         action: Copy.t("B342"))
         }
 
         let dnsFails = sites.filter { $0.stage == .dns }.count
@@ -126,28 +126,28 @@ public enum ReachabilityDiagnosisEngine {
 
         if dnsFails >= max(2, sites.count - 1) {
             return .init(verdict: .dnsBroken,
-                         summary: "绝大多数站点都卡在「域名解析」这一步：域名没被翻译成地址。",
-                         action: "换一个 DNS（例如 223.5.5.5）试试；如果开了代理，检查它的 DNS 设置有没有把查询打回本地。")
+                         summary: Copy.t("B343"),
+                         action: Copy.t("B344"))
         }
         if tlsFails >= 2 {
             return .init(verdict: .tlsRejected,
-                         summary: "能连上服务器，但加密握手被拒——中间有设备在拦或证书不对。",
-                         action: "若开了代理，先关掉它再试；仍失败多半是网络侧的拦截。")
+                         summary: Copy.t("B345"),
+                         action: Copy.t("B346"))
         }
         if httpFails >= 2 {
             return .init(verdict: .siteRefused,
-                         summary: "连接和加密都成功，是网站自己回了拒绝（4xx/5xx）。",
-                         action: "换个时间再试；这类问题通常与你本机、代理无关。")
+                         summary: Copy.t("B347"),
+                         action: Copy.t("B348"))
         }
         if overseasAllFail, overseasCount > 0, domesticOK {
             if proxyInUse {
                 return .init(verdict: .proxyBroken,
-                             summary: "国内网站通、国外全不通：代理在跑，但它的出口没把流量带出去。",
-                             action: "在代理里换一个节点，或看它的日志/流量是否用尽；也可以先关掉代理验证直连是否更快。")
+                             summary: Copy.t("B349"),
+                             action: Copy.t("B350"))
             }
             return .init(verdict: .blockedOverseas,
-                         summary: "国内网站通、国外全不通，而且没有代理在跑——这就是典型的「没开代理」。",
-                         action: "需要访问境外站点时打开代理；只想校内上网则无需处理。")
+                         summary: Copy.t("B351"),
+                         action: Copy.t("B352"))
         }
         // 校内系统全挂、公网正常 → 不是代理问题，是不在校园网
         // 只有"校内独有"的系统全挂才说明不在校园网；邮箱在校外也能开，不能当证据
@@ -157,19 +157,19 @@ public enum ReachabilityDiagnosisEngine {
             // 邮箱在校外也能开，不能算"仅校内"；这里只点名真正的校内独有系统
             let names = campusOnly.map(\.host).joined(separator: "、")
             return .init(verdict: .campusUnreachable,
-                         summary: "公网站点能上，但校内系统（\(names)）不通——它们只对校内网开放；邮箱校内外都能开，不算证据。",
-                         action: "如果在校外，用学校 WebVPN 再访问；在校内则先确认认证是否成功（有线/JLU.PC）。")
+                         summary: Copy.f("B353", names),
+                         action: Copy.t("B354"))
         }
 
         if tcpFails >= 2 {
             return .init(verdict: .proxyBroken,
-                         summary: "多个站点连 TCP 都失败：出口这一段断了（代理或上游）。",
+                         summary: Copy.t("B355"),
                          action: proxyInUse
-                            ? "换代理节点；仍不行就把代理关掉，用直连确认校园网是否正常。"
-                            : "确认校园网是否已认证；也可以先 ping 网关看看。")
+                            ? Copy.t("B356")
+                            : Copy.t("B357"))
         }
         return .init(verdict: .unknown,
-                     summary: "部分站点不通，但没有集中在一个环节。",
-                     action: "看下面每站的失败环节，再决定查 DNS、代理还是网站本身。")
+                     summary: Copy.t("B358"),
+                     action: Copy.t("B359"))
     }
 }

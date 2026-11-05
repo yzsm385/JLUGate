@@ -16,12 +16,12 @@ public enum NetworkValidation {
 
         public var message: String {
             switch self {
-            case .invalidIPv4(let field): "\(field) 不是合法的 IPv4"
-            case .invalidMask(let mask): "子网掩码不连续：\(mask)"
+            case .invalidIPv4(let field): Copy.f("B201", field)
+            case .invalidMask(let mask): Copy.f("B202", mask)
             case .gatewayNotInSubnet(let ip, let mask, let gateway):
-                "网关 \(gateway) 不在 \(ip)/\(mask) 网段内"
-            case .gatewayEqualsHost(let gateway): "网关不能和本机 IP 相同（\(gateway)）"
-            case .invalidMAC(let mac): "MAC 格式不对：\(mac)"
+                Copy.f("B203", gateway, ip, mask)
+            case .gatewayEqualsHost(let gateway): Copy.f("B204", gateway)
+            case .invalidMAC(let mac): Copy.f("B205", mac)
             }
         }
     }
@@ -56,7 +56,7 @@ public enum NetworkValidation {
 
         var gatewayValue: IPv4Address?
         if let gateway, !gateway.isEmpty {
-            if let parsed = IPv4Address(gateway) { gatewayValue = parsed } else { issues.append(.invalidIPv4(field: "网关")) }
+            if let parsed = IPv4Address(gateway) { gatewayValue = parsed } else { issues.append(.invalidIPv4(field: Copy.t("B206"))) }
         }
 
         if let mac, !mac.isEmpty, MACAddress(mac) == nil {

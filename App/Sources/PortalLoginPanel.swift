@@ -17,7 +17,7 @@ struct PortalLoginPanel: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Text("请在下方完成校园网登录。程序不会保存或上传你的明文密码。")
+            Text(Copy.t("A01"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -28,19 +28,19 @@ struct PortalLoginPanel: View {
                 Image(systemName: trusted ? "safari" : "exclamationmark.shield")
                     .font(.system(size: 34))
                     .foregroundStyle(trusted ? Color.secondary : Color.orange)
-                Text(trusted ? "已用默认浏览器打开登录页" : "没有自动打开：地址不在 jlu.edu.cn 下")
+                Text(trusted ? Copy.t("A02") : Copy.t("A03"))
                     .font(.callout)
                 Text(url.absoluteString)
                     .font(.caption2.monospaced())
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                 Text(trusted
-                     ? "在浏览器里完成登录后，回到这里点「已完成登录」。程序不会接触你的明文密码。"
-                     : "确认当前 Wi-Fi 是学校的 JLU.WIFI / JLU.PC，并且这个地址可信，再继续。")
+                     ? Copy.t("A04")
+                     : Copy.t("A05"))
                     .font(.caption2).foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
-                Button(trusted ? "重新打开登录页" : "仍要打开这个页面") {
+                Button(trusted ? Copy.t("A06") : Copy.t("A07")) {
                     NSWorkspace.shared.open(url)
                 }
                 .buttonStyle(.bordered)
@@ -49,10 +49,10 @@ struct PortalLoginPanel: View {
             .padding(.vertical, trusted ? 40 : 20)
 
             HStack(spacing: 8) {
-                Button("取消") { model.finishPortalLogin(.cancelled) }
+                Button(Copy.t("A08")) { model.finishPortalLogin(.cancelled) }
                     .buttonStyle(.bordered)
                 Spacer()
-                Button("已完成登录") { model.finishPortalLogin(.succeeded) }
+                Button(Copy.t("A09")) { model.finishPortalLogin(.succeeded) }
                     .buttonStyle(.borderedProminent)
             }
         }
@@ -60,11 +60,11 @@ struct PortalLoginPanel: View {
 
     private var warning: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Label("这个登录页不是 jlu.edu.cn 的地址", systemImage: "exclamationmark.triangle.fill")
+            Label(Copy.t("A10"), systemImage: "exclamationmark.triangle.fill")
                 .font(.caption2).bold()
                 .foregroundStyle(.orange)
-            Text("只有在确认当前 Wi-Fi 是学校的 JLU.WIFI / JLU.PC 时才继续；"
-                 + "名字可疑的网络里别在这里输入账号密码。")
+            Text(Copy.t("A11")
+                 + Copy.t("A12"))
                 .font(.system(size: 9))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

@@ -6,7 +6,7 @@
   <a href="#english">🇬🇧 English</a>
 </p>
 
-> 📌 吉林大学校园网的 macOS 菜单栏小工具。
+> 📌 吉林大学校园网的 macOS 菜单栏小工具。界面支持 **简体中文 / 繁體中文 / English**，跟着系统语言走。
 
 在吉大用 Mac 上网，有点像进了一栋有三个门、却只发一张卡的大楼 🏢：宿舍网线走 Dr.Com，JLU.PC 也走 Dr.Com，JLU.WIFI 又得开浏览器点网页认证——三个入口，账号密码却是同一套。每次换网络都得重新刷一遍卡；真断网了，对着一句冷冰冰的"未连接"干瞪眼 🫠，分不清是学校的事、DNS 的事，还是自己开的代理在捣乱。
 
@@ -174,7 +174,7 @@ JLU Gate 想把这三个门并成一个闸口 🚪✨。账号密码填一次，
 
 # JLU Gate 🛡️
 
-> 📌 A macOS menu-bar tool for Jilin University's campus network.
+> 📌 A macOS menu-bar tool for Jilin University's campus network. UI ships in **Simplified Chinese / Traditional Chinese / English**, following your system language.
 
 Using a Mac on the JLU campus is a bit like entering a building with three doors but only one key card 🏢: dorm wired internet uses Dr.Com, JLU.PC also uses Dr.Com, and JLU.WIFI requires a browser-based web login—three entrances, one shared set of credentials. Every time you switch networks you re-authenticate; when the connection drops, you stare at a cold "not connected" message 🫠, unsure whether it's the school, DNS, or your own proxy causing trouble.
 

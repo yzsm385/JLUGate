@@ -35,32 +35,38 @@ struct SelfServiceGuideCard: View {
                 Image(systemName: isDynamicWiFi ? "wifi" : "graduationcap")
                     .foregroundStyle(.blue)
                     .font(.system(size: titleSize))
-                Text(isDynamicWiFi ? "JLU.WIFI：不用填 IP / MAC"
-                                   : "不会填？去校园网自助平台查")
+                Text(isDynamicWiFi ? Copy.t("G01")
+                                   : Copy.t("G02"))
                     .font(.system(size: titleSize, weight: .semibold))
                 Spacer(minLength: 0)
             }
 
             Text(isDynamicWiFi
-                 ? "它是网页认证，地址由 DHCP 动态分配；用统一身份认证的账号密码在登录页登录。"
-                   + "先确认 Wi-Fi 名字就是 JLU.WIFI（大写、带点），别在同名的可疑网络里输账号。"
-                 : "固定 IP、网关在「查询信息」里；登记 MAC 在「变更 MAC」里。连不上也可能是网费欠了。")
+                 ? Copy.t("G03")
+                   + Copy.t("G04")
+                 : Copy.t("G05"))
                 .font(.system(size: bodySize))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            HStack(spacing: 6) {
+            // 文案变长（尤其英文）后，两个按钮并排会被截断：改成竖排，各占一行
+            VStack(alignment: .leading, spacing: 6) {
                 Button {
                     NSWorkspace.shared.open(JLUAccessPolicy.selfServiceURL)
                 } label: {
-                    Label("打开 ip.jlu.edu.cn/pay", systemImage: "safari")
+                    Label(Copy.t("G06"), systemImage: "safari")
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
 
-                Button(showSteps ? "收起" : "看步骤") { showSteps.toggle() }
+                Button(showSteps ? Copy.t("G07") : Copy.t("G08")) { showSteps.toggle() }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
             }
 
             if showSteps { steps }
@@ -76,21 +82,21 @@ struct SelfServiceGuideCard: View {
     private var steps: some View {
         VStack(alignment: .leading, spacing: 6) {
             if isDynamicWiFi {
-                stepRow("1", "连上 JLU.WIFI（名字要一模一样），菜单栏点图标 →「登录」，"
-                              + "在打开的网页里用统一身份认证的账号密码登录。")
-                stepRow("2", "不用填 IP / 掩码 / 网关 / MAC——地址是动态分配的，网页认证只认账号。")
-                stepRow("3", "自助平台只用来查网费、开户、看在线的设备。")
+                stepRow("1", Copy.t("G09")
+                              + Copy.t("G10"))
+                stepRow("2", Copy.t("G11"))
+                stepRow("3", Copy.t("G12"))
             } else {
-                stepRow("1", "用校园卡号（录取通知书上那串，如 20220501324）＋ 6 位数字密码 ＋ 验证码登录。")
-                stepRow("2", "点「查询信息」：IP、网关、DNS 都在这儿——这里没有 MAC。")
-                stepRow("3", "登记 MAC 走另一个入口：点「变更 MAC」进去看/改。")
-                stepRow("4", "列表里没有你的 IP：回主菜单点「网络开户」，开通后再回来查。")
+                stepRow("1", Copy.t("G13"))
+                stepRow("2", Copy.t("G14"))
+                stepRow("3", Copy.t("G15"))
+                stepRow("4", Copy.t("G16"))
             }
 
             HStack(spacing: 10) {
-                disclosureButton("三种密码", isOpen: showPasswords) { showPasswords.toggle() }
+                disclosureButton(Copy.t("G17"), isOpen: showPasswords) { showPasswords.toggle() }
                 if !isDynamicWiFi {
-                    disclosureButton("自己电脑的 MAC", isOpen: showMACHint) { showMACHint.toggle() }
+                    disclosureButton(Copy.t("G18"), isOpen: showMACHint) { showMACHint.toggle() }
                 }
             }
 
@@ -132,7 +138,7 @@ struct SelfServiceGuideCard: View {
 
     /// 选成有线/JLU.PC 的人也可能其实是 Wi-Fi——顺手点一句，省得白填
     private var wifiNote: some View {
-        Label("如果其实是连 JLU.WIFI：这些静态参数一个都不用填，那是动态地址的网页认证。",
+        Label(Copy.t("G19"),
               systemImage: "wifi")
             .font(.system(size: bodySize - 1))
             .foregroundStyle(.secondary)
@@ -141,12 +147,12 @@ struct SelfServiceGuideCard: View {
 
     private var passwordList: some View {
         VStack(alignment: .leading, spacing: 5) {
-            factRow("吉大 V 卡（校园卡）",
-                    "账号 = 录取通知书号；密码 = 6 位数字。自助平台用的是这套。")
-            factRow("吉大邮箱",
-                    "独立的一套密码，只用来登邮箱；账号格式和统一账号一样。")
-            factRow("统一身份认证",
-                    "教务、VPN、还有本 App（含 JLU.WIFI 网页登录）用的都是这套。")
+            factRow(Copy.t("G20"),
+                    Copy.t("G21"))
+            factRow(Copy.t("G22"),
+                    Copy.t("G23"))
+            factRow(Copy.t("G24"),
+                    Copy.t("G25"))
         }
         .padding(8)
         .background(Color.primary.opacity(0.04),
@@ -156,12 +162,12 @@ struct SelfServiceGuideCard: View {
     /// 自己这台 Mac 上，两块网卡的 MAC 分别在哪看（按系统设置的路径写，照着点就行）
     private var macList: some View {
         VStack(alignment: .leading, spacing: 5) {
-            factRow("有线网卡",
-                    "系统设置 → 网络 → 点那根有线（USB 网卡也在这）→ 详细信息 → MAC 地址。")
+            factRow(Copy.t("G26"),
+                    Copy.t("G27"))
             factRow("Wi-Fi",
-                    "系统设置 → Wi-Fi → 点已加入的网（JLU.WIFI / JLU.PC）旁的「⋯」→ MAC。")
-            Text("要的是这块网卡的物理地址。系统若开了「私有 Wi-Fi 地址 / 随机 MAC」，"
-                 + "先关掉它，或在 App 里勾「用登记的 MAC 认证」。")
+                    Copy.t("G28"))
+            Text(Copy.t("G29")
+                 + Copy.t("G30"))
                 .font(.system(size: bodySize - 1))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -187,11 +193,11 @@ struct SelfServiceGuideCard: View {
                 .foregroundStyle(.orange)
                 .font(.system(size: bodySize))
             VStack(alignment: .leading, spacing: 1) {
-                Text("连不上，也可能是欠费")
+                Text(Copy.t("G31"))
                     .font(.system(size: bodySize, weight: .medium))
-                Text("-10 元、0 元都还能上；到 -20 元就断（有线 / JLU.PC / JLU.WIFI 都一样）。"
-                     + "充值档位只有 20 / 40 / 100，钱从校园卡余额扣——欠 20 时充 20 变成 0 不算数，"
-                     + "要充 40 让余额变成 20 才能用。")
+                Text(Copy.t("G32")
+                     + Copy.t("G33")
+                     + Copy.t("G34"))
                     .font(.system(size: bodySize - 1))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -203,7 +209,7 @@ struct SelfServiceGuideCard: View {
 
 /// 向导里的一行版：只给入口和最关键的一句，不抢正文的位置。
 struct SelfServiceHintRow: View {
-    var text: String = "这些数字在自助平台「查询信息」里，用校园卡号 + 6 位 V 卡密码登录。"
+    var text: String = Copy.t("G35")
     @State private var expanded = false
 
     var body: some View {
@@ -217,19 +223,25 @@ struct SelfServiceHintRow: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            HStack(spacing: 6) {
+            // 英文文案较长：两个入口竖排，避免按钮被截断
+            VStack(alignment: .leading, spacing: 4) {
                 Button {
                     NSWorkspace.shared.open(JLUAccessPolicy.selfServiceURL)
                 } label: {
-                    Label("打开自助平台", systemImage: "safari")
+                    Label(Copy.t("G36"), systemImage: "safari")
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
 
-                Button(expanded ? "收起" : "新生看这里") { expanded.toggle() }
+                Button(expanded ? Copy.t("G07") : Copy.t("G37")) { expanded.toggle() }
                     .buttonStyle(.plain)
                     .font(.system(size: 10))
                     .foregroundStyle(.blue)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
             }
             if expanded {
                 SelfServiceGuideCard(compact: true)

@@ -10,25 +10,25 @@ struct DeveloperPanel: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text("诊断与开发").font(.headline)
-                Text("平时不用；出问题要反馈时，用这里的导出。所有文件都已脱敏（账号 stu***、MAC 只留前三段）。")
+                Text(Copy.t("X01")).font(.headline)
+                Text(Copy.t("X02"))
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                action("导出诊断文件…", "square.and.arrow.up",
-                       detail: "生成一份 txt（接口/路由/最近日志），用于反馈问题") {
+                action(Copy.t("X03"), "square.and.arrow.up",
+                       detail: Copy.t("X04")) {
                     model.exportDiagnostics()
-                    hint = "已在 Finder 中打开诊断文件"
+                    hint = Copy.t("X05")
                 }
-                action("复制诊断到剪贴板", "doc.on.clipboard",
-                       detail: "把同样的内容直接复制，粘贴给他人即可") {
+                action(Copy.t("X06"), "doc.on.clipboard",
+                       detail: Copy.t("X07")) {
                     model.copyDiagnostics()
-                    hint = "诊断内容已复制"
+                    hint = Copy.t("X08")
                 }
-                action("复制参数卡", "qrcode",
-                       detail: "当前配置的一段可粘贴文本（不含密码），换机时可直接导入") {
+                action(Copy.t("X09"), "qrcode",
+                       detail: Copy.t("X10")) {
                     model.exportConfigCard()
-                    hint = "参数卡已复制"
+                    hint = Copy.t("X11")
                 }
 
                 if let hint {
@@ -38,8 +38,8 @@ struct DeveloperPanel: View {
                 Divider().opacity(0.4)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("字段是什么意思").font(.caption).bold()
-                    Text("详情页不再堆解释；要查某个字段（DNS、网关、TUN…）看这里。")
+                    Text(Copy.t("X12")).font(.caption).bold()
+                    Text(Copy.t("X13"))
                         .font(.system(size: 9)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     ForEach(FieldGuide.entries) { entry in

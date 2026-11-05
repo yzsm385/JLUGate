@@ -25,7 +25,7 @@ struct AccountFormatTests {
     func teacherAccount() {
         let analysis = AccountFormat.analyze("zhangshanwu")
         #expect(analysis.kind == .teacherOrVariant)
-        #expect(analysis.hint.contains("教师"))
+        #expect(analysis.hint == Copy.t("B213"))
         #expect(analysis.isLikelyValid)
     }
 
@@ -45,9 +45,7 @@ struct AccountFormatTests {
 
     @Test("格式说明里同时涵盖学生与教师，并点明密码是邮箱密码")
     func guidanceText() {
-        #expect(AccountFormat.guidance.contains("学生"))
-        #expect(AccountFormat.guidance.contains("教师"))
-        #expect(AccountFormat.guidance.contains("邮箱密码"))
+        #expect(AccountFormat.guidance == Copy.f("B216", AccountFormat.mailDomain))
     }
 }
 

@@ -44,21 +44,21 @@ public enum AccountFormat {
         let normalized = normalize(raw)
         guard !normalized.isEmpty else {
             return Analysis(normalized: "", kind: .unrecognized,
-                            hint: "请输入学校邮箱 @\(mailDomain) 前面那一段。")
+                            hint: Copy.f("B211", mailDomain))
         }
         guard normalized.allSatisfy({ $0.isASCII && ($0.isLetter || $0.isNumber) }) else {
             return Analysis(normalized: normalized, kind: .unrecognized,
-                            hint: "账号只能包含字母和数字（就是邮箱前缀，不要整个邮箱）。")
+                            hint: Copy.t("B212"))
         }
         guard let firstDigit = normalized.firstIndex(where: { $0.isNumber }) else {
             // 纯字母：教师格式（或同名变体）
             return Analysis(normalized: normalized, kind: .teacherOrVariant,
-                            hint: "看起来是教师账号：姓名全拼（如 zhangshanwu）。同名时学校会加后缀，以邮箱实际地址为准。密码是邮箱密码。")
+                            hint: Copy.t("B213"))
         }
         let digits = normalized[firstDigit...]
         guard digits.count == 4, digits.allSatisfy(\.isNumber) else {
             return Analysis(normalized: normalized, kind: .unrecognized,
-                            hint: "学生账号 = 姓全拼 + 名首字母 + 4 位数字（专业代码 2 位 + 入学年份 2 位），例如 zhangcyy2122。")
+                            hint: Copy.t("B214"))
         }
         let codes = Array(digits)
         let professional = String(codes[0...1])
@@ -66,13 +66,9 @@ public enum AccountFormat {
         return Analysis(
             normalized: normalized,
             kind: .student(professionalCode: professional, enrollmentYear: year),
-            hint: "学生账号：专业代码 \(professional)，\(year) 年入学。密码是邮箱密码。")
+            hint: Copy.f("B215", professional, year))
     }
 
     /// 向导里展示的格式说明（一段话，可直接给用户看）。
-    public static let guidance = """
-    账号就是学校邮箱 @\(mailDomain) 前面那一段，密码就是邮箱密码：
-    · 学生：姓全拼 + 名各字首字母 + 4 位数字（专业代码 2 位 + 入学年份 2 位），如 zhangcyy2122；
-    · 教师：姓名全拼，如 zhangshanwu（同名时学校会加后缀，以邮箱实际地址为准）。
-    """
+    public static let guidance = Copy.f("B216", mailDomain)
 }

@@ -26,7 +26,7 @@ struct ConnectionStatusView: View {
                         .foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                     if error.requiresUserAction {
-                        Text("需要你处理一下；改完后点「重试」。")
+                        Text(Copy.t("C01"))
                             .font(.caption2).foregroundStyle(.secondary)
                     }
                 }
@@ -48,20 +48,20 @@ struct ConnectionStatusView: View {
                 Button {
                     model.retry()
                 } label: {
-                    Label("重试", systemImage: "arrow.clockwise")
+                    Label(Copy.t("C02"), systemImage: "arrow.clockwise")
                 }
                 .buttonStyle(.bordered)
 
                 Button {
                     model.presentNetworkDetail()
                 } label: {
-                    Label("网络详情", systemImage: "network")
+                    Label(Copy.t("C03"), systemImage: "network")
                 }
                 .buttonStyle(.bordered)
 
                 Spacer()
 
-                Button("关闭") { model.closeConnectionStatus() }
+                Button(Copy.t("C04")) { model.closeConnectionStatus() }
                     .buttonStyle(.bordered)
             }
         }

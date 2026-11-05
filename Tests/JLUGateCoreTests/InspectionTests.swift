@@ -6,8 +6,8 @@ import Testing
 struct InspectionTests {
     @Test("出口与本机相同 → 没走代理")
     func sameExit() {
-        #expect(InspectionVerdict.ipHint(country: "CN", sameAsLocal: true).contains("没有走代理"))
-        #expect(InspectionVerdict.ipHint(country: "JP", sameAsLocal: false).contains("JP"))
+        #expect(InspectionVerdict.ipHint(country: "CN", sameAsLocal: true) == Copy.t("P54"))
+        #expect(InspectionVerdict.ipHint(country: "JP", sameAsLocal: false) == Copy.f("P55", "JP"))
     }
 
     @Test("WebRTC：拿到地址就说会暴露；没回执说明被挡住反而安全")
@@ -25,27 +25,27 @@ struct InspectionTests {
     @Test("人机验证：区分全挂/被挑战/正常")
     func captcha() {
         let blocked = EndpointCheck(name: "a", url: "", state: .blocked)
-        #expect(InspectionVerdict.captchaHint([blocked, blocked]).contains("加载不出来"))
+        #expect(InspectionVerdict.captchaHint([blocked, blocked]) == Copy.t("P61"))
 
         let challenged = EndpointCheck(name: "a", url: "", state: .challenge)
-        #expect(InspectionVerdict.captchaHint([challenged]).contains("重点照顾"))
+        #expect(InspectionVerdict.captchaHint([challenged]) == Copy.f("P62", 1))
 
         let ok = EndpointCheck(name: "a", url: "", state: .ok)
-        #expect(InspectionVerdict.captchaHint([ok, ok]).contains("没被针对"))
+        #expect(InspectionVerdict.captchaHint([ok, ok]) == Copy.t("P63"))
     }
 
     @Test("DNS 泄漏：出口不同要如实说")
     func dnsSummary() {
         let same = DNSLeakSample(systemResolver: "10.0.0.1", systemEgress: "1.2.3.4",
                                  publicEgress: "1.2.3.4", hijackSuspected: false)
-        #expect(same.summary.contains("一致"))
+        #expect(same.summary == Copy.f("P45", "1.2.3.4"))
 
         let different = DNSLeakSample(systemResolver: "10.0.0.1", systemEgress: "1.2.3.4",
                                       publicEgress: "192.0.2.61", hijackSuspected: false)
-        #expect(different.summary.contains("两套路"))
+        #expect(different.summary == Copy.f("P46", "1.2.3.4", "192.0.2.61"))
 
         let none = DNSLeakSample(systemResolver: nil, systemEgress: nil,
                                  publicEgress: nil, hijackSuspected: false)
-        #expect(none.summary.contains("拦"))
+        #expect(none.summary == Copy.t("P49"))
     }
 }

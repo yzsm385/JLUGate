@@ -28,14 +28,14 @@ struct SitesPanel: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Image(systemName: "link")
-                    Text("吉大常用站点").font(.headline)
+                    Text(Copy.t("T01")).font(.headline)
                     Spacer()
                 }
 
-                TextField("搜站点、域名或用途…", text: $query)
+                TextField(Copy.t("T02"), text: $query)
                     .textFieldStyle(.roundedBorder)
 
-                Text("标注「仅校内」的站点在校外打不开，先连 WebVPN；「需 VPN」表示页面能开、里面的资源要校园网。")
+                Text(Copy.t("T03"))
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -44,7 +44,7 @@ struct SitesPanel: View {
 
                 ForEach(grouped, id: \.category) { group in
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(group.category.rawValue)
+                        Text(group.category.displayName)
                             .font(.caption).bold()
                             .foregroundStyle(.secondary)
                         ForEach(group.sites) { site in
@@ -54,7 +54,7 @@ struct SitesPanel: View {
                 }
 
                 if grouped.isEmpty {
-                    Text("没有匹配的站点").font(.caption).foregroundStyle(.secondary)
+                    Text(Copy.t("T04")).font(.caption).foregroundStyle(.secondary)
                 }
             }
             .padding(12)
@@ -76,12 +76,12 @@ struct SitesPanel: View {
     @ViewBuilder
     private var campusAdCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("校园网门户 / 今日广告").font(.caption).bold()
+            Text(Copy.t("T05")).font(.caption).bold()
             HStack(spacing: 8) {
                 Button {
                     model.openCampusAd()
                 } label: {
-                    Label("打开门户", systemImage: "megaphone")
+                    Label(Copy.t("T06"), systemImage: "megaphone")
                 }
                 .buttonStyle(.borderedProminent).controlSize(.small)
                 if let status = model.campusAdStatus {
@@ -89,7 +89,7 @@ struct SitesPanel: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Text("认证后学校常弹一个欢迎/广告页；这里直接给你地址，用系统浏览器打开，不自动弹。")
+            Text(Copy.t("T07"))
                 .font(.system(size: 9)).foregroundStyle(.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -104,31 +104,31 @@ struct SitesPanel: View {
     @ViewBuilder
     private var myCollegeCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("我的学院").font(.caption).bold()
+            Text(Copy.t("T08")).font(.caption).bold()
             if let college = model.myCollege {
                 HStack(spacing: 6) {
                     Text(college.name).font(.system(size: 12, weight: .medium))
                     Spacer()
-                    Button("打开官网") {
+                    Button(Copy.t("T09")) {
                         if let url = college.url { NSWorkspace.shared.open(url) }
                     }
                     .buttonStyle(.bordered).controlSize(.small)
-                    Button("换一个") { model.clearMyCollege() }
+                    Button(Copy.t("T10")) { model.clearMyCollege() }
                         .buttonStyle(.link).font(.system(size: 10))
                 }
                 Text(college.host).font(.system(size: 10)).foregroundStyle(.secondary)
             } else {
-                Text("填学号，选一次学院，之后自动认出来（只存在本机）")
+                Text(Copy.t("T11"))
                     .font(.system(size: 10)).foregroundStyle(.secondary)
             }
             if model.myCollege == nil {
                 HStack(spacing: 6) {
-                    TextField("学号", text: Binding(
+                    TextField(Copy.t("T12"), text: Binding(
                         get: { model.studentID },
                         set: { model.updateStudentID($0) }))
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 140)
-                    TextField("搜学院名或域名", text: $collegeQuery)
+                    TextField(Copy.t("T13"), text: $collegeQuery)
                         .textFieldStyle(.roundedBorder)
                 }
                 let matches = CollegeDirectory.search(collegeQuery)
@@ -148,7 +148,7 @@ struct SitesPanel: View {
                     .buttonStyle(.plain)
                 }
                 if matches.count > 6, !showAllColleges {
-                    Button("展开全部 \(matches.count) 个学院") { showAllColleges = true }
+                    Button(Copy.f("T14", matches.count)) { showAllColleges = true }
                         .buttonStyle(.link).font(.system(size: 10))
                 }
             }
@@ -162,11 +162,11 @@ struct SitesPanel: View {
     /// 明确告诉用户"一共有多少个"，避免只看到 6 个以为就这些
     private func collegeCountText(_ total: Int) -> String {
         let all = CollegeDirectory.all.count
-        if total == all { return "一共 \(all) 个学院" }
+        if total == all { return Copy.f("T15", all) }
         if total > 6, !showAllColleges {
-            return "匹配 \(total) 个，先显示前 6 个；继续输入可以缩小范围，或点下面展开"
+            return Copy.f("T16", total)
         }
-        return "匹配 \(total) 个"
+        return Copy.f("T17", total)
     }
 
     private func row(_ site: JLUSite) -> some View {
@@ -175,7 +175,7 @@ struct SitesPanel: View {
                 Text(site.title).font(.system(size: 12, weight: .medium))
                 badge(site.access)
                 Spacer()
-                Button("打开") { open(site) }
+                Button(Copy.t("T18")) { open(site) }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
             }
@@ -184,8 +184,8 @@ struct SitesPanel: View {
                 .fixedSize(horizontal: false, vertical: true)
             if site.supportsCredentialPrefill {
                 HStack(spacing: 6) {
-                    Button("复制账号") { copyAccount() }
-                    Button("复制密码") { copyPassword() }
+                    Button(Copy.t("T19")) { copyAccount() }
+                    Button(Copy.t("T20")) { copyPassword() }
                 }
                 .buttonStyle(.link)
                 .font(.system(size: 10))
@@ -198,7 +198,7 @@ struct SitesPanel: View {
     }
 
     private func badge(_ access: JLUSite.Access) -> some View {
-        Text(access.rawValue)
+        Text(access.displayName)
             .font(.system(size: 9))
             .padding(.horizontal, 5).padding(.vertical, 1)
             .background(access == .publicSite ? Color.green.opacity(0.15)
@@ -217,25 +217,25 @@ struct SitesPanel: View {
 
     private func copyAccount() {
         guard !model.account.isEmpty else {
-            flash("还没填账号——先到设置里填一次")
+            flash(Copy.t("T21"))
             return
         }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(model.account, forType: .string)
-        flash("账号已复制：\(model.account)")
+        flash(Copy.f("T22", model.account))
     }
 
     private func copyPassword() {
         guard let password = model.storedPasswordForPrefill(), !password.isEmpty else {
-            flash("本机没有保存密码——先在设置里保存一次")
+            flash(Copy.t("T23"))
             return
         }
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(password, forType: .string)
         let changeCount = pasteboard.changeCount
-        flash("密码已复制，60 秒后自动清空剪贴板")
+        flash(Copy.t("T24"))
         Task { @MainActor in
             try? await Task.sleep(for: .seconds(60))
             // 只有剪贴板还是我们写的那一条才清，避免误删用户新复制的内容

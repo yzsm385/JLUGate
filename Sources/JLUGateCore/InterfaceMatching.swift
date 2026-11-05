@@ -50,10 +50,10 @@ public enum InterfaceMatching {
                                candidates: [InterfaceMACCandidate],
                                locked: String?) -> String {
         if let locked, candidates.contains(where: { $0.name == locked }) {
-            return "已锁定使用 \(locked)。"
+            return Copy.f("B157", locked)
         }
         guard let registered else {
-            return "还没填登记 MAC：程序会在所有网卡里挑最合适的一块（有线优先）。"
+            return Copy.t("B158")
         }
         let matched = matchedCandidates(registered: registered, candidates: candidates)
         switch matched.count {
@@ -61,12 +61,12 @@ public enum InterfaceMatching {
             let listed = candidates
                 .map { "\($0.name)=\($0.macForAuthentication ?? "—")" }
                 .joined(separator: "、")
-            return "没有网卡的 MAC 等于登记的 \(registered)（现有：\(listed)）。请换回登记过的那块网卡，或去自助平台改登记。"
+            return Copy.f("B159", registered, listed)
         case 1:
-            return "已按 MAC 自动匹配到 \(matched[0].name)（\(matched[0].macForAuthentication ?? "—")）。"
+            return Copy.f("B160", matched[0].name, matched[0].macForAuthentication ?? "—")
         default:
             let names = matched.map(\.name).joined(separator: "、")
-            return "有多块网卡都等于登记 MAC：\(names)。建议在下面手动指定一块。"
+            return Copy.f("B161", names)
         }
     }
 }

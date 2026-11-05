@@ -34,7 +34,7 @@ struct MenuContent: View {
                     if let url = model.pendingPortalLoginURL {
                         PortalLoginPanel(url: url)
                     } else {
-                        Text("没有待完成的网页认证").font(.caption)
+                        Text(Copy.t("M01")).font(.caption)
                     }
                 }
             }
@@ -48,7 +48,7 @@ struct MenuContent: View {
                 Button {
                     model.show(.main)
                 } label: {
-                    Label("返回", systemImage: "chevron.left")
+                    Label(Copy.t("M02"), systemImage: "chevron.left")
                         .labelStyle(.titleAndIcon)
                         .font(.caption)
                 }
@@ -99,7 +99,7 @@ struct MenuContent: View {
                         .font(.system(size: 10)).foregroundStyle(.red)
                         .fixedSize(horizontal: false, vertical: true)
                     if error.requiresUserAction {
-                        Text("需要你处理一下；改完后点「重试」。")
+                        Text(Copy.t("M03"))
                             .font(.system(size: 9)).foregroundStyle(.tertiary)
                     }
                 }
@@ -146,15 +146,15 @@ struct MenuContent: View {
 
     private var detailGrid: some View {
         VStack(alignment: .leading, spacing: 6) {
-            detailRow("链路", model.linkTitle, hint: linkHint)
+            detailRow(Copy.t("M04"), model.linkTitle, hint: linkHint)
             if let ip = model.clientIP {
-                detailRow("本机 IP", ip, hint: "学校分给这台机器的门牌号", mono: true)
+                detailRow(Copy.t("M05"), ip, hint: Copy.t("M06"), mono: true)
             }
             if model.state.isOnline {
-                detailRow("已在线", timeText, hint: "这期间认证一直在续，不用你管", mono: true)
+                detailRow(Copy.t("M07"), timeText, hint: Copy.t("M08"), mono: true)
             }
-            detailRow("出口", model.routeSummary,
-                      hint: "认证包从哪张网卡出去；走代理不一定坏，但慢/丢包会被判掉线", small: true)
+            detailRow(Copy.t("M09"), model.routeSummary,
+                      hint: Copy.t("M10"), small: true)
         }
     }
 
@@ -163,7 +163,9 @@ struct MenuContent: View {
                            hint: String, mono: Bool = false, small: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(label).font(.caption2).foregroundStyle(.secondary)
-                .frame(width: 44, alignment: .leading)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 96, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
                 Text(value)
                     .font(mono ? .caption.monospacedDigit() : (small ? .caption2 : .caption))
@@ -177,10 +179,10 @@ struct MenuContent: View {
 
     private var linkHint: String {
         switch model.config.link {
-        case "wired": "插网线的那种，最稳"
-        case "jluPC": "学校无线信号，要用 Wi-Fi 网卡的身份认证"
-        case "jluWiFi": "网页登录那种，走浏览器"
-        default: "自动：先探一下再决定用哪条路"
+        case "wired": Copy.t("M11")
+        case "jluPC": Copy.t("M12")
+        case "jluWiFi": Copy.t("M13")
+        default: Copy.t("M14")
         }
     }
 
@@ -197,7 +199,7 @@ struct MenuContent: View {
             DateFormatter.localizedString(from: $0, dateStyle: .none, timeStyle: .short)
         }
         let duration = String(format: "%d:%02d", total / 60, total % 60)
-        return absolute.map { "\($0) 起 · \(duration)" } ?? duration
+        return absolute.map { Copy.f("M15", $0, duration) } ?? duration
     }
 
     // MARK: 动作
@@ -211,7 +213,7 @@ struct MenuContent: View {
                     Button {
                         model.presentWizard()
                     } label: {
-                        Label("填写账号密码（断线后自动重连）", systemImage: "person.badge.key")
+                        Label(Copy.t("M16"), systemImage: "person.badge.key")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -220,7 +222,7 @@ struct MenuContent: View {
                     Button {
                         model.disconnect()
                     } label: {
-                        Label("下线", systemImage: "stop.circle")
+                        Label(Copy.t("M17"), systemImage: "stop.circle")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -228,7 +230,7 @@ struct MenuContent: View {
                     Button {
                         model.connect()
                     } label: {
-                        Label("登录", systemImage: "bolt.horizontal.circle")
+                        Label(Copy.t("M18"), systemImage: "bolt.horizontal.circle")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -239,7 +241,7 @@ struct MenuContent: View {
                     Button {
                         model.retry()
                     } label: {
-                        Label("重试", systemImage: "arrow.clockwise")
+                        Label(Copy.t("M19"), systemImage: "arrow.clockwise")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -261,7 +263,7 @@ struct MenuContent: View {
                     Button {
                         model.presentWizard()
                     } label: {
-                        Label("重新输入密码", systemImage: "key")
+                        Label(Copy.t("M20"), systemImage: "key")
                             .font(.caption2)
                     }
                     .buttonStyle(.link)
@@ -272,7 +274,7 @@ struct MenuContent: View {
 
             if case .manual(let command, _) = model.routeGuarantee, !model.state.isOnline {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("代理接管了校园网段，需要先加一条直连路由：")
+                    Text(Copy.t("M21"))
                         .font(.caption2)
                         .foregroundStyle(.orange)
                     Text(command)
@@ -280,11 +282,11 @@ struct MenuContent: View {
                         .textSelection(.enabled)
                         .lineLimit(3)
                     HStack {
-                        Button("复制命令") {
+                        Button(Copy.t("M22")) {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(command, forType: .string)
                         }
-                        Button("我已执行，重新检测") { model.refreshDiagnostics() }
+                        Button(Copy.t("M23")) { model.refreshDiagnostics() }
                     }
                     .buttonStyle(.link)
                     .font(.caption2)
@@ -295,7 +297,7 @@ struct MenuContent: View {
 
             if model.portalLimitNotice != nil, !model.state.isOnline {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("JLU.WIFI 同时最多 \(JLUWiFiLimits.maxDevices) 台设备", systemImage: "exclamationmark.circle")
+                    Label(Copy.f("M24", JLUWiFiLimits.maxDevices), systemImage: "exclamationmark.circle")
                         .font(.caption)
                         .foregroundStyle(.orange)
                     Text(JLUWiFiLimits.reclaimNotice)
@@ -305,7 +307,7 @@ struct MenuContent: View {
                     Button {
                         model.reclaimPortal()
                     } label: {
-                        Label("重新抢回在线", systemImage: "arrow.uturn.backward.circle")
+                        Label(Copy.t("M25"), systemImage: "arrow.uturn.backward.circle")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
@@ -316,7 +318,7 @@ struct MenuContent: View {
                 Button {
                     model.openPortalLogin()
                 } label: {
-                    Label("打开网页登录页", systemImage: "safari")
+                    Label(Copy.t("M26"), systemImage: "safari")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -326,7 +328,7 @@ struct MenuContent: View {
                 Button {
                     model.presentWizard()
                 } label: {
-                    Label("重新设置…", systemImage: "wand.and.stars")
+                    Label(Copy.t("M27"), systemImage: "wand.and.stars")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
@@ -344,7 +346,7 @@ struct MenuContent: View {
                     model.adoptDetectedMAC()
                     model.retry()
                 } label: {
-                    Label("改用出厂 MAC \(detected)", systemImage: "wand.and.stars")
+                    Label(Copy.f("M28", detected), systemImage: "wand.and.stars")
                         .font(.caption2)
                 }
                 .buttonStyle(.link)
@@ -357,7 +359,7 @@ struct MenuContent: View {
         Button {
             NSWorkspace.shared.open(JLUAccessPolicy.selfServiceURL)
         } label: {
-            Label("打开自助平台（改登记 MAC）", systemImage: "safari")
+            Label(Copy.t("M29"), systemImage: "safari")
                 .font(.caption2)
         }
         .buttonStyle(.link)
@@ -367,9 +369,9 @@ struct MenuContent: View {
     private func accountConflictHint(for error: DrcomError) -> String? {
         switch error {
         case .accountInUse:
-            return "同一账号同一时刻只能一台设备在线。想让本机上线：到那台设备上退出（或等约 30 秒自动释放）再点重试。"
+            return Copy.t("M30")
         case .macInUse:
-            return "这个 MAC 已被别的设备占用。若你换了网卡/共用廉价网卡，请到学校平台核对登记。"
+            return Copy.t("M31")
         case .macRejected:
             return JLUAccessPolicy.rejectedByMacHint
         case .macMismatch(let expected, let actual):
@@ -392,25 +394,27 @@ struct MenuContent: View {
 
     private var footer: some View {
         // 380 宽放不下一行 7 个按钮：改成两行、等宽网格，图标在上文字在下
-        VStack(spacing: 6) {
-            HStack(spacing: 2) {
-                footerButton("设置", "gearshape") { model.presentSettings() }
-                footerButton("站点", "link") { model.show(.sites) }
-                footerButton("详情", "network") { model.presentNetworkDetail() }
-                footerButton("诊断", "stethoscope.circle") { model.show(.developer) }
-                footerButton("体检", "stethoscope") { model.show(.inspect) }
-                footerButton("退出", "power") { NSApplication.shared.terminate(nil) }
-            }
+        HStack(spacing: 2) {
+            footerButton(Copy.t("M32"), "gearshape") { model.presentSettings() }
+            footerButton(Copy.t("M33"), "link") { model.show(.sites) }
+            footerButton(Copy.t("M34"), "network") { model.presentNetworkDetail() }
+            footerButton(Copy.t("M35"), "stethoscope.circle") { model.show(.developer) }
+            footerButton(Copy.t("M36"), "stethoscope") { model.show(.inspect) }
+            footerButton(Copy.t("M37"), "power") { NSApplication.shared.terminate(nil) }
         }
         .padding(.horizontal, 2)
     }
 
     private func footerButton(_ title: String, _ symbol: String,
                               action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        // 底栏不放 emoji：已经有 SF Symbol 图标，emoji 会把文字挤到下一行
+        let label = Copy.withoutEmoji(title)
+        return Button(action: action) {
             VStack(spacing: 2) {
                 Image(systemName: symbol).font(.system(size: 13))
-                Text(title).font(.system(size: 10))
+                Text(label).font(.system(size: 9.5))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.65)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 4)
@@ -428,13 +432,13 @@ struct MenuContent: View {
         }
         switch model.updateStatus {
         case .idle:
-            return ("arrow.triangle.2.circlepath", "更新：从 GitHub 拉最新版本", .secondary)
+            return ("arrow.triangle.2.circlepath", Copy.t("M38"), .secondary)
         case .checking:
-            return ("arrow.triangle.2.circlepath", "正在检查最新版本…", .secondary)
+            return ("arrow.triangle.2.circlepath", Copy.t("M39"), .secondary)
         case .upToDate:
-            return ("checkmark.circle", "已是最新版本 v\(BuildInfo.version)", .green)
+            return ("checkmark.circle", Copy.f("M40", BuildInfo.version), .green)
         case .available(let tag, _, _, _):
-            return ("arrow.down.circle.fill", "有新版本 \(tag)：点「更新」自动下载并替换", .orange)
+            return ("arrow.down.circle.fill", Copy.f("M41", tag), .orange)
         case .failed(let message):
             return ("exclamationmark.triangle", message, .orange)
         }
@@ -442,11 +446,11 @@ struct MenuContent: View {
 
     private var updateButtonTitle: String {
         switch model.updateStatus {
-        case .available: "更新"
-        case .checking: "检查中"
-        case .failed: "重试"
-        case .upToDate: "再查一次"
-        case .idle: "更新"
+        case .available: Copy.t("M42")
+        case .checking: Copy.t("M43")
+        case .failed: Copy.t("M19")
+        case .upToDate: Copy.t("M44")
+        case .idle: Copy.t("M42")
         }
     }
 

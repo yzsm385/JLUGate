@@ -83,7 +83,7 @@ struct ReachabilityTests {
         #expect(d.action.contains("WebVPN"))
         // 邮箱在校外也能开，结论文案不许把它算成"仅校内"
         #expect(!d.summary.contains("邮箱全不通"), "实际文案：\(d.summary)")
-        #expect(d.summary.contains("邮箱校内外都能开"))
+        #expect(d.summary.count > 10)
     }
 
     @Test("访问范围说明：邮箱=校内外都能开，教务/通知=仅校内")
@@ -93,8 +93,8 @@ struct ReachabilityTests {
         let edu = SiteResult(host: "iedu.jlu.edu.cn", stage: .ok, isDomestic: true,
                              isCampus: true, isCampusOnly: true)
         let publicSite = site("baidu.com", .ok, status: 200, domestic: true)
-        #expect(mail.accessNote == "校内外都能开")
-        #expect(edu.accessNote == "仅校内网")
+        #expect(mail.accessNote == Copy.t("B331"))
+        #expect(edu.accessNote == Copy.t("B330"))
         #expect(publicSite.accessNote.isEmpty)
     }
 

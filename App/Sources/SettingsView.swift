@@ -38,55 +38,55 @@ struct SettingsView: View {
             Section {
                 SelfServiceGuideCard(link: draft.link)
             } header: {
-                Label("新生 / 第一次用", systemImage: "questionmark.bubble")
+                Label(Copy.t("S01"), systemImage: "questionmark.bubble")
             }
 
-            Section("账号") {
-                TextField("学校邮箱前缀（如 zhangcyy2122 / zhangshanwu）", text: $draft.account)
-                SecureField("密码（存 Keychain）", text: $draft.password)
+            Section(Copy.t("S02")) {
+                TextField(Copy.t("S03"), text: $draft.account)
+                SecureField(Copy.t("S04"), text: $draft.password)
                 if let saved = model.storedPasswordSummary {
-                    Text("留空 = 继续用已保存的密码（\(saved)）")
+                    Text(Copy.f("S05", saved))
                         .font(.system(size: 9)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
-            Section("链路") {
-                Picker("接入方式", selection: $draft.link) {
-                    Text("自动").tag("auto")
-                    Text("有线").tag("wired")
+            Section(Copy.t("S06")) {
+                Picker(Copy.t("S07"), selection: $draft.link) {
+                    Text(Copy.t("S08")).tag("auto")
+                    Text(Copy.t("S09")).tag("wired")
                     Text("JLU.PC").tag("jluPC")
                     Text("JLU.WIFI").tag("jluWiFi")
                 }
-                Label("Wi-Fi 名字要一模一样：JLU.PC / JLU.WIFI（大写、中间是一个点）；"
-                      + "同名网络先确认是不是学校的，可疑网络里别输账号。",
+                Label(Copy.t("S10")
+                      + Copy.t("S11"),
                       systemImage: "exclamationmark.shield")
                     .font(.system(size: 9)).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
-                Picker("通道实现", selection: $draft.channel) {
-                    Text("BSD（默认，最接近官方客户端）").tag("bsd")
-                    Text("NW（系统网络框架）").tag("nw")
+                Picker(Copy.t("S12"), selection: $draft.channel) {
+                    Text(Copy.t("S13")).tag("bsd")
+                    Text(Copy.t("S14")).tag("nw")
                 }
-                Text("BSD：原始 socket，能精确绑定源端口 61440 和网卡（IP_BOUND_IF）；"
-                     + "NW：走 Network.framework，受系统路径管理。两者发的是同样的 UDP 包，"
-                     + "默认用 BSD，遇到系统限制再换 NW。")
+                Text(Copy.t("S15")
+                     + Copy.t("S16")
+                     + Copy.t("S17"))
                     .font(.system(size: 9)).foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
             Section {
-                Text("固定网络参数（只用于有线 / JLU.PC）")
+                Text(Copy.t("S18"))
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.secondary)
                 if draft.link == "jluWiFi" {
-                    Label("当前选的是 JLU.WIFI：动态分配地址 + 网页认证，下面这些静态参数都不用填。",
+                    Label(Copy.t("S19"),
                           systemImage: "wifi")
                         .font(.system(size: 9)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     LabeledAddressField(title: "IP", kind: .ipv4, text: $draft.ip,
-                                        hint: "学校分给你的固定地址，按通知单照抄（不是 DHCP 分到的）",
+                                        hint: Copy.t("S20"),
                                         onSubmit: focusNextField)
                         .onChange(of: draft.ip) { _, newValue in
                             let parts = newValue.split(separator: "·").map(String.init)
@@ -96,40 +96,40 @@ struct SettingsView: View {
                                 draft.gateway = "\(parts[0])·\(parts[1])·\(parts[2])·254"
                             }
                         }
-                    LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $draft.mask,
-                                        hint: "一般是 255.255.255.0",
+                    LabeledAddressField(title: Copy.t("S21"), kind: .ipv4, text: $draft.mask,
+                                        hint: Copy.t("S22"),
                                         onSubmit: focusNextField)
-                    LabeledAddressField(title: "网关", kind: .ipv4, text: $draft.gateway,
-                                        hint: "同网段的第一跳，通常是 x.x.x.254",
+                    LabeledAddressField(title: Copy.t("S23"), kind: .ipv4, text: $draft.gateway,
+                                        hint: Copy.t("S24"),
                                         onSubmit: focusNextField)
                     LabeledAddressField(title: "DNS", kind: .ipv4, text: Binding(
                         get: { draft.dns.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? "" },
                         set: { draft.dns = $0 }),
-                                        hint: "校内 10.10.10.10；校外可换 223.5.5.5")
-                    LabeledAddressField(title: "登记 MAC", kind: .mac, text: $draft.registeredMAC,
-                                        hint: "学校登记的那块网卡的物理地址（不是系统随机 MAC）",
+                                        hint: Copy.t("S25"))
+                    LabeledAddressField(title: Copy.t("S26"), kind: .mac, text: $draft.registeredMAC,
+                                        hint: Copy.t("S27"),
                                         onSubmit: save)
                 }
-                Toggle("兼容模式：关闭液态玻璃（虚拟机/老显卡上更稳，重启生效）", isOn: $draft.compatibilityMode)
-                Toggle("系统用了私有/随机 MAC 时，用登记的 MAC 认证（高级）", isOn: $draft.useRegisteredMACForAuth)
-                Text("只影响认证报文里的 MAC 字段，不改网卡本身。优选方案仍是到系统设置里把「私有地址」关掉。")
+                Toggle(Copy.t("S28"), isOn: $draft.compatibilityMode)
+                Toggle(Copy.t("S29"), isOn: $draft.useRegisteredMACForAuth)
+                Text(Copy.t("S30"))
                     .font(.caption2).foregroundStyle(.secondary)
             } header: {
-                Text("静态网络参数")
+                Text(Copy.t("S31"))
             }
 
-            Section("系统当前值（仅供核对）") {
+            Section(Copy.t("S32")) {
                 ForEach(model.orderedInterfaces, id: \.name) { item in
                     Text("\(item.name)：\(item.ipv4 ?? "无 IPv4")  当前 MAC \(item.mac ?? "—")  出厂 MAC \(item.hardwareMAC ?? "—")")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Text("路由：\(model.routeSummary)")
+                Text(Copy.f("S33", model.routeSummary))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            Section("网卡") {
+            Section(Copy.t("S34")) {
                 Text(model.interfaceMatchingSummary)
                     .font(.caption2)
                     .foregroundStyle(model.interfaceCandidates.contains(where: {
@@ -137,45 +137,45 @@ struct SettingsView: View {
                     }) ? Color.secondary : Color.orange)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Picker("使用哪块网卡", selection: Binding(
+                Picker(Copy.t("S35"), selection: Binding(
                     get: { model.config.interfaceLock ?? "" },
                     set: { model.selectInterface($0.isEmpty ? nil : $0) })) {
-                    Text("自动（按 MAC 认）").tag("")
+                    Text(Copy.t("S36")).tag("")
                     ForEach(model.interfaceCandidates) { candidate in
                         Text("\(candidate.name)  \(candidate.macForAuthentication ?? "—")")
                             .tag(candidate.name)
                     }
                 }
 
-                Button("按登记 MAC 自动选一次") { model.autoSelectInterface() }
+                Button(Copy.t("S37")) { model.autoSelectInterface() }
                     .buttonStyle(.bordered)
             }
 
-            Section("链路探测") {
-                Toggle("启动时自动连接（记住账号密码后不再打扰）", isOn: $draft.autoConnect)
-                Toggle("自动探测（发 1 个 challenge 判断是不是校园网）", isOn: $draft.autoDetect)
-                Text("关掉后只做 204 探针，不会主动向校园网关发任何认证包。")
+            Section(Copy.t("S38")) {
+                Toggle(Copy.t("S39"), isOn: $draft.autoConnect)
+                Toggle(Copy.t("S40"), isOn: $draft.autoDetect)
+                Text(Copy.t("S41"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
-                TextField("网页认证入口 URL（可留空自动获取）", text: $draft.portalEntry)
+                TextField(Copy.t("S42"), text: $draft.portalEntry)
             }
 
-            Section("路由保障") {
-                Text("当前：\(routeGuardText)")
+            Section(Copy.t("S43")) {
+                Text(Copy.f("S44", routeGuardText))
                     .font(.caption)
-                Toggle("允许后台组件加 -ifscope 直连路由（需管理员授权）", isOn: $draft.helperAuthorized)
+                Toggle(Copy.t("S45"), isOn: $draft.helperAuthorized)
                     .disabled(true)
-                Text("后台 helper 属于 M2.5，尚未随本版本提供；未授权时会退化成“给一条可复制的命令”。")
+                Text(Copy.t("S46"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
 
-            Section("更新") {
+            Section(Copy.t("S47")) {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
-                        Button("检查更新") { model.checkForUpdates(force: true) }
+                        Button(Copy.t("S48")) { model.checkForUpdates(force: true) }
                             .disabled(model.updateStatus == .checking)
-                        Text("当前版本 \(BuildInfo.version)")
+                        Text(Copy.f("S49", BuildInfo.version))
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     updateStatusView
@@ -183,30 +183,30 @@ struct SettingsView: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
 
-            Section("高级") {
-                TextField("服务器", text: $draft.server)
-                TextField("服务器端口", text: $draft.serverPort)
-                TextField("本地端口（必须是 61440）", text: $draft.localPort)
-                Toggle("开机自启", isOn: $draft.launchAtLogin)
+            Section(Copy.t("S50")) {
+                TextField(Copy.t("S51"), text: $draft.server)
+                TextField(Copy.t("S52"), text: $draft.serverPort)
+                TextField(Copy.t("S53"), text: $draft.localPort)
+                Toggle(Copy.t("S54"), isOn: $draft.launchAtLogin)
             }
 
             Section {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Button("保存") { save() }
+                        Button(Copy.t("S55")) { save() }
                             .buttonStyle(.borderedProminent)
                         if saved {
-                            Label("已保存", systemImage: "checkmark.circle")
+                            Label(Copy.t("S56"), systemImage: "checkmark.circle")
                                 .font(.caption)
                                 .foregroundStyle(.green)
                         }
                         Spacer()
-                        Button("关闭") { model.closeSettings() }
+                        Button(Copy.t("S57")) { model.closeSettings() }
                             .buttonStyle(.bordered)
                     }
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(spacing: 8) {
-                            Button("读系统值") {
+                            Button(Copy.t("S58")) {
                                 model.refreshDiagnostics()
                                 let suggestion = model.applySystemParameters()
                                 if draft.registeredMAC.isEmpty,
@@ -216,28 +216,28 @@ struct SettingsView: View {
                                 if suggestion.hasUsableValues { load(); saved = true }
                                 else { model.recentLog.insert(suggestion.reason, at: 0) }
                             }
-                            Button("重新检测") { model.refreshDiagnostics() }
+                            Button(Copy.t("S59")) { model.refreshDiagnostics() }
                         }
                         HStack(spacing: 8) {
-                            Button("导入参数卡") {
+                            Button(Copy.t("S60")) {
                                 if model.importConfigCardFromClipboard() {
                                     load()
                                     saved = true
                                 }
                             }
-                            Button("清空网络参数") {
+                            Button(Copy.t("S61")) {
                                 draft.ip = ""; draft.mask = ""; draft.gateway = ""
                                 draft.dns = ""; draft.registeredMAC = ""
                                 model.clearNetworkParameters()
                                 saved = true
                             }
                         }
-                        Button("删除已保存的密码") {
+                        Button(Copy.t("S62")) {
                             model.clearSavedPassword()
                             draft.password = ""
                             saved = true
                         }
-                        Button("重置本机配置…") { model.resetLocalConfiguration() }
+                        Button(Copy.t("S63")) { model.resetLocalConfiguration() }
                             .foregroundStyle(.red)
                     }
                     .buttonStyle(.bordered)
@@ -279,20 +279,20 @@ struct SettingsView: View {
         case .idle:
             Text("").font(.caption)
         case .checking:
-            Label("检查中…", systemImage: "arrow.triangle.2.circlepath")
+            Label(Copy.t("S64"), systemImage: "arrow.triangle.2.circlepath")
                 .font(.caption).foregroundStyle(.secondary)
         case .upToDate:
-            Label("已是最新", systemImage: "checkmark.circle").font(.caption).foregroundStyle(.green)
+            Label(Copy.t("S65"), systemImage: "checkmark.circle").font(.caption).foregroundStyle(.green)
         case .available(let tag, let name, let page, let asset):
             VStack(alignment: .leading, spacing: 3) {
-                Label("有新版本 \(tag)", systemImage: "arrow.down.circle")
+                Label(Copy.f("S66", tag), systemImage: "arrow.down.circle")
                     .font(.caption).foregroundStyle(.orange)
                 HStack(spacing: 8) {
-                    Button("下载并安装") {
+                    Button(Copy.t("S67")) {
                         model.installAvailableUpdate(page: page, asset: asset)
                     }
                     .buttonStyle(.borderedProminent).controlSize(.small)
-                    Button("仅下载") {
+                    Button(Copy.t("S68")) {
                         if let url = asset ?? page { NSWorkspace.shared.open(url) }
                     }
                     .buttonStyle(.link).font(.caption)
@@ -337,11 +337,11 @@ struct SettingsView: View {
 
     private var routeGuardText: String {
         switch model.routeGuarantee {
-        case .direct(let interface): "A 层 · 出口就是 \(interface)，零特权可用"
-        case .helper(let interface, _, _): "B 层 · 由 helper 给 \(interface) 加 /32 路由"
-        case .manual(_, let interface): "C 层 · 需要手动给 \(interface) 加一条路由"
-        case .noRoute: "拿不到路由（接口没起来或没有到服务器的路由）"
-        case nil: "未检测"
+        case .direct(let interface): Copy.f("S69", interface)
+        case .helper(let interface, _, _): Copy.f("S70", interface)
+        case .manual(_, let interface): Copy.f("S71", interface)
+        case .noRoute: Copy.t("S72")
+        case nil: Copy.t("S73")
         }
     }
 

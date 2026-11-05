@@ -110,9 +110,9 @@ struct WizardView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("欢迎使用 JLU Gate")
+            Text(Copy.t("W01"))
                 .font(.title2.bold())
-            Text("第 \(step.rawValue + 1) / \(Step.allCases.count) 步 · \(stepTitle)")
+            Text(Copy.f("W02", step.rawValue + 1, Step.allCases.count, stepTitle))
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -120,9 +120,9 @@ struct WizardView: View {
 
     private var stepTitle: String {
         switch step {
-        case .credentials: "账号与密码（三网共用）"
-        case .link: "选择接入方式"
-        case .network: "网络参数"
+        case .credentials: Copy.t("W03")
+        case .link: Copy.t("W04")
+        case .network: Copy.t("W05")
         }
     }
 
@@ -130,12 +130,12 @@ struct WizardView: View {
 
     private var credentialsStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("账号密码只填一次，有线 / JLU.PC / JLU.WIFI 三个入口共用。",
+            Label(Copy.t("W06"),
                   systemImage: "person.badge.key")
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            TextField("学校邮箱前缀（不是整个邮箱）", text: $account)
+            TextField(Copy.t("W07"), text: $account)
                 .textFieldStyle(.roundedBorder)
                 .textContentType(.username)
 
@@ -156,9 +156,9 @@ struct WizardView: View {
             if hasSavedPassword, password.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
                     Label(model.requirePasswordReentry
-                          ? "上次这份密码被服务器拒绝，请重新输入"
-                          : (savedPasswordVerified ? "本机保存过密码（上次成功登录过）"
-                                                   : "本机保存过密码，但未验证"),
+                          ? Copy.t("W08")
+                          : (savedPasswordVerified ? Copy.t("W09")
+                                                   : Copy.t("W10")),
                           systemImage: (savedPasswordVerified && !model.requirePasswordReentry)
                             ? "checkmark.seal" : "exclamationmark.triangle")
                         .font(.caption2)
@@ -166,7 +166,7 @@ struct WizardView: View {
                                          ? Color.secondary : Color.orange)
                     HStack(spacing: 8) {
                         if !model.requirePasswordReentry {
-                            Button("使用已保存的密码") {
+                            Button(Copy.t("W11")) {
                                 if let stored = CredentialStore.password(for: account),
                                    !stored.isEmpty {
                                     password = stored
@@ -174,7 +174,7 @@ struct WizardView: View {
                             }
                             .buttonStyle(.bordered)
                         }
-                        Button("重新输入") {
+                        Button(Copy.t("W12")) {
                             hasSavedPassword = false      // 收起这块，直接输入新的
                             password = ""
                         }
@@ -183,20 +183,20 @@ struct WizardView: View {
                 }
             }
 
-            SecureField("密码", text: $password)
+            SecureField(Copy.t("W13"), text: $password)
                 .textFieldStyle(.roundedBorder)
                 .textContentType(.password)
 
             if model.requirePasswordReentry, !password.isEmpty {
-                SecureField("再输一次（确认没有多打/全角）", text: $passwordConfirm)
+                SecureField(Copy.t("W14"), text: $passwordConfirm)
                     .textFieldStyle(.roundedBorder)
                     .textContentType(.password)
                 if !passwordConfirm.isEmpty, passwordConfirm != password {
-                    Label("两次输入不一致，请检查输入法（全角/空格）",
+                    Label(Copy.t("W15"),
                           systemImage: "exclamationmark.triangle")
                         .font(.caption2).foregroundStyle(.orange)
                 }
-                Text("本次密码指纹：\(PasswordFingerprint.describe(password))")
+                Text(Copy.f("W16", PasswordFingerprint.describe(password)))
                     .font(.system(size: 9)).foregroundStyle(.secondary)
             }
 
@@ -206,14 +206,14 @@ struct WizardView: View {
 
             // 新生最容易错的地方：以为所有地方都是同一个密码。
             // 这里填的是统一身份认证那套；自助平台查 IP 用的是校园卡号 + 6 位 V 卡密码。
-            SelfServiceHintRow(text: "这一步填的是统一身份认证的账号密码；自助平台用的是校园卡号 + 6 位 V 卡密码，不是同一个。")
+            SelfServiceHintRow(text: Copy.t("W17"))
         }
     }
 
     private var keychainNote: String {
         switch CredentialStore.backend {
-        case .keychain: "密码保存在系统钥匙串，只用于本地计算认证摘要 / 自动登录。"
-        case .file: "当前是本机构建版（无开发者签名），密码保存在仅本用户可读的本地文件里。"
+        case .keychain: Copy.t("W18")
+        case .file: Copy.t("W19")
         }
     }
 
@@ -251,15 +251,15 @@ struct WizardView: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             // 认名字：学校的无线只有这两个，名字要一模一样；同名热点可能是别人伪装的
-            Label("Wi-Fi 名字要一模一样：JLU.PC 或 JLU.WIFI（大写、中间是一个点）。"
-                  + "如果看到同名网络，先确认是不是学校自己的信号——在可疑网络里别输账号密码。",
+            Label(Copy.t("W20")
+                  + Copy.t("W21"),
                   systemImage: "exclamationmark.shield")
                 .font(.caption2)
                 .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
 
             if !model.interfaces.isEmpty {
-                Text("当前可用：\(model.interfaces.filter(\.isUsableForAuthentication).map(\.name).joined(separator: "、"))")
+                Text(Copy.f("W22", model.interfaces.filter(\.isUsableForAuthentication).map(\.name).joined(separator: "、")))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -274,18 +274,18 @@ struct WizardView: View {
     }
 
     private static let linkOptions: [LinkOption] = [
-        LinkOption(value: "auto", title: "自动识别（推荐）", detail: "先探一次网络，判断走 Dr.Com 还是网页认证"),
-        LinkOption(value: "wired", title: "有线", detail: "需要学校分配的固定 IP / 掩码 / 网关 / 登记 MAC"),
-        LinkOption(value: "jluPC", title: "JLU.PC（无线 · Dr.Com）", detail: "用本机 Wi-Fi 网卡 MAC 认证"),
-        LinkOption(value: "jluWiFi", title: "JLU.WIFI（网页认证）", detail: "不需要静态地址，浏览器里登录一次"),
+        LinkOption(value: "auto", title: Copy.t("W23"), detail: Copy.t("W24")),
+        LinkOption(value: "wired", title: Copy.t("W25"), detail: Copy.t("W26")),
+        LinkOption(value: "jluPC", title: Copy.t("W27"), detail: Copy.t("W28")),
+        LinkOption(value: "jluWiFi", title: Copy.t("W29"), detail: Copy.t("W30")),
     ]
 
     private var hintForLink: String {
         switch link {
-        case "wired": "有线需要学校分配的固定 IP / 掩码 / 网关 / 登记 MAC；下一步会让你填。"
+        case "wired": Copy.t("W31")
         case "jluPC": JLUAccessPolicy.jluPCHint
-        case "jluWiFi": "网页认证不需要静态地址，登录时用浏览器输入同一套账号密码即可。"
-        default: "自动模式会先探一次网络，判断该走 Dr.Com 还是网页认证；不是校园网就不发任何认证。"
+        case "jluWiFi": Copy.t("W32")
+        default: Copy.t("W33")
         }
     }
 
@@ -311,10 +311,10 @@ struct WizardView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Picker("使用哪块网卡", selection: Binding(
+                Picker(Copy.t("W34"), selection: Binding(
                     get: { model.config.interfaceLock ?? "" },
                     set: { model.selectInterface($0.isEmpty ? nil : $0) })) {
-                    Text("自动（按 MAC 认）").tag("")
+                    Text(Copy.t("W35")).tag("")
                     ForEach(model.interfaceCandidates) { candidate in
                         Text("\(candidate.name)  \(candidate.macForAuthentication ?? "—")").tag(candidate.name)
                     }
@@ -325,16 +325,16 @@ struct WizardView: View {
             // 分隔符由界面画出来：IP 四格、MAC 六格，填满自动跳下一格
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                 LabeledAddressField(title: "IP", kind: .ipv4, text: $ip,
-                                    hint: "学校分给你的固定地址（通知单上那串）",
+                                    hint: Copy.t("W36"),
                                     onSubmit: focusNextField)
                     .onChange(of: ip) { _, newValue in
                         autofillNeighbours(from: newValue)
                     }
-                LabeledAddressField(title: "子网掩码", kind: .ipv4, text: $mask,
-                                    hint: "一般是 255.255.255.0",
+                LabeledAddressField(title: Copy.t("W37"), kind: .ipv4, text: $mask,
+                                    hint: Copy.t("W38"),
                                     onSubmit: focusNextField)
-                LabeledAddressField(title: "网关", kind: .ipv4, text: $gateway,
-                                    hint: "同网段第一跳，通常 x.x.x.254",
+                LabeledAddressField(title: Copy.t("W39"), kind: .ipv4, text: $gateway,
+                                    hint: Copy.t("W40"),
                                     onSubmit: focusNextField)
                 GridRow {
                     Text("DNS").frame(width: 72, alignment: .leading).foregroundStyle(.secondary)
@@ -344,28 +344,28 @@ struct WizardView: View {
                             set: { dns = FieldFormatting.ipv4ListInput($0) }))
                     }
                 }
-                LabeledAddressField(title: "登记 MAC", kind: .mac, text: $mac,
-                                    hint: "学校登记的那块网卡（不是系统随机 MAC）",
+                LabeledAddressField(title: Copy.t("W41"), kind: .mac, text: $mac,
+                                    hint: Copy.t("W42"),
                                     onSubmit: finish)
             }
 
-            Label("这些值只能从学校通知单照抄。下面是系统当前读数，仅供核对——不要照抄 DHCP 分到的地址。",
+            Label(Copy.t("W43"),
                   systemImage: "info.circle")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            SelfServiceHintRow(text: "没有通知单也没关系：自助平台「查询信息」里点自己寝室那条，IP / 网关都在（登记 MAC 在「变更 MAC」里）。")
+            SelfServiceHintRow(text: Copy.t("W44"))
 
             VStack(alignment: .leading, spacing: 6) {
-                Button("用系统当前读数填入") { fillFromSystem() }
+                Button(Copy.t("W45")) { fillFromSystem() }
                     .buttonStyle(.borderedProminent)
                 HStack(spacing: 8) {
                     if hasSavedProfile {
-                        Button("载入上次参数") { loadSavedProfile() }
+                        Button(Copy.t("W46")) { loadSavedProfile() }
                             .buttonStyle(.bordered)
                     }
-                    Button("清空") { clearFields() }
+                    Button(Copy.t("W47")) { clearFields() }
                         .buttonStyle(.bordered)
                 }
             }
@@ -387,11 +387,11 @@ struct WizardView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             if step != .credentials {
-                Button("上一步") { goBack() }
+                Button(Copy.t("W48")) { goBack() }
                     .buttonStyle(.bordered)
             }
             Spacer()
-            Button(isLastStep ? "完成" : "下一步") { advance() }
+            Button(isLastStep ? Copy.t("W49") : Copy.t("W50")) { advance() }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut(.defaultAction)
         }
@@ -460,7 +460,7 @@ struct WizardView: View {
         if mask.isEmpty { mask = "255·255·255·0" }
         if gateway.isEmpty {
             gateway = "\(parts[0])·\(parts[1])·\(parts[2])·254"
-            suggestionNote = "网关按同网段推测为 \(gateway)，不对就改。"
+            suggestionNote = Copy.f("W51", gateway)
         }
     }
 
@@ -486,7 +486,7 @@ struct WizardView: View {
         case .credentials:
             let normalized = AccountFormat.normalize(account)
             guard !normalized.isEmpty else {
-                errorText = "请填写账号（学校邮箱 @\(AccountFormat.mailDomain) 前面的那一段）"
+                errorText = Copy.f("W52", AccountFormat.mailDomain)
                 return
             }
             if AccountFormat.analyze(normalized).kind == .unrecognized {
@@ -495,13 +495,13 @@ struct WizardView: View {
             }
             account = normalized
             if model.requirePasswordReentry, passwordConfirm != password {
-                errorText = "两次输入的密码不一致（检查输入法是否全角/多了空格）"
+                errorText = Copy.t("W53")
                 return
             }
             guard !password.isEmpty else {
                 errorText = hasSavedPassword
-                    ? "请选择：用已保存的密码，或重新输入一次"
-                    : "请填写密码"
+                    ? Copy.t("W54")
+                    : Copy.t("W55")
                 return
             }
             // 换账号时载入该账号已经存过的地址，别让用户重填
@@ -551,7 +551,7 @@ struct WizardView: View {
                 return
             }
             if ip.isEmpty || mask.isEmpty || gateway.isEmpty || mac.isEmpty {
-                errorText = "有线 / JLU.PC 需要填全 IP、掩码、网关与登记 MAC"
+                errorText = Copy.t("W56")
                 return
             }
         }

@@ -8,16 +8,16 @@ struct InspectPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("体检的是浏览器会走的那条路：出口 IP、WebRTC、DNS 泄漏、人机验证可达性。")
+            Text(Copy.t("P01"))
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             // 快捷排查：能不能上网 + 到底哪一层坏了
             VStack(alignment: .leading, spacing: 6) {
                 // 已经合并进「开始检测」：这里只显示结果，不再单独给按钮
-                Text("能不能上网（含校内系统）").font(.caption).bold()
+                Text(Copy.t("P02")).font(.caption).bold()
                 if model.reachability.isEmpty {
-                    Text("进入本页会自动检测；下面的按钮只用于重试")
+                    Text(Copy.t("P03"))
                         .font(.system(size: 10)).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -44,16 +44,16 @@ struct InspectPanel: View {
             Button {
                 model.runInspection()
             } label: {
-                Label(model.inspectionRunning ? "检测中…" : "重新检测", systemImage: "arrow.clockwise")
+                Label(model.inspectionRunning ? Copy.t("P05") : Copy.t("P06"), systemImage: "arrow.clockwise")
             }
             .buttonStyle(.borderedProminent)
             .disabled(model.inspectionRunning)
 
-            module("出口 IP", timingKey: "ip", value: ipValueWithFlag, hint: ipHint)
+            module(Copy.t("P07"), timingKey: "ip", value: ipValueWithFlag, hint: ipHint)
             module("Cloudflare", timingKey: "cloudflare", value: cloudflareValue, hint: cloudflareHint)
             module("WebRTC（STUN）", timingKey: "webrtc", value: webRTCValue, hint: webRTCHint)
             module("DNS", timingKey: "dns", value: dnsValue, hint: dnsHint)
-            module("人机验证", timingKey: "captcha", value: captchaValue, hint: captchaHint)
+            module(Copy.t("P08"), timingKey: "captcha", value: captchaValue, hint: captchaHint)
 
             // IP 纯净度：住宅 or 机房
             purityModule
@@ -70,19 +70,19 @@ struct InspectPanel: View {
                     HStack(spacing: 6) {
                         Text("BiliBili").font(.system(size: 10)).frame(width: 66, alignment: .leading)
                         Text("\(model.bilibiliAddr ?? "-") · " + bilibili.short
-                             + (model.bilibiliAddr == consensus.ip ? "" : "（B 站走了另一条路）"))
+                             + (model.bilibiliAddr == consensus.ip ? "" : Copy.t("P09")))
                             .font(.system(size: 10)).foregroundStyle(.secondary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 if consensus.countryDisagreement {
-                    Text("⚠️ 各源国家不一致（\(consensus.countries.joined(separator: " / "))）：可能是广播/中转 IP")
+                    Text(Copy.f("P10", consensus.countries.joined(separator: " / ")))
                         .font(.system(size: 10)).foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
             if let alignment = model.dnsAlignment {
-                Text("DNS 与 IP 出口：" + alignment.explanation
+                Text(Copy.t("P11") + alignment.explanation
                      + "  " + CountryFlag.label(alignment.ipCountry)
                      + " / " + CountryFlag.label(alignment.dnsCountry))
                     .font(.system(size: 10))
@@ -98,29 +98,29 @@ struct InspectPanel: View {
 
             // 带宽三档
             VStack(alignment: .leading, spacing: 6) {
-                Text("带宽（三档对比）").font(.caption).bold()
+                Text(Copy.t("P12")).font(.caption).bold()
                 if let direct = model.speedDirect {
-                    speedRow("直连", direct)
+                    speedRow(Copy.t("P13"), direct)
                 }
                 if let viaDefault = model.speedViaDefault {
-                    speedRow("默认出口（含代理）", viaDefault)
+                    speedRow(Copy.t("P14"), viaDefault)
                 }
                 if let viaProxy = model.speedViaProxy {
-                    speedRow("本地代理", viaProxy)
+                    speedRow(Copy.t("P15"), viaProxy)
                 }
                 HStack(spacing: 6) {
-                    TextField("本地代理 127.0.0.1:7890", text: Binding(
+                    TextField(Copy.t("P16"), text: Binding(
                         get: { model.speedProxy },
                         set: { model.speedProxy = $0 }))
                         .textFieldStyle(.roundedBorder)
                         .font(.caption2)
-                    Button(model.speedRunning ? "测速中…" : "测速") { model.runSpeedAll() }
+                    Button(model.speedRunning ? Copy.t("P17") : Copy.t("P18")) { model.runSpeedAll() }
                         .buttonStyle(.bordered)
                         .disabled(model.speedRunning)
                 }
                 Text(model.speedProxy.isEmpty
-                     ? "没检测到本地代理端口：若用的是 TUN 全局模式，第二档就是最终带宽，不用再测第三档。"
-                     : "已自动检测到 \(model.detectedProxy?.label ?? "本地代理")（\(model.speedProxy)）；也可手动改。")
+                     ? Copy.t("P19")
+                     : Copy.f("P20", model.detectedProxy?.label ?? "本地代理", model.speedProxy))
                     .font(.system(size: 10)).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -133,7 +133,7 @@ struct InspectPanel: View {
                 Button {
                     NSWorkspace.shared.open(url)
                 } label: {
-                    Label("在浏览器中打开校园网门户", systemImage: "safari")
+                    Label(Copy.t("P21"), systemImage: "safari")
                         .font(.caption)
                 }
                 .buttonStyle(.borderless)
@@ -177,13 +177,13 @@ struct InspectPanel: View {
     private var purityHint: String {
         if let reputation = model.ipReputation {
             switch reputation.kind {
-            case .residential: return "住宅/运营商 IP：对 Claude、流媒体这类站点最友好"
-            case .datacenter: return "机房 IP：很多站点会直接拒绝或要求人机验证"
-            case .mobile: return "移动网络 IP：一般也能通过，但可能被限速"
-            case .unknown: return "归属信息不足，无法判断类型"
+            case .residential: return Copy.t("P22")
+            case .datacenter: return Copy.t("P23")
+            case .mobile: return Copy.t("P24")
+            case .unknown: return Copy.t("P25")
             }
         }
-        return "点上面的「开始检测」，会查出口 IP 的归属与类型（住宅 / 机房）"
+        return Copy.t("P26")
     }
 
     private func module(_ title: String, timingKey: String? = nil,
@@ -225,7 +225,7 @@ struct InspectPanel: View {
 
     private var ipHint: String {
         if model.inspection.publicIPs.isEmpty {
-            return model.inspectionRunning ? "正在问不同网站「你看到我是谁」…" : "点「开始检测」，问几个网站同一个问题"
+            return model.inspectionRunning ? Copy.t("P27") : Copy.t("P28")
         }
         let local = model.interfaces.first(where: { $0.name == model.config.interfaceLock })?.ipv4
         let same = local.map { localIP in
@@ -240,7 +240,7 @@ struct InspectPanel: View {
     private var purityModule: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
-                Text("出口 IP 纯净度").font(.caption).bold()
+                Text(Copy.t("P29")).font(.caption).bold()
                 Spacer(minLength: 0)
             }
             if let reputation = model.ipReputation {
@@ -248,24 +248,24 @@ struct InspectPanel: View {
                     if let flag = CountryFlag.emoji(for: reputation.country) { Text(flag) }
                     Text(reputation.kindTitle).font(.caption)
                     if reputation.proxy == true {
-                        Text("已被标记为代理").font(.system(size: 9)).foregroundStyle(.orange)
+                        Text(Copy.t("P30")).font(.system(size: 9)).foregroundStyle(.orange)
                     }
                 }
                 let place = [reputation.city, reputation.region, reputation.country]
                     .compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " / ")
                 if !place.isEmpty {
-                    purityLine("位置", place)
+                    purityLine(Copy.t("P31"), place)
                 }
                 if let who = [reputation.isp, reputation.org].compactMap({ $0 }).first {
-                    purityLine("归属", who)
+                    purityLine(Copy.t("P32"), who)
                 }
                 if let asn = reputation.asn { purityLine("ASN", asn) }
-                purityLine("类型", reputation.kindTitle + (reputation.hosting == true ? " · 机房标记" : ""))
+                purityLine(Copy.t("P33"), reputation.kindTitle + (reputation.hosting == true ? Copy.t("P34") : ""))
                 ForEach(Array(reputation.notes.enumerated()), id: \.offset) { _, note in
-                    purityLine("旁证", note)
+                    purityLine(Copy.t("P35"), note)
                 }
             } else {
-                Text(model.inspectionRunning ? "检测中…" : "尚未获取").font(.caption2)
+                Text(model.inspectionRunning ? "检测中…" : Copy.t("P36")).font(.caption2)
                     .foregroundStyle(.secondary)
             }
             Text(purityHint).font(.system(size: 9)).foregroundStyle(.tertiary)
@@ -292,26 +292,26 @@ struct InspectPanel: View {
         if let ip = trace.ip {
             parts.append((CountryFlag.emoji(for: trace.location).map { $0 + " " } ?? "") + ip)
         }
-        if let location = trace.location { parts.append("地区 \(location)") }
-        if let colo = trace.colo { parts.append("机房 \(colo)") }
+        if let location = trace.location { parts.append(Copy.f("P37", location)) }
+        if let colo = trace.colo { parts.append(Copy.f("P38", colo)) }
         return parts.joined(separator: " · ")
     }
 
     private var cloudflareHint: String {
-        guard model.inspection.cloudflare != nil else { return "看 Cloudflare 认为你从哪个国家/机房出来" }
-        return "Cloudflare 是最会认「你从哪来」的服务之一；机房离你越近，通常越快"
+        guard model.inspection.cloudflare != nil else { return Copy.t("P39") }
+        return Copy.t("P40")
     }
 
     private var webRTCValue: String {
         let sample = model.inspection.webRTC
         guard let sample else { return "" }
-        guard let ip = sample.publicIP else { return "无回执（\(sample.server)）" }
+        guard let ip = sample.publicIP else { return Copy.f("P41", sample.server) }
         return "\(ip)\(sample.port.map { ":\($0)" } ?? "")"
     }
 
     private var webRTCHint: String {
         guard let sample = model.inspection.webRTC else {
-            return "STUN 是浏览器 WebRTC 用来问「我的公网地址」的协议；这里用同样的方法问一次"
+            return Copy.t("P42")
         }
         let local = model.interfaces.first(where: { $0.name == model.config.interfaceLock })?.ipv4
         return InspectionVerdict.webRTCHint(sample, localIP: local)
@@ -328,9 +328,9 @@ struct InspectPanel: View {
 
     private var dnsHint: String {
         guard let dns = model.inspection.dns else {
-            return "DNS 泄漏的意思是：你以为走了代理，域名却还是本地运营商在解析"
+            return Copy.t("P43")
         }
-        return dns.summary + (dns.hijackSuspected ? "；另外有可疑劫持迹象（不存在的域名被解析出地址）" : "")
+        return dns.summary + (dns.hijackSuspected ? Copy.t("P44") : "")
     }
 
     private var captchaValue: String {

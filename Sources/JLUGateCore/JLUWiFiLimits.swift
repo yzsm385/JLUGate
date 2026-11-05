@@ -9,18 +9,13 @@ public enum JLUWiFiLimits {
     public static let maxDevices = 3
 
     /// 会话掉线时给用户看的解释。
-    public static let kickNotice = """
-    JLU.WIFI 同时最多 \(maxDevices) 台设备，新设备加入会把最早加入的那台踢下线。
-    你的会话可能就是这样被挤掉的。
-    """
+    public static let kickNotice = Copy.f("B410", maxDevices)
 
     /// 准备重进时的提醒（会踢掉谁）。
-    public static let reclaimNotice = """
-    重新登录会把你排到队尾，并踢掉当前队列里第二台设备——如果那是你自己的另一台电脑/手机，它会掉线。
-    """
+    public static let reclaimNotice = Copy.t("B411")
 
     /// 登录窗口顶部的说明。
     public static var portalHint: String {
-        "本机：\(maxDevices) 台设备上限之外，登录会让你重新排到队尾。\n\(reclaimNotice)"
+        Copy.f("B412", maxDevices, reclaimNotice)
     }
 }

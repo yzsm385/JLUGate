@@ -22,6 +22,9 @@ jobs:
           python3 --version
 
       - name: 单元测试（编码器黄金向量 + 通道 + 状态机 + 探针 + 选路）
+        # 断言用的是中文文案；界面文案现在按系统语言切换，CI 里固定简体，保证可重复
+        env:
+          JLUGATE_LANG: zh-Hans
         run: swift test
 
       - name: 离线自测 · Dr.Com（模拟网关）

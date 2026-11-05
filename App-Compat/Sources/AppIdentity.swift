@@ -1,4 +1,5 @@
 import Foundation
+import JLUGateCore
 
 /// 区分「正式安装」与「便携副本」。
 ///
@@ -13,7 +14,14 @@ enum AppIdentity {
         Bundle.main.bundleURL.path.hasPrefix("/Applications/")
     }
 
-    static var displaySuffix: String { isInstalled ? "" : "（便携）" }
+    static var displaySuffix: String {
+        guard !isInstalled else { return "" }
+        switch Copy.language {
+        case .zhHans: return "（便携）"
+        case .zhHant: return "（便攜）"
+        case .en: return " (portable)"
+        }
+    }
 
     /// Application Support 下的目录名
     static var supportDirectoryName: String {

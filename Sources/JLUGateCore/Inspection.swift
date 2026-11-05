@@ -53,16 +53,16 @@ public struct DNSLeakSample: Sendable, Equatable {
 
     public var summary: String {
         if let system = systemEgress, let pub = publicEgress {
-            if system == pub { return "系统 DNS 与公共 DNS 出口一致（\(system)）" }
-            return "系统 DNS 出口 \(system)，公共 DNS 出口 \(pub)：两者不同，说明解析走了两套路"
+            if system == pub { return Copy.f("P45", system) }
+            return Copy.f("P46", system, pub)
         }
         if let system = systemEgress {
-            return "系统 DNS 出口 \(system)；公共 DNS 不可达（可能被墙或被代理接管）"
+            return Copy.f("P47", system)
         }
         if let pub = publicEgress {
-            return "系统 DNS 没有回执；公共 DNS 出口 \(pub)"
+            return Copy.f("P48", pub)
         }
-        return "两种 DNS 都没有回执，可能整条 DNS 都被拦了"
+        return Copy.t("P49")
     }
 }
 
@@ -92,10 +92,10 @@ public struct EndpointCheck: Sendable, Equatable, Identifiable {
 
     public var human: String {
         switch state {
-        case .ok: "可用"
-        case .blocked: "连不上"
-        case .challenge: "会弹人机验证"
-        case .unexpected: "返回了意外内容"
+        case .ok: Copy.t("P50")
+        case .blocked: Copy.t("P51")
+        case .challenge: Copy.t("P52")
+        case .unexpected: Copy.t("P53")
         }
     }
 }
@@ -103,33 +103,33 @@ public struct EndpointCheck: Sendable, Equatable, Identifiable {
 public enum InspectionVerdict {
     /// 出口 IP 是否"看起来像代理出口"（仅做提示，不下结论）。
     public static func ipHint(country: String?, sameAsLocal: Bool) -> String {
-        if sameAsLocal { return "出口就是本机地址：流量没有走代理" }
+        if sameAsLocal { return Copy.t("P54") }
         if let country {
-            return "出口国家/地区 \(country)：流量已经过代理或异地节点"
+            return Copy.f("P55", country)
         }
-        return "出口与本机不同"
+        return Copy.t("P56")
     }
 
     /// WebRTC 一句话。
     public static func webRTCHint(_ sample: WebRTCSample, localIP: String?) -> String {
         guard let publicIP = sample.publicIP else {
-            return "没有拿到 STUN 回执：UDP 可能被完全挡住（这种情况反而不会泄漏）"
+            return Copy.t("P57")
         }
         if let localIP, publicIP == localIP {
-            return "STUN 看到的就是本机地址 \(publicIP)：WebRTC 会暴露真实 IP"
+            return Copy.f("P58", publicIP)
         }
-        return "STUN 看到 \(publicIP)：这是浏览器 WebRTC 会暴露给网站的地址"
+        return Copy.f("P59", publicIP)
     }
 
     /// 人机验证是否"看起来被针对"。
     public static func captchaHint(_ checks: [EndpointCheck]) -> String {
-        guard !checks.isEmpty else { return "还没检测" }
+        guard !checks.isEmpty else { return Copy.t("P60") }
         let ok = checks.filter { $0.state == .ok }.count
         let challenged = checks.filter { $0.state == .challenge }.count
         let blocked = checks.filter { $0.state == .blocked }.count
-        if blocked == checks.count { return "全部连不上：你的人机验证按钮在境外站点上很可能加载不出来" }
-        if challenged > 0 { return "有 \(challenged) 个站点直接回人机验证页：这条出口被重点照顾了" }
-        if ok == checks.count { return "都能正常加载，暂时没被针对" }
-        return "\(ok)/\(checks.count) 可用，\(blocked) 个连不上"
+        if blocked == checks.count { return Copy.t("P61") }
+        if challenged > 0 { return Copy.f("P62", challenged) }
+        if ok == checks.count { return Copy.t("P63") }
+        return Copy.f("P64", ok, checks.count, blocked)
     }
 }

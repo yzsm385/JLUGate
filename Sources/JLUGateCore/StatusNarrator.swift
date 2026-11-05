@@ -33,39 +33,39 @@ public enum StatusNarrator {
     public static func story(_ phase: StatusPhase) -> StatusStory {
         switch phase {
         case .idle:
-            StatusStory(title: "还没连上",
-                        oneLiner: "现在走的是「没认证」状态，就像进了校门但还没刷校园卡。",
-                        action: "点下面的「连接」就会帮你刷一次。")
+            StatusStory(title: Copy.t("B101"),
+                        oneLiner: Copy.t("B102"),
+                        action: Copy.t("B103"))
 
         case .working:
-            StatusStory(title: "正在连…",
-                        oneLiner: "正在跟学校网关核对身份，像门卫看一眼你的卡，通常一两秒。",
+            StatusStory(title: Copy.t("B104"),
+                        oneLiner: Copy.t("B105"),
                         action: nil)
 
         case .online:
-            StatusStory(title: "已连接",
-                        oneLiner: "这条路是 JLU Gate 在替你守着，可以正常上网。",
+            StatusStory(title: Copy.t("B106"),
+                        oneLiner: Copy.t("B107"),
                         action: nil)
 
         case .onlineViaOfficialClient:
-            StatusStory(title: "已连接（官方客户端在管）",
-                        oneLiner: "官方 Dr.Com 客户端正握着那条通道（它先占了端口），网络是通的，你也能上网。",
-                        action: "想让 JLU Gate 接管：先在官方客户端里退出，再回来点「连接」。")
+            StatusStory(title: Copy.t("B108"),
+                        oneLiner: Copy.t("B109"),
+                        action: Copy.t("B110"))
 
         case .officialClientHoldingPort:
-            StatusStory(title: "官方客户端占着通道，但没连上",
-                        oneLiner: "端口被官方客户端捏在手里，可它自己也没认证成功——像有人占了电话亭却没打通。",
-                        action: "退出官方 Dr.Com 客户端（含菜单栏/后台的 DrClientNS），再点「连接」。")
+            StatusStory(title: Copy.t("B111"),
+                        oneLiner: Copy.t("B112"),
+                        action: Copy.t("B113"))
 
         case .waitingForNetwork:
-            StatusStory(title: "等网络就绪",
-                        oneLiner: "电脑现在还没有可用的网线/IP，像车还没上高速。",
-                        action: "插好网线（或确认这块网卡有地址），程序会自动继续。")
+            StatusStory(title: Copy.t("B114"),
+                        oneLiner: Copy.t("B115"),
+                        action: Copy.t("B116"))
 
         case .failed:
-            StatusStory(title: "没连上",
-                        oneLiner: "尝试过了，但没通过网关这一关。",
-                        action: "看下面的原因；改完点「重试」。")
+            StatusStory(title: Copy.t("B117"),
+                        oneLiner: Copy.t("B118"),
+                        action: Copy.t("B119"))
         }
     }
 
@@ -73,10 +73,10 @@ public enum StatusNarrator {
     public static func explain(portHeldByOfficialClient: Bool,
                                linkIsWebPortal: Bool) -> String? {
         if portHeldByOfficialClient {
-            return "学校客户端先占了认证用的「电话号码」（UDP 61440），我们打不进去。"
+            return Copy.t("B120")
         }
         if linkIsWebPortal {
-            return "网页认证走浏览器：登录页会在浏览器里打开，登录完回来点「已完成登录」。"
+            return Copy.t("B121")
         }
         return nil
     }

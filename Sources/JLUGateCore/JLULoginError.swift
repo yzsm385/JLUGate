@@ -19,41 +19,41 @@ public enum JLULoginError: UInt8, Sendable, CaseIterable {
 
     public var title: String {
         switch self {
-        case .macCheckFailed: "MAC 校验失败"
-        case .serverBusy: "服务器忙"
-        case .wrongPassword: "密码错误"
-        case .insufficientBalance: "余额不足"
-        case .accountFrozen: "账号被冻结"
-        case .ipMismatch: "IP 不匹配"
-        case .macMismatch: "MAC 不匹配"
-        case .tooManyIPs: "在线设备数超限"
-        case .clientUpgradeRequired: "服务器拒绝凭据（0x15）"
-        case .ipAndMACMismatch: "IP 与 MAC 都不匹配"
-        case .mustUseDHCP: "必须使用 DHCP"
+        case .macCheckFailed: Copy.t("E22")
+        case .serverBusy: Copy.t("E23")
+        case .wrongPassword: Copy.t("E24")
+        case .insufficientBalance: Copy.t("E25")
+        case .accountFrozen: Copy.t("E26")
+        case .ipMismatch: Copy.t("E27")
+        case .macMismatch: Copy.t("E28")
+        case .tooManyIPs: Copy.t("E29")
+        case .clientUpgradeRequired: Copy.t("E30")
+        case .ipAndMACMismatch: Copy.t("E31")
+        case .mustUseDHCP: Copy.t("E32")
         }
     }
 
     public var advice: String {
         switch self {
         case .macCheckFailed, .macMismatch, .ipAndMACMismatch:
-            "本机网卡与账号绑定的不一致：确认用的是登记过的那块网卡（不是随机 MAC）。"
+            Copy.t("E33")
         case .serverBusy:
-            "认证服务器过载，稍等片刻自动重试即可，不用改配置。"
+            Copy.t("E34")
         case .wrongPassword:
-            "核对校园网密码；刚改过密码的话要同步更新。"
+            Copy.t("E35")
         case .insufficientBalance:
-            "网费余额不足，先去充值。"
+            Copy.t("E36")
         case .accountFrozen:
-            "账号被停机/冻结，需要联系网络中心。"
+            Copy.t("E37")
         case .ipMismatch:
-            "本机 IP 与账号绑定不符：检查网线插的端口，或改成自动获取 IP。"
+            Copy.t("E38")
         case .tooManyIPs:
-            "同时在线的设备数已达上限，先注销其它设备。"
+            Copy.t("E39")
         case .clientUpgradeRequired:
-            "吉大网络里这个码通常表示密码不正确（社区实现 jlu-drcom-ng 在本地图里就是这么标注的）；"
-            + "也可能随服务端升级变化。先用网页版验证密码，再去客户端重新输入。"
+            Copy.t("E40")
+            + Copy.t("E41")
         case .mustUseDHCP:
-            "把网卡改成「使用 DHCP 自动获取地址」再试。"
+            Copy.t("E42")
         }
     }
 
