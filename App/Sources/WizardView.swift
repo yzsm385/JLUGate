@@ -344,7 +344,7 @@ struct WizardView: View {
                                     hint: Copy.t("W40"),
                                     onSubmit: focusNextField)
                 GridRow {
-                    Text("DNS").frame(width: 92, alignment: .leading).foregroundStyle(.secondary)
+                    Text("DNS").frame(width: 72, alignment: .leading).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 6) {
                         AddressField(kind: .ipv4, text: Binding(
                             get: { FieldFormatting.ipv4ListInput(dns).components(separatedBy: ", ").first ?? "" },

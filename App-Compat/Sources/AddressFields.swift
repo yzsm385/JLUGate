@@ -57,9 +57,11 @@ struct AddressField: View {
                     if focused != index, !parts[index].isEmpty {
                         Text(parts[index])
                             .font(.system(size: 12, design: .monospaced))
+                            .frame(width: kind.segmentWidth)
                             .allowsHitTesting(false)
                     }
                 }
+                .frame(width: kind.segmentWidth, height: 22)
                     .focused($focused, equals: index)
                     .onSubmit { advance(from: index) }
                     .onKeyPress(.leftArrow) {
@@ -184,7 +186,7 @@ struct LabeledAddressField: View {
                     .font(.caption)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                    .frame(width: 92, alignment: .leading)
+                    .frame(width: 64, alignment: .leading)
                     .foregroundStyle(.secondary)
                 AddressField(kind: kind, text: $text, onSubmit: onSubmit)
             }
@@ -193,7 +195,7 @@ struct LabeledAddressField: View {
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 100)
+                    .padding(.leading, 72)
             }
         }
     }
