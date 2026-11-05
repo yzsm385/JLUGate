@@ -64,8 +64,12 @@ public enum JLUSiteDirectory {
         // 校园网
         .init(title: "WebVPN", host: "vpn.jlu.edu.cn", category: .network,
               access: .publicSite, note: "校外访问校内系统的入口（统一身份认证登录）", supportsCredentialPrefill: true),
+        // 这个平台用的是**校园卡号 + 6 位 V 卡密码**，和统一账号不是一套，
+        // 所以不能预填（复制过去的账号反而会让人以为密码错了）。
         .init(title: "校园网自助服务", host: "ip.jlu.edu.cn", category: .network,
-              access: .campusOnly, note: "在线设备、IP 绑定、网费与解绑", supportsCredentialPrefill: true),
+              access: .campusOnly,
+              note: "查固定 IP / 登记 MAC、开户与充值（账号是校园卡号，密码是 6 位 V 卡密码）",
+              supportsCredentialPrefill: false),
         .init(title: "大数据和网络管理中心", host: "nic.jlu.edu.cn", category: .network,
               access: .publicSite, note: "断网通知、服务指南、报修电话", supportsCredentialPrefill: false),
 

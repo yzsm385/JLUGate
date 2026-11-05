@@ -203,6 +203,10 @@ struct WizardView: View {
             Label(keychainNote, systemImage: "lock.shield")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+
+            // 新生最容易错的地方：以为所有地方都是同一个密码。
+            // 这里填的是统一身份认证那套；自助平台查 IP 用的是校园卡号 + 6 位 V 卡密码。
+            SelfServiceHintRow(text: "这一步填的是统一身份认证的账号密码；自助平台用的是校园卡号 + 6 位 V 卡密码，不是同一个。")
         }
     }
 
@@ -244,6 +248,14 @@ struct WizardView: View {
             Text(hintForLink)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // 认名字：学校的无线只有这两个，名字要一模一样；同名热点可能是别人伪装的
+            Label("Wi-Fi 名字要一模一样：JLU.PC 或 JLU.WIFI（大写、中间是一个点）。"
+                  + "如果看到同名网络，先确认是不是学校自己的信号——在可疑网络里别输账号密码。",
+                  systemImage: "exclamationmark.shield")
+                .font(.caption2)
+                .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
 
             if !model.interfaces.isEmpty {
@@ -342,6 +354,8 @@ struct WizardView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
+
+            SelfServiceHintRow(text: "没有通知单也没关系：自助平台「查询信息」里点自己寝室那条，IP / 网关都在（登记 MAC 在「变更 MAC」里）。")
 
             VStack(alignment: .leading, spacing: 6) {
                 Button("用系统当前读数填入") { fillFromSystem() }

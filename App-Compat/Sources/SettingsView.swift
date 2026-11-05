@@ -34,6 +34,13 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            // 新生打开设置第一眼就能看到：去哪儿查自己的账号 / IP / 网费。
+            Section {
+                SelfServiceGuideCard(link: draft.link)
+            } header: {
+                Label("新生 / 第一次用", systemImage: "questionmark.bubble")
+            }
+
             Section("账号") {
                 TextField("学校邮箱前缀（如 zhangcyy2122 / zhangshanwu）", text: $draft.account)
                 SecureField("密码（存 Keychain）", text: $draft.password)
@@ -51,6 +58,11 @@ struct SettingsView: View {
                     Text("JLU.PC").tag("jluPC")
                     Text("JLU.WIFI").tag("jluWiFi")
                 }
+                Label("Wi-Fi 名字要一模一样：JLU.PC / JLU.WIFI（大写、中间是一个点）；"
+                      + "同名网络先确认是不是学校的，可疑网络里别输账号。",
+                      systemImage: "exclamationmark.shield")
+                    .font(.system(size: 9)).foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
                 Picker("通道实现", selection: $draft.channel) {
                     Text("BSD（默认，最接近官方客户端）").tag("bsd")
                     Text("NW（系统网络框架）").tag("nw")
@@ -63,6 +75,15 @@ struct SettingsView: View {
             }
 
             Section {
+                Text("固定网络参数（只用于有线 / JLU.PC）")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                if draft.link == "jluWiFi" {
+                    Label("当前选的是 JLU.WIFI：动态分配地址 + 网页认证，下面这些静态参数都不用填。",
+                          systemImage: "wifi")
+                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 VStack(alignment: .leading, spacing: 8) {
                     LabeledAddressField(title: "IP", kind: .ipv4, text: $draft.ip,
                                         hint: "学校分给你的固定地址，按通知单照抄（不是 DHCP 分到的）",
