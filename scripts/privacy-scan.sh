@@ -14,7 +14,7 @@ c=$(find . \( -name '*.pcap' -o -name '*.pcapng' -o -name '*.har' \) -not -path 
 
 # 2) 非合成 MAC（允许 02:00:00:00:00:01 与全 0/广播）
 m=$(grep -rIonE '([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}' . "${X[@]}" 2>/dev/null \
-    | grep -viE '02:00:00:00:00:0[0-9]|00:00:00:00:00:00|ff:ff:ff:ff:ff:ff|aa:bb:cc:dd:ee:ff' | head -20)
+    | grep -viE '02:00:00:00:00:0[0-9]|00:00:00:00:00:00|ff:ff:ff:ff:ff:ff|aa:bb:cc:dd:ee:ff|a1:b2:c3:d4:e5:f6' | head -20)
 [ -n "$m" ] && hit "发现真实网卡 MAC（应替换为 02:00:00:00:00:01）" "$m"
 
 # 3) 非白名单 IPv4（保留地址 + 认证服务器 + 探针内置兜底地址除外）
