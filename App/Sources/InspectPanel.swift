@@ -12,6 +12,20 @@ struct InspectPanel: View {
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            // 重新体检：居中，放在「能不能上网」上面
+            HStack(spacing: 0) {
+                Spacer(minLength: 0)
+                Button {
+                    model.runInspection()
+                } label: {
+                    Label(model.inspectionRunning ? Copy.t("P05") : Copy.t("P06"),
+                          systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.inspectionRunning)
+                Spacer(minLength: 0)
+            }
+
             // 快捷排查：能不能上网 + 到底哪一层坏了
             VStack(alignment: .leading, spacing: 6) {
                 // 已经合并进「开始检测」：这里只显示结果，不再单独给按钮
@@ -24,7 +38,7 @@ struct InspectPanel: View {
 
                 ForEach(model.reachability.filter { !$0.isCampus }) { reachRow($0) }
                 if model.reachability.contains(where: \.isCampus) {
-                    Text("校内系统（教务/通知仅校内；邮箱校内外都能开）")
+                    Text(Copy.t("P04"))
                         .font(.system(size: 10)).foregroundStyle(.tertiary)
                         .padding(.top, 2)
                     ForEach(model.reachability.filter(\.isCampus)) { reachRow($0) }
@@ -40,14 +54,6 @@ struct InspectPanel: View {
             .padding(8)
             .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
                         in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-            Button {
-                model.runInspection()
-            } label: {
-                Label(model.inspectionRunning ? Copy.t("P05") : Copy.t("P06"), systemImage: "arrow.clockwise")
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(model.inspectionRunning)
 
             module(Copy.t("P07"), timingKey: "ip", value: ipValueWithFlag, hint: ipHint)
             module("Cloudflare", timingKey: "cloudflare", value: cloudflareValue, hint: cloudflareHint)
