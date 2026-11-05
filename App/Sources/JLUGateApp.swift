@@ -68,6 +68,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.showPanel()
             }
         }
+
+        // 用户手动打开（不是登录项拉起）：等状态栏图标真正就位后把面板亮出来。
+        // showPanel() 自己会确认锚点已经进菜单栏，所以这里 400ms 后调用不会放歪。
+        let launchedByUser = (notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool) ?? true
+        FileLogger.shared.log("启动：launchedByUser=\(launchedByUser)")
+        if launchedByUser,
+           DevOverrides.startPanelName == nil,
+           !DevOverrides.openPanelOnLaunch,
+           !CommandLine.arguments.contains("--open-panel"),
+           !DevOverrides.autostart {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(400))
+                self.showPanel()
+            }
+        }
     }
 
     static func panel(named name: String) -> AppModel.Panel? {
@@ -204,8 +219,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    func showPanel() {
+    /// 显示菜单栏面板。
+    ///
+    /// 真机踩过的坑（macOS 14）：启动阶段就 show 的话，状态栏按钮的窗口可能还停在
+    /// 屏幕原点、没被系统摆到菜单栏右上角；NSPopover 会按那个坐标锚定，于是整个
+    /// 面板飘到屏幕左上角（压在访达上），而且会一直停在那儿。
+    /// 所以先确认按钮真的进了菜单栏区域（窗口在屏幕上半部），再激活 App 并显示；
+    /// 不满足就隔 300ms 重试，最多 10 次。
+    func showPanel(retry: Int = 0) {
         guard let model, let button = statusItem?.button else { return }
+
+        // 状态栏按钮刚建出来时，窗口可能还停在菜单栏最左边、没被系统排到右上角；
+        // 这时 show，NSPopover 就锚在左边——真机现象是面板跑到屏幕左上、压在访达上。
+        // 所以要求锚点既在屏幕上半部、又在右半边，否则 300ms 后重试。
+        guard let window = button.window else {
+            guard retry < 10 else {
+                FileLogger.shared.log("面板：状态栏按钮一直不在窗口里，放弃显示")
+                return
+            }
+            retryPanelShow(retry)
+            return
+        }
+        let placed = window.screen.map {
+            window.frame.minY > $0.frame.midY && window.frame.minX > $0.frame.midX
+        } ?? false
+        if !placed, retry < 10 {
+            FileLogger.shared.log("面板：按钮还没摆到菜单栏右侧（x=\(window.frame.minX) y=\(window.frame.minY)），300ms 后重试（\(retry + 1)/10）")
+            retryPanelShow(retry)
+            return
+        }
+        if !placed {
+            FileLogger.shared.log("面板：锚点一直异常，按当前坐标显示（可能放歪）")
+        }
+
+        // 先激活再 show：非活跃的 accessory App 在 macOS 14 上也会把 popover 放歪
+        NSApp.activate(ignoringOtherApps: true)
+
         if popover == nil {
             let popover = NSPopover()
             popover.behavior = .transient
@@ -221,21 +270,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.popover = popover
             FileLogger.shared.log("面板：已创建 NSPopover（380×560）")
         }
-        guard button.window != nil else {
-            // 刚登录/刚重启时状态栏按钮可能还没进窗口：稍后再试一次，而不是静默失败
-            FileLogger.shared.log("面板：按钮还不在窗口里，稍后重试")
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(400))
-                guard let button = self.statusItem?.button, button.window != nil else { return }
-                self.popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-                NSApp.activate(ignoringOtherApps: true)
-            }
-            return
+
+        // 之前可能在错误位置显示过：先收起，再按当前锚点重新显示
+        if popover?.isShown == true {
+            popover?.performClose(nil)
         }
         popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         model.isPanelVisible = true
-        NSApp.activate(ignoringOtherApps: true)
-        FileLogger.shared.log("面板：已显示")
+        FileLogger.shared.log("面板：已显示（锚点 x=\(window.frame.minX) y=\(window.frame.minY)，屏幕宽 \(window.screen?.frame.width ?? 0)）")
+    }
+
+    private func retryPanelShow(_ retry: Int) {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            self.showPanel(retry: retry + 1)
+        }
     }
 
     func closePanel() {
