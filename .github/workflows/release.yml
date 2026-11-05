@@ -44,15 +44,9 @@ jobs:
           cp "$compat" "out/JLU-Gate-${{ github.ref_name }}-Compat.zip"
           ls -lh out
 
-      - name: 清理已废弃的旧版 Release（0.1.x 连不上，不对外发布）
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -eux
-          for tag in v0.1.0 v0.1.1 v0.1.2 v0.1.3 v0.1.4; do
-            gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
-          done
+      # 注：原来这里还有一步用 gh 清理 0.1.x 的旧 Release，实测会在 runner 上挂住，
+      # 把整个发布队列堵死（1.2.0 卡在 in_progress、后面的 tag 全部排队）。
+      # 0.1.x 的 Release 早就删干净了，这一步直接去掉。
 
       - name: 创建 / 更新 Release
         uses: softprops/action-gh-release@v2
