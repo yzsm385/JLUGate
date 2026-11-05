@@ -51,6 +51,36 @@ JLU Gate 想把这三个门并成一个闸口。账号密码填一次，三种�
 | **更新与卸载** | 来了就走、走了不留痕 | 设置里检查更新，有新版自己下载 → 退出 → 替换 → 重开，不用手动覆盖；卸载脚本删掉 App、配置、日志和钥匙串条目 |
 | **安全上的克制** | 该它管的它管，不该它碰的一根手指都不伸 | JLU.WIFI 走系统浏览器，程序不碰明文密码、不做 DOM 操作或自动填充；预检只提示不拦截，放不放行由学校服务器定 |
 
+## 参与贡献
+
+这个工具是一个人照着自己在吉大撞过的坑写的，**覆盖面肯定不全**。下面这几块是最容易补、也最希望同学们帮忙的地方——不用会写 Swift，会认字、会上网就行。
+
+### 我的学院没收进去 / 学号认不出学院
+
+学院目录在 [Sources/JLUGateCore/CollegeDirectory.swift](Sources/JLUGateCore/CollegeDirectory.swift)，目前收了官网「院系设置」页列出的 **44 个学院**。如果你发现：
+
+- 你的学院不在这份名单里（比如新成立的、或者独立学院/研究院/中心也想收进来）；
+- 填了学号却认不出学院——吉大**没有公开的"学号前缀 → 学院"对照表**，现在的做法是"你选一次、本机记住同前缀"，所以**只有你一个人用的时候它学得会，换个人就又得重选**。
+
+能怎么帮：
+- 在 [Issues](https://github.com/yzsm385/JLUGate/issues) 开一条，写明「学院名 + 官网域名 +（如果知道的话）学号前缀」，我加进目录；
+- 或者直接 PR 改 `CollegeDirectory.all`，照着现有格式加一行 `College(name:host:)` 就行。
+
+### 想把某个常用网站收进合集
+
+站点合集在 [Sources/JLUGateCore/JLUSiteDirectory.swift](Sources/JLUGateCore/JLUSiteDirectory.swift)，目前 **14 个**（教务 / OA / 邮箱 / WebVPN / 校园网自助 / 官网新闻）。如果你每次都得去收藏夹翻的入口不在里面——比如你学院的教务系统、某个办事流程页、某个实验室/课题组的站点、图书馆某个常用数据库入口：
+
+- 开 Issue 说「网站名 + 域名 + 是仅校内 / 需 VPN / 公网 + 一句话用途」；
+- 直接 PR 也行，照 `JLUSite` 的字段加一条，`category` 选已有的五类之一，`access` 选 `公网 / 仅校内 / 需 VPN` 三个之一。
+
+### 其他想补的
+
+- **体检站点**：[Sources/JLUGateNet/ReachabilityService.swift](Sources/JLUGateNet/ReachabilityService.swift) 里"能不能上网"探的站点是 google / brave / duckduckgo / bing / 百度 + 教务 / OA / 邮箱，想加别的探针也欢迎；
+- **真机验证**：作者只有一台插校园网线的 Mac，别的机型 / 别的校区（朝阳 / 南湖 / 和平 / 南岭 / 新民 / 南部）的网络环境没试过，反馈真实环境的掉线日志和 `tcpdump` 抓包（**记得脱敏**）很有价值；
+- **文案**：界面上哪句"人话"没说人话、哪段注解看不懂，直接开 Issue 说该怎么说。
+
+> 不收任何真实凭据。Issue / PR 里**别贴明文密码、别贴原始抓包**；脱敏规则见 [SECURITY.md](SECURITY.md) 和 [docs/CHECKLIST.md](docs/CHECKLIST.md)。
+
 ## 给开发者的几条底线
 
 这几条是开发时给自己立的规矩，也是这个项目能放心做下去的前提：
