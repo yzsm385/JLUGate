@@ -56,7 +56,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>LSMinimumSystemVersion</key>  <string>26.0</string>
     <key>LSUIElement</key>             <true/>
     <key>NSHighResolutionCapable</key> <true/>
-    <key>NSHumanReadableCopyright</key><string>MIT</string>
+    <key>NSHumanReadableCopyright</key><string>Copyright © 2026 yzsm385, MIT License</string>
 </dict>
 </plist>
 PLIST
