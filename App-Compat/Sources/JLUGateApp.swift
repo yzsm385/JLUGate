@@ -26,9 +26,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var iconTask: Task<Void, Never>?
 
     /// 在访达里双击已在运行的 App：系统不会重新启动进程，只会发 reopen。
-    /// 用户此时想要的通常是"连上"，所以顺手触发一次连接。
+    /// 用户此时想要的通常是"看到界面"，所以先亮面板，再顺手触发一次连接。
     func applicationShouldHandleReopen(_ sender: NSApplication,
                                        hasVisibleWindows flag: Bool) -> Bool {
+        FileLogger.shared.log("访达再次打开 App：弹出面板")
+        showPanel()
         if let model, !model.state.isOnline, !model.state.isBusy {
             FileLogger.shared.log("访达再次打开 App：触发自动连接")
             model.retry()
@@ -37,8 +39,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        FileLogger.shared.log("启动：进程已起来（bundle=\(Bundle.main.bundleURL.path)，"
+                              + "installed=\(AppIdentity.isInstalled)）")
         CrashReporter.install()
         NSApplication.shared.setActivationPolicy(.accessory)
+
+        // 先把菜单栏图标挂上，再做后面的初始化：初始化再慢，用户也能看到"App 起来了"，
+        // 不会双击半天以为没反应；日志也能区分"没启动"和"卡在初始化"。
+        buildStatusItem()
+        FileLogger.shared.log("启动：菜单栏图标已就绪")
+
         _ = SingleInstance.claim { NSApp.terminate(nil) }
 
         buildMainMenu()
@@ -46,8 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         terminateOtherCopies()
         let model = AppModel()
         self.model = model
-        buildStatusItem(model: model)
         observeIcon(model: model)
+        FileLogger.shared.log("启动：初始化完成")
 
         if let start = DevOverrides.startPanelName, let panel = Self.panel(named: start) {
             model.show(panel)
@@ -55,6 +65,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if DevOverrides.openPanelOnLaunch || CommandLine.arguments.contains("--open-panel") {
             Task { @MainActor in
                 try? await Task.sleep(for: .milliseconds(900))
+                self.showPanel()
+            }
+        }
+
+        // 从访达手动打开（不是登录项拉起）：直接把面板亮出来。
+        // 菜单栏工具双击后什么都不弹，用户根本不知道图标躲在右上角，会以为"无响应"。
+        let launchedByUser = (notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool) ?? true
+        FileLogger.shared.log("启动：launchedByUser=\(launchedByUser)")
+        if launchedByUser,
+           DevOverrides.startPanelName == nil,
+           !DevOverrides.openPanelOnLaunch,
+           !CommandLine.arguments.contains("--open-panel"),
+           !DevOverrides.autostart {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(500))
                 self.showPanel()
             }
         }
@@ -74,7 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: 菜单栏图标
 
-    private func buildStatusItem(model: AppModel) {
+    private func buildStatusItem() {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             button.image = NSImage(systemSymbolName: "shield.lefthalf.filled",
