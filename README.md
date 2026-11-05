@@ -1,7 +1,8 @@
+<a id="top"></a>
 # JLU Gate 🛡️
 
 <p>
-  <a href="README.md">🌐 中文</a> ·
+  <a href="#top">🌐 中文</a> ·
   <a href="#english">🇬🇧 English</a>
 </p>
 
@@ -187,6 +188,8 @@ cd App-Compat && xcodegen generate && open JLUGate.xcodeproj # 旧版适配
 - ✅ 推送前跑 `./scripts/privacy-scan.sh`；发布流程见 [docs/PUBLISH.md](docs/PUBLISH.md)。
 
 ---
+
+<a id="english"></a>
 
 ## 🇬🇧 English
 
