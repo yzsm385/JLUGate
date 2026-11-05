@@ -173,16 +173,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateIcon(model: AppModel) {
         guard let button = statusItem?.button else { return }
-        // 菜单栏图标**始终是盾牌**：在线/失败/等待只换角标。
-        // 之前在线时会换成"圆圈+闪电"，真机上用户认不出那是自己装的 App，
-        // 还以为图标没出来；而且面板就开在这个"陌生图标"下面。
+        // 图标按用户要求保持原样：在线 = 圆圈+闪电，其余用状态盾牌/圆圈。
         let name: String
-        switch model.statusPhase {
-        case .online, .onlineViaOfficialClient: name = "checkmark.shield.fill"
-        case .officialClientHoldingPort: name = "exclamationmark.shield.fill"
-        case .failed: name = "xmark.shield.fill"
-        case .working: name = "arrow.triangle.2.circlepath"
-        case .waitingForNetwork, .idle: name = "shield.lefthalf.filled"
+        if model.state.isOnline {
+            name = "bolt.horizontal.circle.fill"
+        } else if model.state.isBusy {
+            name = "circle.dotted"
+        } else {
+            name = model.statusSymbol
         }
         guard name != lastIconName else { return }   // 没变化就别重建 NSImage
         lastIconName = name
@@ -280,6 +278,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lastAnchor = currentAnchorRect()
         FileLogger.shared.log("面板：已显示（锚点 x=\(Int(lastAnchor?.minX ?? -1)) y=\(Int(lastAnchor?.minY ?? -1))）")
         scheduleAnchorCheck()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(600))
+            self.verifyPanelPlacement()
+        }
     }
 
     // MARK: 锚点自校正
@@ -311,6 +313,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             lastAnchor = now
             FileLogger.shared.log("面板：状态栏图标位置变化，已重新锚定（x=\(Int(now.minX)) y=\(Int(now.minY))）")
+        }
+    }
+
+    /// 校验"面板真的贴在图标下面"。
+    ///
+    /// macOS 14 实测：启动瞬间 show 出来的 popover 有时会被 AppKit 丢到屏幕左侧，
+    /// 而锚点本身没变，光比对锚点发现不了。这里直接量面板窗口和图标锚点的偏差，
+    /// 偏太大就收起、重开，最多 3 次；日志会记录每次的 dx/dy。
+    private func verifyPanelPlacement(attempt: Int = 0) {
+        guard popover?.isShown == true,
+              let anchor = currentAnchorRect(),
+              let win = popover?.contentViewController?.view.window else { return }
+        let dx = abs(win.frame.midX - anchor.midX)
+        let dy = abs(win.frame.maxY - anchor.minY)
+        if dx > 200 || dy > 200 {
+            guard attempt < 3 else {
+                FileLogger.shared.log("面板：重开 3 次仍偏离图标（dx=\(Int(dx)) dy=\(Int(dy))）")
+                return
+            }
+            popover?.performClose(nil)
+            if let button = statusItem?.button {
+                popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            }
+            FileLogger.shared.log("面板：偏离图标（dx=\(Int(dx)) dy=\(Int(dy))），已收起重开（\(attempt + 1)/3）")
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(600))
+                self.verifyPanelPlacement(attempt: attempt + 1)
+            }
+        } else {
+            FileLogger.shared.log("面板：位置正常（dx=\(Int(dx)) dy=\(Int(dy))）")
         }
     }
 
