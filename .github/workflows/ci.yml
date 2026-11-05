@@ -7,7 +7,8 @@ on:
 
 jobs:
   test:
-    # macOS 26 才有 Liquid Glass / SwiftUI 新 API；旧 runner 会因为 deployment target 26.0 直接编译失败。
+    # 部署目标是 macOS 14（旧版适配包要能在 Sonoma 启动），但编译 Liquid Glass 需要 macOS 26 SDK，
+    # 所以 runner 还得用 macos-26（见 Package.swift 里 platforms 的注释）。
     runs-on: macos-26
     timeout-minutes: 20
 

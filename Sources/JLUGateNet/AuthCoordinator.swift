@@ -70,7 +70,7 @@ final class AuthStateHub: @unchecked Sendable {
         var continuations: [UUID: AsyncStream<AuthState>.Continuation] = [:]
     }
 
-    private let state = Mutex(HubState())
+    private let state = CompatMutex(HubState())
 
     func publish(_ next: AuthState) {
         let continuations = state.withLock { state -> [AsyncStream<AuthState>.Continuation] in
@@ -159,7 +159,7 @@ public final class DrcomAuthProvider: AuthProvider, SessionTelemetryProviding, @
 
 /// 遥测广播（与 `AuthStateHub` 同构，只是载荷不同）。
 final class AuthTelemetryHub: @unchecked Sendable {
-    private let state = Mutex<[UUID: AsyncStream<AuthTelemetry>.Continuation]>([:])
+    private let state = CompatMutex<[UUID: AsyncStream<AuthTelemetry>.Continuation]>([:])
 
     func publish(_ event: AuthTelemetry) {
         for continuation in state.withLock({ Array($0.values) }) {

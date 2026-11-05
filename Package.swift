@@ -3,7 +3,14 @@ import PackageDescription
 
 let package = Package(
     name: "JLUGate",
-    platforms: [.macOS("26.0"), .iOS("26.0")],
+    // 部署目标必须压到**最低支持的系统**（14.0），不能只看新版 App 的 26.0：
+    // LaunchServices 判断"能不能在这台 Mac 上启动"时读的是 Mach-O 里的
+    // LC_BUILD_VERSION minos；Info.plist 的 LSMinimumSystemVersion 改不动它。
+    // 之前这里写 26.0，旧版适配包的二进制 minos 也是 26.0，在 macOS 14/15 上
+    // 就会弹"这个版本不能与此版本的 macOS 配合使用"。
+    // macOS 26 的 Liquid Glass 用 #available(macOS 26.0, *) 隔离
+    //（见 App/Sources/AppearanceCompat.swift）。
+    platforms: [.macOS("14.0")],
     products: [
         .library(name: "JLUGateCore", targets: ["JLUGateCore"]),
         .library(name: "JLUGateNet", targets: ["JLUGateNet"]),

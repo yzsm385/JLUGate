@@ -40,6 +40,18 @@ swift build -c "$CONFIG" --product AppCompatCompileCheck \
 BIN="$(swift build -c "$CONFIG" --product AppCompatCompileCheck \
     --disable-sandbox --scratch-path .build --cache-path .build/cache --show-bin-path)"
 
+# LaunchServices 判断“这个 App 能不能在这台 Mac 上启动”时读的是 Mach-O 的
+# LC_BUILD_VERSION minos，不是 Info.plist 的 LSMinimumSystemVersion。
+# 部署目标一旦被写回 26.0，这里产出的包在 macOS 14/15 上就会弹
+# “这个版本不能与此版本的 macOS 配合使用”，所以打包前硬性校验。
+echo "==> verify minos（二进制必须按 macOS 14 编译）"
+MINOS="$(vtool -show-build "$BIN/AppCompatCompileCheck" | awk '/minos/ {print $2; exit}')"
+if [ "$MINOS" != "14.0" ]; then
+    echo "ERROR: 二进制 minos=$MINOS，旧版适配包必须是 14.0。" >&2
+    echo "       检查 Package.swift 的 platforms，别把部署目标写回 26.0。" >&2
+    exit 1
+fi
+
 APP="dist/JLU Gate (Compat).app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

@@ -41,6 +41,16 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 echo "==> assemble .app"
 cp "$BIN/AppCompileCheck" "$APP/Contents/MacOS/JLUGate"
 
+# Liquid Glass 的系统外观按「链接的 SDK 版本」开关，不只按 minos。包部署目标为了
+# Compat 包压到了 14，SwiftPM 会把 LC_BUILD_VERSION.sdk 一起写成 14，AppKit 于是
+# 把新版 App 当"旧 SDK 构建"退回旧外观（实测：菜单栏面板变成不透明灰底，玻璃没了）。
+# 这里把 sdk 标回 26.0（与 1.0.0 的 platform 26 产物一致）；minos 仍是 14，
+# 低版本系统由 Info.plist 的 LSMinimumSystemVersion=26.0 挡住。
+echo "==> stamp SDK 26（新版外观）"
+vtool -set-build-version macos 14.0 26.0 -replace \
+    -output "$APP/Contents/MacOS/JLUGate.new" "$APP/Contents/MacOS/JLUGate"
+mv "$APP/Contents/MacOS/JLUGate.new" "$APP/Contents/MacOS/JLUGate"
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

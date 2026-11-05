@@ -186,7 +186,7 @@ public struct SystemInterfaceProvider: InterfaceProvider {
     }
 
     /// 出厂 MAC 缓存：`networksetup` 是子进程，别每次枚举都起一次。
-    private static let hardwareMACCache = Mutex<[String: (value: String, at: Date)]>([:])
+    private static let hardwareMACCache = CompatMutex<[String: (value: String, at: Date)]>([:])
     /// 出厂 MAC 的缓存有效期：避免每次刷新都起子进程（启动/保存时会刷新多次）
     private static let hardwareMACTTL: TimeInterval = 60
 

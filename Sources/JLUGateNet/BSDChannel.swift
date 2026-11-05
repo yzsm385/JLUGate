@@ -16,8 +16,9 @@ public final class BSDChannel: DatagramChannel, @unchecked Sendable {
         var port: UInt16 = 0
     }
 
-    /// 用 `Mutex`（Synchronization）而不是 `NSLock`：Swift 6 禁止在 async 上下文里裸 lock()。
-    private let state = Mutex(SocketState())
+    /// 用 `CompatMutex`（macOS 14 兼容的 Mutex 替身）而不是裸 `NSLock`：
+    /// Swift 6 禁止在 async 上下文里直接 lock()，统一走 `withLock` 闭包。
+    private let state = CompatMutex(SocketState())
 
     public init() {}
 

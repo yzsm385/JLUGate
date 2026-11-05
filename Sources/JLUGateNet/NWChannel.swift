@@ -12,7 +12,7 @@ public final class NWInterfaceRegistry: @unchecked Sendable {
         var latestPath: NWPath?
         var started = false
     }
-    private let state = Mutex(RegistryState())
+    private let state = CompatMutex(RegistryState())
 
     public init() {}
 
@@ -62,7 +62,7 @@ public typealias CoreIPv4Address = JLUGateCore.IPv4Address
 public final class NWChannel: DatagramChannel, @unchecked Sendable {
     private let registry: NWInterfaceRegistry
     private let queue = DispatchQueue(label: "dev.jlugate.nwchannel")
-    private let state = Mutex<NWConnection?>(nil)
+    private let state = CompatMutex<NWConnection?>(nil)
 
     public init(registry: NWInterfaceRegistry) {
         self.registry = registry

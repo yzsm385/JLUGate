@@ -21,7 +21,7 @@ func expectEventually(_ description: String,
 
 /// 虚拟时间：`sleep` 只推进时钟（顺带让出一毫秒真时间，避免把 CPU 打满）。
 final class FakeClock: Clock, @unchecked Sendable {
-    private let instant = Mutex(ContinuousClock.now)
+    private let instant = CompatMutex(ContinuousClock.now)
 
     func now() -> ContinuousClock.Instant {
         instant.withLock { $0 }
@@ -48,7 +48,7 @@ final class FakeChannel: DatagramChannel, @unchecked Sendable {
         var openParameters: (localIP: IPv4Address, localPort: UInt16, remote: IPv4Endpoint, index: UInt32)?
     }
 
-    private let state = Mutex(State())
+    private let state = CompatMutex(State())
     private let responder: @Sendable (Data) -> [Data]
 
     init(responder: @escaping @Sendable (Data) -> [Data] = { _ in [] }) {
@@ -94,7 +94,7 @@ final class FakeChannel: DatagramChannel, @unchecked Sendable {
 
 final class RecordingChannelFactory: ChannelFactory, @unchecked Sendable {
     private let channel: FakeChannel
-    private let box = Mutex(0)
+    private let box = CompatMutex(0)
 
     init(channel: FakeChannel) {
         self.channel = channel

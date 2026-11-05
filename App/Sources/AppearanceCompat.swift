@@ -48,7 +48,10 @@ private struct GlassCardModifier: ViewModifier {
     var interactive: Bool = false
 
     func body(content: Content) -> some View {
-        if glassAllowed && AppearanceCompat.useGlass {
+        // 部署目标是 14.0（旧版适配包要能在 Sonoma 启动），Liquid Glass 的
+        // glassEffect 是 26.0 才有的 API，必须用 #available 挡住；否则要么
+        // 编译不过，要么在旧系统上 unrecognized selector 崩溃。
+        if #available(macOS 26.0, *), glassAllowed && AppearanceCompat.useGlass {
             let base = tint.map {
                 content.glassEffect(.regular.tint($0.opacity(0.5)).interactive(interactive),
                                     in: .rect(cornerRadius: cornerRadius))
