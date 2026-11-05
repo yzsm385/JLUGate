@@ -470,6 +470,8 @@ public actor DrcomEngine {
         // 抓包里保活 B 的轮次从 0x05 起（A 型用 0x04 之前的号），这里按同一口径起算。
         var round: UInt8 = 0x03
         var misses = 0
+        var bMisses = 0
+        var loggedFirstB = false
         var packetSeq: UInt8 = 1
         var mirror: UInt32 = 0
 
@@ -504,6 +506,12 @@ public actor DrcomEngine {
                             check: UInt32.random(in: 0...UInt32.max),
                             clientIP: packetIndex == 1 ? ticket.clientIP : nil)
                         let datagram = try codec.makeKeepAliveB(bContext)
+                        if !loggedFirstB {
+                            loggedFirstB = true
+                            // 真机上这份报文网关一直不回；记下我们自己发的是什么，
+                            // 下次诊断就能和网关的未知报文对照
+                            emit(.log("保活 B 首包（\(datagram.count) 字节）=\(Hex.string(datagram))"))
+                        }
                         try await context.channel.send(datagram)
                         packetSeq &+= 1
                         let incoming = try await receive(matching: { frame in
@@ -523,7 +531,16 @@ public actor DrcomEngine {
                 throw error
             } catch {
                 misses += 1
-                emit(.log("保活 \(kind.rawValue) 无应答（第 \(misses) 次）"))
+                if kind == .a {
+                    emit(.log("保活 A 无应答（第 \(misses) 次）"))
+                } else {
+                    // 真机上 B 常常整场都收不到回执：只记前几次和每 10 次，
+                    // 别让这一行把诊断日志刷满
+                    bMisses += 1
+                    if bMisses == 1 || bMisses % 10 == 0 {
+                        emit(.log("保活 B 无应答（累计 \(bMisses) 次）"))
+                    }
+                }
                 // 先用真实探测确认网络是否真断：网关不回保活应答 ≠ 会话失效
                 if misses >= 2, let liveness = configuration.livenessCheck,
                    await liveness(context.interface) {

@@ -409,6 +409,8 @@ final class AppModel {
     @ObservationIgnored private var autoReconnectTask: Task<Void, Never>?
     /// 在线巡检：每 25 秒确认一次"外网真的还在"，连续两次被门户拦下就重新认证
     @ObservationIgnored private var onlineWatchTask: Task<Void, Never>?
+    /// 最近一次"静默断网"强制重连的时间（防止探测目标被拦时反复重登）
+    @ObservationIgnored private var lastForcedReauthAt: Date?
     @ObservationIgnored private lazy var portalBrowser = WKPortalBrowser(model: self)
     @ObservationIgnored private let interfacesProvider = SystemInterfaceProvider()
     @ObservationIgnored private let activityKeeper = ActivityKeeper()
@@ -1006,6 +1008,7 @@ final class AppModel {
         onlineWatchTask?.cancel()
         onlineWatchTask = Task { @MainActor [weak self] in
             var intercepted = 0
+            var silent = 0
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(25))
                 guard let self, !Task.isCancelled else { return }
@@ -1025,8 +1028,10 @@ final class AppModel {
                 switch SessionLiveness.verdict(outcome) {
                 case .online:
                     intercepted = 0
+                    silent = 0
                 case .offline:
                     intercepted += 1
+                    silent = 0
                     FileLogger.shared.log("在线巡检：外网被门户拦下（第 \(intercepted) 次）")
                     if intercepted >= 2 {
                         self.recentLog.insert("外网断了（会话已失效），正在自动重连", at: 0)
@@ -1035,7 +1040,28 @@ final class AppModel {
                         return
                     }
                 case .inconclusive:
-                    FileLogger.shared.log("在线巡检：探针不通（不算断线，只记录）")
+                    intercepted = 0
+                    silent += 1
+                    FileLogger.shared.log("在线巡检：探针不通（第 \(silent) 次）")
+                    // 有些网关掉线时不再重定向到门户，只是静默丢包：探针一直"说不准"。
+                    // 连续 4 次（约 100 秒）外网探不到、而校内还通，就按会话失效处理。
+                    // 5 分钟冷却，避免探测目标本身被拦时反复重登。
+                    if silent >= 4 {
+                        let campus = await CampusLiveness().probe(
+                            interface: interface,
+                            server: IPv4Address(self.config.server) ?? IPv4Address("10.100.61.3")!,
+                            dns: self.config.currentProfile?.dns.compactMap(IPv4Address.init).first)
+                        let cooledDown = self.lastForcedReauthAt
+                            .map { Date().timeIntervalSince($0) > 300 } ?? true
+                        if campus, cooledDown {
+                            self.lastForcedReauthAt = Date()
+                            self.recentLog.insert("外网探不到、校内可达：按会话失效自动重连", at: 0)
+                            FileLogger.shared.log("在线巡检：连续 \(silent) 次探不到外网、校内可达 → 重新认证")
+                            self.retry()
+                            return
+                        }
+                        silent = 0
+                    }
                 }
             }
         }
