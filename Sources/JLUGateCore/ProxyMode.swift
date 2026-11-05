@@ -101,10 +101,10 @@ public enum ProxyModeAnalyzer {
             return "所有流量都从物理网卡出去\(appText)，认证包不会被代理吞掉。"
         case .ruleSplit:
             return "公网流量被代理接管，校内网段仍从 \(facts.campusRouteInterface ?? "物理网卡") 直接出去\(appText)。"
-                + "注意：**小火箭/Clash 即使在「全局」模式下通常也会放行内网段**，"
+                + "注意：小火箭/Clash 即使在「全局」模式下通常也会放行内网段，"
                 + "所以光看路由分不出「全局」还是「规则」——只要认证包没绕路，就是好事。"
         case .global:
-            return "连校园网段也被虚拟网卡接管了\(appText)。认证包会绕一圈代理——**能不能成功取决于这段绕路是否稳定**："
+            return "连校园网段也被虚拟网卡接管了\(appText)。认证包会绕一圈代理——能不能成功取决于这段绕路是否稳定："
                 + "延迟低、不丢包就照样能认证；一旦代理抖动/排队，认证或保活超时就会被服务器判为中断。"
         case .tunnelIdle:
             return "有 TUN 接口，但默认路由还没被它接管\(appText)；可能规则没命中，或代理未真正生效。"

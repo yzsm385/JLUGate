@@ -50,7 +50,7 @@ public enum JLULoginError: UInt8, Sendable, CaseIterable {
         case .tooManyIPs:
             "同时在线的设备数已达上限，先注销其它设备。"
         case .clientUpgradeRequired:
-            "吉大网络里这个码通常表示**密码不正确**（社区实现 jlu-drcom-ng 在本地图里就是这么标注的）；"
+            "吉大网络里这个码通常表示密码不正确（社区实现 jlu-drcom-ng 在本地图里就是这么标注的）；"
             + "也可能随服务端升级变化。先用网页版验证密码，再去客户端重新输入。"
         case .mustUseDHCP:
             "把网卡改成「使用 DHCP 自动获取地址」再试。"

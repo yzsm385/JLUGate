@@ -17,7 +17,7 @@ public enum JLUAccessPolicy {
         let got = actual ?? "未知"
         let iface = interfaceName.map { "（\($0)）" } ?? ""
         return """
-        学校按 **MAC 地址** 认设备：当前网卡\(iface) 是 \(got)，而账号登记的是 \(want)。
+        学校按 MAC 地址认设备：当前网卡\(iface) 是 \(got)，而账号登记的是 \(want)。
         有线走的是网线/USB 网卡的 MAC，JLU.PC 走的是 Wi-Fi 网卡的 MAC，两者不是同一块卡、也不能互改。
         要改用这个网络，得先到自助平台把登记 MAC 改成 \(got)（改了以后原来那台就用不了了）。
         """
@@ -28,7 +28,7 @@ public enum JLUAccessPolicy {
         let hardwareText = hardware ?? "（读不到硬件地址）"
         let registeredText = registered ?? "（未登记）"
         return """
-        系统现在给这块网卡用的是 **私有/随机 MAC**：\(current)（第二位是 2/6/a/e 就属于这类），
+        系统现在给这块网卡用的是私有/随机 MAC：\(current)（第二位是 2/6/a/e 就属于这类），
         而网卡出厂地址是 \(hardwareText)，学校登记的是 \(registeredText)。
         三种处理方式：
         1. 到「系统设置 → 网络 → 该网卡 → 详细信息 → 硬件」里把「私有地址/随机 MAC」关掉，恢复硬件地址；
@@ -39,7 +39,7 @@ public enum JLUAccessPolicy {
 
     /// JLU.PC 的前置说明（向导里展示）。
     public static let jluPCHint = """
-    JLU.PC 使用本机 **Wi-Fi 网卡** 的 MAC 认证。若你在学校登记的是 USB/有线网卡的 MAC，
+    JLU.PC 使用本机 Wi-Fi 网卡的 MAC 认证。若你在学校登记的是 USB/有线网卡的 MAC，
     这里会认证失败——需要先到 ip.jlu.edu.cn 把登记 MAC 改成 Wi-Fi 网卡的（改完有线那台会失效）。
     """
 

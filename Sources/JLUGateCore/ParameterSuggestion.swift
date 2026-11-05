@@ -39,7 +39,7 @@ public enum ParameterSuggester {
                 isTrustworthy: false,
                 reason: method.isEmpty
                     ? "读不到这块网卡的配置方式；请手动照抄学校分配的地址，不要用 DHCP 分到的。"
-                    : "这块网卡当前是 \(configMethod ?? "自动")，地址是自动分配的，**不能**当静态参数用。请手动照抄。")
+                    : "这块网卡当前是 \(configMethod ?? "自动")，地址是自动分配的，不能当静态参数用。请手动照抄。")
         }
 
         guard let ip, !ip.isEmpty else {
@@ -51,6 +51,6 @@ public enum ParameterSuggester {
         return NetworkParameterSuggestion(
             ip: ip, mask: mask, gateway: defaultGateway, dns: dns, mac: mac,
             isTrustworthy: true,
-            reason: "这块网卡当前是**手动配置**，以下读数就是本机实际在用的静态参数，可直接使用（建议与学校通知单核对一眼）。")
+            reason: "这块网卡当前是手动配置，以下读数就是本机实际在用的静态参数，可直接使用（建议与学校通知单核对一眼）。")
     }
 }

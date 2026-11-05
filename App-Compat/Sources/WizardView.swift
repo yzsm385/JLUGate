@@ -349,7 +349,7 @@ struct WizardView: View {
                                     onSubmit: finish)
             }
 
-            Label("这些值只能从学校通知单照抄。下面是系统当前读数，仅供核对——**不要照抄 DHCP 分到的地址**。",
+            Label("这些值只能从学校通知单照抄。下面是系统当前读数，仅供核对——不要照抄 DHCP 分到的地址。",
                   systemImage: "info.circle")
                 .font(.caption2)
                 .foregroundStyle(.secondary)

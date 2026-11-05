@@ -8,7 +8,7 @@ struct InspectPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("体检的是**浏览器会走的那条路**：出口 IP、WebRTC、DNS 泄漏、人机验证可达性。")
+            Text("体检的是浏览器会走的那条路：出口 IP、WebRTC、DNS 泄漏、人机验证可达性。")
                 .font(.caption2).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
