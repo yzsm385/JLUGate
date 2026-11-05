@@ -23,16 +23,14 @@ struct CopyTests {
         #expect(Copy.entryCount(.en) == 711)
     }
 
-    @Test("设置里选的界面语言能覆盖系统语言")
-    func override() {
-        let original = Copy.storedOverride
-        defer { Copy.storedOverride = original }
-        Copy.storedOverride = .zhHant
-        #expect(Copy.language == .zhHant)
-        #expect(Copy.t("M32").contains("設定"))
-        Copy.storedOverride = .en
-        #expect(Copy.language == .en)
-        #expect(Copy.t("M32").contains("Settings"))
+    @Test("设置里选的界面语言能覆盖环境变量和系统语言")
+    func effectiveLanguage() {
+        // 纯函数，不改全局状态（否则并行跑的其他测试会被带偏）
+        #expect(Copy.effectiveLanguage(stored: .zhHant, forced: "zh-Hans", preferred: ["en-US"]) == .zhHant)
+        #expect(Copy.effectiveLanguage(stored: .en, forced: nil, preferred: ["zh-Hans-CN"]) == .en)
+        #expect(Copy.effectiveLanguage(stored: nil, forced: "zh-Hant", preferred: ["en-US"]) == .zhHant)
+        #expect(Copy.effectiveLanguage(stored: nil, forced: nil, preferred: ["zh-Hant-TW"]) == .zhHant)
+        #expect(Copy.effectiveLanguage(stored: nil, forced: nil, preferred: ["en-GB"]) == .en)
     }
 
     @Test("取文案：非空、不含未替换的占位符残留（静态条目）")

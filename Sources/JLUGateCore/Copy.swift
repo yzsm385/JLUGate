@@ -43,10 +43,17 @@ public enum Copy {
 
     /// 最终生效的语言：用户在设置里选的 > 环境变量（调试/CI）> 系统首选
     public static var language: CopyLanguage {
-        if let stored = storedOverride { return stored }
-        if let forced = ProcessInfo.processInfo.environment["JLUGATE_LANG"]
-            .flatMap(CopyLanguage.init(rawValue:)) { return forced }
-        return resolveLanguage()
+        effectiveLanguage(stored: storedOverride,
+                          forced: ProcessInfo.processInfo.environment["JLUGATE_LANG"],
+                          preferred: Locale.preferredLanguages)
+    }
+
+    /// 纯函数版本（可测、不碰全局状态）
+    static func effectiveLanguage(stored: CopyLanguage?, forced: String?,
+                                  preferred: [String]) -> CopyLanguage {
+        if let stored { return stored }
+        if let forced = forced.flatMap(CopyLanguage.init(rawValue:)) { return forced }
+        return resolveLanguage(preferred: preferred)
     }
 
     public static func t(_ key: String) -> String {
