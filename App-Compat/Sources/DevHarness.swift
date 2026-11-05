@@ -41,6 +41,9 @@ enum DevOverrides {
         var runInspect: Bool?
         /// 自检：向导直接跳到"网络参数"这一步（用于截图验证输入框）
         var wizardNetwork: Bool?
+        /// 自检：假装菜单栏图标被系统摆到了左边，验证"换名重建到右侧"这条路径
+        /// （macOS 14 的坑只在真机上出现，开发机上用它保证这条路径不被改坏）
+        var healPlacement: Bool?
     }
 
     private static let fileConfig: FileConfig? = {
@@ -107,6 +110,12 @@ enum DevOverrides {
     static var uiProbeOnLaunch: Bool {
         guard isEnabled else { return false }
         return fileConfig?.uiProbe ?? false
+    }
+
+    /// 自检：按"图标在左边"处理一次，走一遍重建到右侧的路径。
+    static var healPlacementOnLaunch: Bool {
+        guard isEnabled else { return false }
+        return fileConfig?.healPlacement ?? false
     }
 
     /// 自检时模拟一次"有线 + 保存"的完整流程。

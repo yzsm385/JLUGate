@@ -25,6 +25,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var popover: NSPopover?
     private var iconTask: Task<Void, Never>?
 
+    // MARK: 菜单栏图标位置（macOS 14 的坑）
+
+    /// AppKit 自己用来记住"这枚图标排第几"的偏好键：`NSStatusItem Preferred Position <autosaveName>`。
+    /// 值越小越靠右（300 大约就是其他菜单栏 App 那一排），0/巨大值会被排到最左边。
+    private static let preferredPositionPrefix = "NSStatusItem Preferred Position "
+    /// 当前这枚图标使用的 autosaveName：重建时换新名字，系统才会重新读取位置偏好。
+    private static let autosaveNameKey = "JLUGate.statusItem.autosaveName"
+    /// 重建代次。AppKit 会按 autosaveName 缓存图标位置，同一个名字重建不会生效，
+    /// 所以每次重排都必须用一个从没用过的名字（JLUGate.g1、g2……）。
+    private static let autosaveGenerationKey = "JLUGate.statusItem.generation"
+
+    /// macOS 14 真机：状态栏图标会被系统摆到"紧挨着帮助"的位置，甚至压进 App 菜单中间
+    /// （实测 x≈180/450，1280 宽的屏），而且之后再也不归位——面板跟着锚在左边。
+    /// 所以不能听天由命：图标建好后量一次真实坐标，不在屏幕右半边就换名重建，
+    /// 并显式写入位置偏好，把图标排到屏幕右侧。
+    private let placementValues: [Double] = [300, 120]
+    private var placementAttempt = 0
+    private var placementProbeCount = 0
+    private var baselineIconX: CGFloat?
+    private var devHealUsed = false
+
     /// 在访达里双击已在运行的 App：系统不会重新启动进程，只会发 reopen。
     /// 用户此时想要的通常是"看到界面"，所以先亮面板，再顺手触发一次连接。
     func applicationShouldHandleReopen(_ sender: NSApplication,
@@ -69,8 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
-        // 用户手动打开（不是登录项拉起）：等状态栏图标真正就位后把面板亮出来。
-        // showPanel() 自己会确认锚点已经进菜单栏，所以这里 400ms 后调用不会放歪。
+        // 用户手动打开（不是登录项拉起）：等图标真正排到右侧、面板能贴住它之后再亮出来。
+        // 1.5s 里包含了 checkStatusItemPlacement() 的第一次测量（1.0s）和必要时的重建。
         let launchedByUser = (notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool) ?? true
         FileLogger.shared.log("启动：launchedByUser=\(launchedByUser)")
         if launchedByUser,
@@ -79,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            !CommandLine.arguments.contains("--open-panel"),
            !DevOverrides.autostart {
             Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(400))
+                try? await Task.sleep(for: .milliseconds(1500))
                 self.showPanel()
             }
         }
@@ -100,14 +121,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: 菜单栏图标
 
     private func buildStatusItem() {
+        let name = UserDefaults.standard.string(forKey: Self.autosaveNameKey) ?? "JLUGate"
+        createStatusItem(autosaveName: name)
+        schedulePlacementCheck(after: .milliseconds(1000))
+    }
+
+    @discardableResult
+    private func createStatusItem(autosaveName name: String) -> NSStatusItem {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        item.autosaveName = name
         if let button = item.button {
-            setStatusImage("shield.lefthalf.filled", on: button)
+            // 初始也用圆圈系（在线是"圆圈+闪电"），不要盾牌
+            setStatusImage("circle.dashed", on: button)
             button.target = self
             button.action = #selector(togglePanel(_:))
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         }
         statusItem = item
+        lastIconName = nil                 // 新按钮还没有图标，让 observeIcon 下一轮补上
+        UserDefaults.standard.set(name, forKey: Self.autosaveNameKey)
+        FileLogger.shared.log("图标：已挂上（autosave=\(name)）")
+        return item
     }
 
     /// 设置菜单栏图标。符号取不到（老系统缺某个 SF Symbol）时退回文字，
@@ -185,6 +219,120 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard name != lastIconName else { return }   // 没变化就别重建 NSImage
         lastIconName = name
         setStatusImage(name, on: button)
+    }
+
+    // MARK: 图标位置自校正
+
+    /// 量图标按钮在屏幕上的真实矩形。刚启动、菜单栏还没布局时可能拿不到，返回 nil。
+    private func statusButtonFrame() -> NSRect? {
+        guard let button = statusItem?.button, let window = button.window else { return nil }
+        let frame = window.convertToScreen(button.convert(button.bounds, to: nil))
+        guard frame.width > 1, frame.height > 1 else { return nil }
+        return frame
+    }
+
+    private func schedulePlacementCheck(after delay: Duration) {
+        Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            self.checkStatusItemPlacement()
+        }
+    }
+
+    /// 图标是不是真的在屏幕右半边（用户说的"右上角"）。
+    /// 不猜坐标、不信任 AppKit 的默认摆放——只量按钮此刻在屏幕上的真实位置。
+    private func checkStatusItemPlacement() {
+        guard placementProbeCount < 8 else {
+            FileLogger.shared.log("图标：多次都量不到真实位置，本轮的自动校正放弃")
+            return
+        }
+        placementProbeCount += 1
+
+        guard let frame = statusButtonFrame(),
+              let screen = statusItem?.button?.window?.screen ?? NSScreen.main else {
+            FileLogger.shared.log("图标：还没量到真实位置，800ms 后再看（第 \(placementProbeCount) 次）")
+            schedulePlacementCheck(after: .milliseconds(800))
+            return
+        }
+
+        let mid = screen.frame.midX
+        FileLogger.shared.log("图标：位置 x=\(Int(frame.minX))…\(Int(frame.maxX))，"
+                              + "屏宽 \(Int(screen.frame.width))，中线 \(Int(mid))")
+        var misplaced = frame.midX < mid
+        if DevOverrides.healPlacementOnLaunch && !devHealUsed {
+            devHealUsed = true
+            misplaced = true
+            FileLogger.shared.log("图标：自检开关要求，按「被摆到左边」走一次重建")
+        }
+        guard misplaced else { return }
+
+        if placementAttempt == 0 {
+            baselineIconX = frame.midX
+        } else if let baseline = baselineIconX, frame.midX < baseline - 20 {
+            // 写了位置偏好反而更靠左 → 这台系统不是"离右边多少点"的语义，
+            // 再写小值只会更糟。撤回偏好，回到系统默认摆放，本轮到此为止。
+            FileLogger.shared.log("图标：位置偏好反而把它推得更左（\(Int(baseline)) → \(Int(frame.midX))），"
+                                  + "撤回偏好、回默认摆放")
+            revertStatusItemPlacement()
+            return
+        }
+        healStatusItemPlacement(reason: "图标落在屏幕左半边")
+    }
+
+    /// 撤回位置偏好：换一个全新的 autosaveName、不写任何偏好，让系统按默认规则摆放。
+    private func revertStatusItemPlacement() {
+        placementAttempt = placementValues.count      // 本轮不再重排
+        let generation = UserDefaults.standard.integer(forKey: Self.autosaveGenerationKey) + 1
+        UserDefaults.standard.set(generation, forKey: Self.autosaveGenerationKey)
+        let name = "JLUGate.d\(generation)"
+        if let old = statusItem {
+            NSStatusBar.system.removeStatusItem(old)
+            statusItem = nil
+        }
+        createStatusItem(autosaveName: name)
+        FileLogger.shared.log("图标：已回到默认摆放（autosave=\(name)）")
+    }
+
+    /// 把图标挪回右侧：换一个新的 autosaveName，并在建图标之前写死位置偏好。
+    ///
+    /// `NSStatusItem Preferred Position` 是 AppKit 自己持久化图标顺序用的键（值越小越靠右，
+    /// 菜单栏管理类 App 都用它排序）。实测：先写值、再建图标，系统就会把图标排到
+    /// "离屏幕右边约 N 点"的位置；300 正好落在其他菜单栏 App 那一排。
+    /// 必须换新名字——同一个 autosaveName 的值会被 AppKit 缓存/清掉，重建也不生效。
+    private func healStatusItemPlacement(reason: String) {
+        guard placementAttempt < placementValues.count else {
+            FileLogger.shared.log("图标：两次重排后仍不在右半边，保持现状（日志里已记录实际坐标）")
+            return
+        }
+        let value = placementValues[placementAttempt]
+        placementAttempt += 1
+        var generation = UserDefaults.standard.integer(forKey: Self.autosaveGenerationKey) + 1
+        var name = "JLUGate.g\(generation)"
+        // 万一算出来的名字正好是现在用的那个（老版本留下的），再往后跳一代
+        let currentName = UserDefaults.standard.string(forKey: Self.autosaveNameKey)
+        while name == currentName {
+            generation += 1
+            name = "JLUGate.g\(generation)"
+        }
+        UserDefaults.standard.set(generation, forKey: Self.autosaveGenerationKey)
+        UserDefaults.standard.set(value, forKey: Self.preferredPositionPrefix + name)
+        UserDefaults.standard.synchronize()
+
+        if let old = statusItem {
+            NSStatusBar.system.removeStatusItem(old)
+            statusItem = nil
+        }
+        createStatusItem(autosaveName: name)
+        FileLogger.shared.log("图标：\(reason)，已重建到右侧（autosave=\(name)，"
+                              + "preferredPosition=\(Int(value))）")
+
+        // 图标挪了位置：面板如果正开着，等落位后重新贴一次
+        if popover?.isShown == true {
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(700))
+                self.showPanel()
+            }
+        }
+        schedulePlacementCheck(after: .milliseconds(1200))
     }
 
     // MARK: 面板
@@ -275,74 +423,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         model.isPanelVisible = true
-        lastAnchor = currentAnchorRect()
-        FileLogger.shared.log("面板：已显示（锚点 x=\(Int(lastAnchor?.minX ?? -1)) y=\(Int(lastAnchor?.minY ?? -1))）")
-        scheduleAnchorCheck()
+        let anchor = statusButtonFrame()
+        FileLogger.shared.log("面板：已显示（锚点 x=\(Int(anchor?.minX ?? -1)) y=\(Int(anchor?.minY ?? -1))）")
         Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(600))
+            try? await Task.sleep(for: .milliseconds(500))
             self.verifyPanelPlacement()
         }
     }
 
     // MARK: 锚点自校正
 
-    private var lastAnchor: NSRect?
-
-    private func currentAnchorRect() -> NSRect? {
-        guard let button = statusItem?.button, let window = button.window else { return nil }
-        return window.convertToScreen(button.convert(button.bounds, to: nil))
-    }
-
-    /// 面板刚显示时，状态栏图标可能还在被系统挪位；1.2 秒后对一下锚点，
-    /// 真挪了就收起、按新位置重开。不猜坐标，只认"位置变了没有"。
-    private func scheduleAnchorCheck() {
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(1200))
-            self.reanchorIfMoved()
-        }
-    }
-
-    private func reanchorIfMoved() {
-        guard popover?.isShown == true,
-              let now = currentAnchorRect(),
-              let last = lastAnchor else { return }
-        if abs(now.minX - last.minX) > 6 || abs(now.minY - last.minY) > 6 {
-            popover?.performClose(nil)
-            if let button = statusItem?.button {
-                popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            }
-            lastAnchor = now
-            FileLogger.shared.log("面板：状态栏图标位置变化，已重新锚定（x=\(Int(now.minX)) y=\(Int(now.minY))）")
-        }
-    }
-
     /// 校验"面板真的贴在图标下面"。
     ///
-    /// macOS 14 实测：启动瞬间 show 出来的 popover 有时会被 AppKit 丢到屏幕左侧，
-    /// 而锚点本身没变，光比对锚点发现不了。这里直接量面板窗口和图标锚点的偏差，
-    /// 偏太大就收起、重开，最多 3 次；日志会记录每次的 dx/dy。
+    /// 只认两条硬指标：面板和图标在横向上有重叠；面板上沿贴着菜单栏（不是掉到屏幕中间）。
+    /// 不比对中心点——图标靠右时 popover 会被屏幕边缘挤过来，中心点本来就不重合。
+    /// 不对就收起重开，最多 2 次，每次都把实测数字写进日志。
     private func verifyPanelPlacement(attempt: Int = 0) {
         guard popover?.isShown == true,
-              let anchor = currentAnchorRect(),
+              let anchor = statusButtonFrame(),
               let win = popover?.contentViewController?.view.window else { return }
-        let dx = abs(win.frame.midX - anchor.midX)
-        let dy = abs(win.frame.maxY - anchor.minY)
-        if dx > 200 || dy > 200 {
-            guard attempt < 3 else {
-                FileLogger.shared.log("面板：重开 3 次仍偏离图标（dx=\(Int(dx)) dy=\(Int(dy))）")
-                return
-            }
-            popover?.performClose(nil)
-            if let button = statusItem?.button {
-                popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            }
-            FileLogger.shared.log("面板：偏离图标（dx=\(Int(dx)) dy=\(Int(dy))），已收起重开（\(attempt + 1)/3）")
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(600))
-                self.verifyPanelPlacement(attempt: attempt + 1)
-            }
-        } else {
-            FileLogger.shared.log("面板：位置正常（dx=\(Int(dx)) dy=\(Int(dy))）")
+        let overlaps = win.frame.minX < anchor.maxX && win.frame.maxX > anchor.minX
+        let gapY = abs(win.frame.maxY - anchor.minY)
+        if overlaps && gapY <= 80 {
+            FileLogger.shared.log("面板：位置正常（面板 x=\(Int(win.frame.minX))…\(Int(win.frame.maxX))，"
+                                  + "图标 x=\(Int(anchor.minX))…\(Int(anchor.maxX))）")
+            return
+        }
+        guard attempt < 2 else {
+            FileLogger.shared.log("面板：重开 2 次仍没贴住图标（overlaps=\(overlaps) gapY=\(Int(gapY))）")
+            return
+        }
+        popover?.performClose(nil)
+        if let button = statusItem?.button {
+            popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+        FileLogger.shared.log("面板：没贴住图标（overlaps=\(overlaps) gapY=\(Int(gapY))），已收起重开（\(attempt + 1)/2）")
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(500))
+            self.verifyPanelPlacement(attempt: attempt + 1)
         }
     }
 
