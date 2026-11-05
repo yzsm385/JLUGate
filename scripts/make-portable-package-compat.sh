@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="1.1.6"
+VERSION="1.2.0"
 APP="dist/JLU Gate (Compat).app"
 
 echo "==> 构建 .app [compat: macOS 14, no Liquid Glass]"

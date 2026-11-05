@@ -7,6 +7,8 @@ struct MenuContent: View {
     @Environment(AppModel.self) private var model
     /// 每秒刷新一次，让"已在线"的时长真的在走
     @State private var now = Date()
+    /// 作息提醒的时钟（每 30 秒刷新一次，按北京时间判断）
+    @State private var careNow = Date()
 
     var body: some View {
         Group {
@@ -76,15 +78,56 @@ struct MenuContent: View {
                 actionButtons
             }
 
+            if let care = DormSchedule.care(at: careNow) {
+                careBanner(care)
+            }
+
             updateBar
             offCampusAssist
             footer
         }
         .padding(14)
         .frame(width: 348)
+        .onReceive(Timer.publish(every: 30, on: .main, in: .common).autoconnect()) { tick in
+            careNow = tick
+        }
         .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { tick in
             // 只有"在线 + 面板可见"时才需要每秒刷新，其余时候不动，省 CPU
             if model.state.isOnline, model.isPanelVisible { now = tick }
+        }
+    }
+
+    // MARK: 作息提醒
+
+    private func careBanner(_ care: DormSchedule.Care) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Text(careText(care))
+                .font(.system(size: 10))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(careTint(care).opacity(0.13),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func careText(_ care: DormSchedule.Care) -> String {
+        switch care.kind {
+        case .blackoutSoon: Copy.f("R01", care.minutes)
+        case .blackoutImminent: Copy.f("R02", care.minutes)
+        case .weekendFree: Copy.t("R03")
+        case .afterBlackout: Copy.t("R04")
+        case .morningClass: Copy.t("R05")
+        }
+    }
+
+    private func careTint(_ care: DormSchedule.Care) -> Color {
+        switch care.kind {
+        case .morningClass: .orange
+        case .blackoutSoon, .blackoutImminent, .afterBlackout: .indigo
+        case .weekendFree: .purple
         }
     }
 

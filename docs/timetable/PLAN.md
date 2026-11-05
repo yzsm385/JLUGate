@@ -1,182 +1,136 @@
-# 课表 × 日程：JLU Gate 集成方案（讨论稿 v0.1）
+# 课表 × 日程：JLU Gate 集成方案（v0.3 讨论稿）
 
-> **状态**：方案讨论稿，尚未写代码。本文只回答三件事：**能不能做、做成什么样、怎么一步步做**。
-> **结论先行**：能做，而且吉大的条件比大多数学校好——课表有**整学期一次返回的 JSON 接口**，不用去啃 HTML 表格。真正难的只有三处：① 本 App 历史上有 WKWebView 崩溃记录；② 登录态/证书/代理路径；③ 重新同步时**不能覆盖用户手改过的内容**。
-> **最后更新**：2026-11-05
+> **状态**：方案讨论稿，尚未写代码。
+> **v0.3 增补**（2026-11-05）：学期日历（几周/第一周哪天/每周起始日）、课程起止周、显示开关、作息表细到每一节（节数/课间/放学）、开机提醒下一节课。
+> **v0.2 变更**（2026-11-05，按你的三条新要求重写）：
+>
+> | 上一版 | 这一版 | 为什么 |
+> |---|---|---|
+> | 独立窗口 + WKWebView 登录 | **380 面板内 + 原生扫码** | 产品初衷不是做独立窗口；且 380 里的网页登录页实测很难看（见 §4.6） |
+> | 网页登录后截 XHR | **原生 CAS 会话 + 原生 JSON 接口** | 实测 `iedu` 公网可达、`wdkb` 直接 302 到 CAS；接口本来就是 JSON |
+> | 固定「节次网格」 | **真时间轴 + 方格流两种视图** | 课程可能晚半小时、对不齐；380 也塞不下 7×12 |
+> | 一次性导入 | 多学期归档 + 三方合并 | 你的第二条要求 |
 
 ---
 
-## 0. 30 秒版
+## 0. 结论
 
 | 问题 | 结论 |
 |---|---|
-| 能不能记住课表地址，直接进？ | 能。`https://iedu.jlu.edu.cn/jwapp/sys/wdkb/*default/index.do#/xskcb` 存为默认入口，登录态用 Cookie 记住 |
-| 未登录会不会自动跳登录页？ | 会。CAS（`cas.jlu.edu.cn/tpass/login`）接管，登录后回跳；我们把 `#/xskcb` 补回去，直接落在课表 |
-| 登录后能不能自动导入？ | 能。页面自己会请求 `cxxszhxqkb.do`，我们在 WebView 里挂个钩子把响应截下来；也可以直接用 Cookie 走原生请求 |
-| 能不能改了再改（纠正）？ | 能。课表以「节次」为坐标存，时间由「作息表」换算；格子可拖、可拉长、可改周次；另有「本周临时调课」层 |
-| 能不能再加活动？ | 能。活动和课程是两套模型，共用网格，可重复、可提醒、可导出 ICS |
-| 能不能反复更新？ | 能。按学期归档，重新同步走**三方合并**：学校改的更新，你改的保留，两边都改的让你选 |
-| 能不能存好几个学期？ | 能。本地是一个「档案」，里面 N 个学期；当前学期自动识别，历史学期只增不删 |
-| 规则模式下能不能用？ | 能，但要先做一次**预检**：`jlu.edu.cn` / `10.0.0.0/8` 有没有被代理吞掉。吞掉了就给你一条可复制的 DIRECT 规则 |
-| 最大风险是什么？ | WKWebView 在这个 App 里崩过。**M0 先花 1–2 天专门验证**，崩就退到「原生 CAS + 粘贴兜底」 |
-
-### 0.1 先说难听的：值不值得做
-
-- **如果只想"在 Mac 上看课表"**，现成的 [JLU_schedule](https://github.com/JFyuhong/JLU_schedule) 的 iOS/PWA 版、手机上的 WakeUp 都能用，没必要重造。
-- **JLU Gate 做这件事的增量**只有四点：① 登录态和校园网在同一个 App，不用先开浏览器；② 入口就在菜单栏，和"连没连校园网"联动；③ 能做"下一节课/上课提醒"这种贴着菜单栏的提醒；④ 课表能和网络体检/站点合集放在一个地方。
-- **代价**：一个新子系统（约 20 人日）+ 一条长期维护面（教务一改版就得跟）。
-- **折中方案**：先做 **M1+M2（只读 + 导入 + 同步）**，编辑/活动看使用频率再加；或者干脆只做"导出 ICS 给系统日历"，一天就能收工。本文按"完整做"来写，但里程碑是可裁剪的。
+| 能不能记住地址直接进？ | 能。`https://iedu.jlu.edu.cn/jwapp/sys/wdkb/*default/index.do#/xskcb` 存为默认入口 |
+| 未登录怎么办？ | 实测该地址会 302 到 `cas.jlu.edu.cn/tpass/login?service=<原地址>`；登录后原路返回，补 `#/xskcb` 就是课表 |
+| 登录能不能不弹窗、不嵌网页？ | **能，而且学校主推的扫码正好适合**：二维码内容、轮询接口都已抓到（§4.6），可以在面板里原生画 QR、原生轮询 |
+| 要不要预填账号密码？ | 字段是 `#un`/`#pd`，可以填；但**当前密码模板没有图形验证码**（验证码在「手机登录」tab），且密码提交用了学校自定义 DES，**不是标准 3DES**（已实测），所以"预填"容易、"原生提交"要单独移植 |
+| 能不能塞进 380 面板？ | 能：**周方格流**看全周 + **单日真时间轴**看细节，都不需要二维网格 |
+| 不规整的课怎么办？ | 时间轴按**真实分钟**排，节次只是参考线；08:30 的课就画在 08:30，不强行对齐，重叠就并排 |
+| 更新/多学期？ | 一个 `timetable.json` 存 N 个学期；重新同步走三方合并，手改不被覆盖 |
+| 最大风险？ | 不是 WebView 了（这版不用它）。是：**扫码成功后的回调细节**、**密码登录的二次验证**、**教务接口字段变化** |
 
 ---
 
-## 1. 需求转写
+## 0.1 先说难听的：值不值得做
 
-把聊天里的要求拆成可验收的用户故事（U1–U10），后面每一节都对着它们做。
+- 只想"看课表"：手机上的 WakeUp、开源 [JLU_schedule](https://github.com/JFyuhong/JLU_schedule) 都能用。
+- JLU Gate 的增量：登录态/校园网/入口/提醒在一个 App；菜单栏一眼看到"下一节"；课表变动能和网络状态一起解释。
+- 代价：一个新子系统（约 15–20 人日）+ 一条长期维护面。
+- 可裁剪：只做 **M1+M2**（导入 + 同步 + 只读展示）约 1 周多；编辑和活动后加。
 
-| # | 用户故事 | 验收标准 |
+---
+
+## 1. 需求（含本轮新增）
+
+| # | 用户故事 | 验收 |
 |---|---|---|
-| U1 | 我记得课表地址，不想每次从教务首页点进去 | 首次填一次 URL，之后「课表」入口一键直达；URL 可改、可恢复默认 |
-| U2 | 没登录时它自己跳登录页，登录完直接看到课表 | 打开 → CAS → 登录 → 回跳 → 自动补 `#/xskcb` → 课表渲染完成，全程不用再点 |
-| U3 | 看到课表后，能把课表导进来 | 页面上出现「导入本学期（32 门）」；点一下进预览，确认后落库 |
-| U4 | 导进来只是起点，时间/格子/周次都能改 | 网格里点、拖、拉、右键都能改；改完立刻生效并持久化 |
-| U5 | 颜色要好看、稳定，不要每次导入都变 | 同一门课跨学期同色；深浅色两套；可手动改色；改完不被同步覆盖 |
-| U6 | 除了课，还要能加活动（社团、实验、约会…） | 可建一次性/每周重复的活动，显示在同一个网格和「今天」列表里，可设提醒 |
-| U7 | 课表会变（调课、停课、补课），要能再同步 | 「同步」按钮 → diff 预览 → 应用；手工改动不被覆盖；可撤销 |
-| U8 | 好几个学期的课表都要留着 | 学期列表可切换/重命名/删除；新学期自动建；旧学期不因同步消失 |
-| U9 | 开着代理（规则模式）时也能用 | 预检通过才发请求；失败时给出「加 DIRECT 规则 / 先连校园网 / 用 WebVPN」的可执行建议 |
-| U10 | 出问题别只报「网络错误」 | 分阶段状态：未登录 / 登录过期 / 不是校园网 / 代理接管 / 证书不受信 / 接口变了，各有各的说法和下一步 |
-
-**非目标（明确不做）**：抢课、查成绩/考试（后续可复用同一会话）、自动提交表单、绕过验证码、后台定时爬取、上传课表到任何服务器。
-
----
-
-## 2. 现有工程的约束（必须先承认）
-
-这些不是"注意事项"，是设计输入。绕开它们会返工。
-
-| 约束 | 出处 | 对本功能的影响 |
-|---|---|---|
-| 所有界面都在 **380pt 宽的菜单栏 popover** 里，且**故意不开窗口** | `App/Sources/JLUGateApp.swift`、`MenuContent.swift` 注释 | 完整课表/编辑必须另开窗口，或做成"面板看、窗口改" |
-| **WKWebView 在这个 App 里崩过**（AppKit display cycle → SIGABRT） | `WKPortalBrowser.swift`、`PortalViewerView.swift` 注释 | 登录页不能直接塞进 popover；必须独立窗口 + 生命周期正确，且要有降级路径 |
-| 决策 D-001：**不做表单重放、不做 DOM 操作/自动填充** | `WKPortalBrowser.swift` | 网页里默认不代填账号密码；「帮填」只能是显式开关 |
-| `JLUGateCore` **不得 import 网络框架**，必须能离线 `swift test` | `docs/PLAN.md` §0 | 解析/合并/周次计算放纯逻辑层，网络单独放 |
-| DrCOM 连接链路冻结（10 个文件） | `docs/connection-freeze.md` | 新增文件不受限，但**一个字节都不能顺手动**那几个文件 |
-| 无第三方依赖（SwiftPM 无 dependencies） | `Package.swift` | WebView、JSON、ICS、颜色全部原生实现 |
-| 文案三语（简/繁/英），且 `CopyTests` 写死了 **711 条** | `Sources/JLUGateCore/CopyTable-*.swift`、`Tests/.../CopyTests.swift` | 新增文案要同步三张表 + 改测试里的数字 |
-| 隐私扫描禁止真实 MAC/IP/学号入库 | `scripts/privacy-scan.sh` | 测试夹具只能用合成数据；真实响应**绝不入库** |
-| 配置走 0600 文件 / Keychain 双后端 | `FilePrivacy.swift`、`CredentialStore.swift` | 课表与 Cookie 沿用同一套 |
-| `App/` 与 `App-Compat/` 是**两份物理源码** | `App-Compat/Sources` | 每个新 View 要放两遍（逻辑尽量下沉到 Core/Schedule，UI 重复才可控） |
-
-**推论**：课表是"第二个产品面"，不要塞进 DrCOM 状态机，也不要塞进 `AppConfig`。它应该是**独立子系统 + 独立存储 + 独立 target**。
+| U1 | 记住课表地址，一键直达 | 首次填一次，之后点「课表」就开 |
+| U2 | 没登录自动跳登录，登录完直接看到课表 | 302 → CAS → 回跳 → 补 `#/xskcb` |
+| U3 | 登录后能导入 | 「导入本学期（32 门）」→ 预览 → 落库 |
+| U4 | 时间/格子/周次都能改 | 点方块改、拖时间、改周次 |
+| U5 | 颜色稳定好看 | 同名同色、跨学期一致、可手改 |
+| U6 | 能加活动 | 一次性/每周/全天，可提醒 |
+| U7 | 能反复更新 | 同步 → diff → 合并，手改不丢 |
+| U8 | 多学期并存 | 学期列表切换，历史不删 |
+| U9 | 规则模式下能用 | 预检 + DIRECT 规则提示 |
+| U10 | **不规整的课不被强行对齐** | 08:30 的课画在 08:30；重叠并排；可标「偏轴」 |
+| U11 | **时间轴本身可调** | 改起止、缩放、改节次表；改完所有课自动重算 |
+| U12 | **全部在 380 面板里完成** | 不出现独立窗口（v1 硬约束） |
+| U13 | 登录界面能预填 | 网页登录时填 `#un`/`#pd`；原生表单直接带出账号密码 |
 
 ---
 
-## 3. 外部调研：别人怎么做的
+## 2. 约束
 
-### 3.1 同类实现对比
-
-| 方案 | 形态 | 导入方式 | 值得借鉴 | 不足/教训 |
-|---|---|---|---|---|
-| [JLU_schedule](https://github.com/JFyuhong/JLU_schedule)（吉大，开源，GPL-3.0） | Android + iOS + 鸿蒙 + PWA | ① 内嵌 WebView 登录后**捕获页面自身的 XHR 响应**；② 原生 CAS(TPASS) + 原生二跳接口；③ Cookie 在 WebView ↔ 原生之间双向迁移 | 把吉大的接口链、字段名、周次表达式、节次表全踩过一遍；"捕获"比"猜参数"稳；多课表 + 备份 + 小组件 | 它的默认节次时间**和学校官方表不一致**（少了课间），说明"内置时间必须可改"；GPL 代码不能直接抄进 MIT 项目 |
-| [AiScheduleForNewJLU](https://github.com/Temsys-Shen/AiScheduleForNewJLU) | 小爱课程表适配脚本 | DOM/JSON 解析 | 证明"新教务"的课表页结构可解析 | 页面一改就废；只做一次性导入 |
-| [jlu-mobile-schedule](https://github.com/con9uer666/jlu-mobile-schedule) | Flutter 多端 | 教务导入 + 手动 | 调课、提醒、学习事项、桌面小组件的产品形态 | 功能参考，不是架构参考 |
-| [ClassIsland](https://www.classisland.tech/) | Windows 桌面 | 拖入 ICS/课表文件、手动 | **课表 / 时间表 / 科目 三层模型**；时间表可复用；调课是独立概念 | 面向教室大屏，交互偏重 |
-| WakeUp / 超级课程表 / 星链 | 手机 App | 教务适配、分享码、ICS/JSON | 周视图、配色、多课表、桌面小组件；生态里 ICS/JSON 是事实标准 | 闭源，规则由社区维护 |
-| 强智系高校脚本（如 [classCrawl](https://github.com/inannan423/classCrawl)） | 脚本 | 直接调 `app.do?method=...` JSON | 说明"能拿 JSON 就别解析 HTML"是普遍经验 | 强智 ≠ 吉大用的这套，仅作方法论参考 |
-
-> 许可证提醒：`JLU_schedule` 是 **GPL-3.0**，本仓库是 **MIT**。可以读它的**行为与接口事实**（协议、字段名属互操作性事实），**不要复制代码/注释/资源**。真要移植解析器，先决定整个项目的许可证。
-
-### 3.2 三条被反复验证的经验
-
-1. **优先 JSON 接口，其次响应捕获，最后才是 HTML 解析。** 吉大这套正好是第一种。
-2. **登录只负责产出 Cookie。** 把"怎么拿到登录态"和"怎么解析课表"彻底解耦，换登录方式不影响解析。
-3. **一次性导入的产品都活不久。** 课表会变（调课/停课/补课/重修），必须有"再同步 + 合并"。
-
-### 3.3 反向清单（不要学）
-
-- ❌ 把账号密码塞进网页自动提交（验证码/风控一改就死，也有安全争议）
-- ❌ 后台常驻轮询教务（无意义、易被封、耗电）
-- ❌ 把课表传到云端做"多端同步"（本工具定位是本地优先）
-- ❌ 用 HTML 表格当唯一数据源（页面改版必炸）
+| 约束 | 影响 |
+|---|---|
+| 380pt popover，**v1 不开独立窗口** | 不能做 7×12 大网格；编辑用内联卡片；登录不能靠大网页 |
+| WKWebView 历史崩溃 | v1 尽量不用 WebView；扫码/接口都走原生 |
+| Core 不 import 网络 | 解析/合并/时间轴/配色全放纯逻辑 target |
+| DrCOM 冻结 10 个文件 | 新文件随便加，别碰旧的 |
+| 无三方依赖 | QR 用 CoreImage，HTTP 用 URLSession |
+| 文案三语 + `CopyTests` 写死 711 | 新文案要同步三张表并改数字 |
+| `App/` 与 `App-Compat/` 两份源码 | View 要放两遍，逻辑下沉 |
+| MIT 仓库 | 参考实现是 GPL-3.0，只参考行为，不抄代码 |
 
 ---
 
-## 4. 吉大教务的真实链路
+## 3. 调研（结论没变，压缩）
 
-> 标记：✅ 已从公开页面/开源实现确认；⚠️ 逻辑成立但未在吉大真机验证；❓ 完全未知。
+| 方案 | 学到什么 |
+|---|---|
+| [JLU_schedule](https://github.com/JFyuhong/JLU_schedule)（吉大，GPL） | 吉大接口链、字段、周次表达式；WebView 捕获 vs 原生二跳；多课表/备份/小组件 |
+| [AiScheduleForNewJLU](https://github.com/Temsys-Shen/AiScheduleForNewJLU) | 新教务页面可解析；但一次性导入、页面一改就废 |
+| [ClassIsland](https://docs.classisland.tech/app/profile/) | 「课表 / 时间表 / 科目」三层；时间表可复用、可单独改 |
+| WakeUp / 超级课程表 | 周视图、配色、多课表、小组件；ICS/JSON 是事实交换格式 |
+| [classCrawl](https://github.com/inannan423/classCrawl) | "能拿 JSON 就别抓 HTML"的普遍经验 |
 
-### 4.1 地址与请求链
+三条经验：**优先 JSON；登录只产出 Cookie；一次性导入的产品活不久。**
 
-| 用途 | 地址 | 状态 |
-|---|---|---|
-| 课表页（你给的） | `https://iedu.jlu.edu.cn/jwapp/sys/wdkb/*default/index.do#/xskcb` | ✅ |
-| 教务门户 | `https://iedu.jlu.edu.cn/jwapp/sys/emaphome/portal/index.do` | ✅ |
-| 统一认证 | `https://cas.jlu.edu.cn/tpass/login?service=<urlencoded 门户>` | ✅ |
-| 当前学期 | `POST .../wdkb/modules/jshkcb/dqxnxq.do`（空表单） | ⚠️ |
-| 整学期课表 | `POST .../wdkb/modules/xskcb/cxxszhxqkb.do`，body `XNXQDM=<学期码>` | ⚠️ |
+---
 
-发请求时要带的三样东西（缺一个就可能被网关拦）：
+## 4. 吉大链路（含本轮实测）
+
+### 4.1 地址
+
+| 用途 | 地址 |
+|---|---|
+| 课表页 | `https://iedu.jlu.edu.cn/jwapp/sys/wdkb/*default/index.do#/xskcb` |
+| 门户 | `https://iedu.jlu.edu.cn/jwapp/sys/emaphome/portal/index.do` |
+| CAS | `https://cas.jlu.edu.cn/tpass/login?service=<encoded>` |
+| 当前学期 | `POST .../wdkb/modules/jshkcb/dqxnxq.do` |
+| 整学期课表 | `POST .../wdkb/modules/xskcb/cxxszhxqkb.do`，body `XNXQDM=<学期码>` |
+
+### 4.2 302 链（实测）
 
 ```
-Referer: https://iedu.jlu.edu.cn/jwapp/sys/wdkb/*default/index.do
-X-Requested-With: XMLHttpRequest
-User-Agent: <和 WebView 里一致的浏览器 UA>
+GET https://iedu.jlu.edu.cn/jwapp/sys/wdkb/*default/index.do
+  → 302 Location: https://cas.jlu.edu.cn/tpass/login?service=https%3A%2F%2Fiedu.jlu.edu.cn%2Fjwapp%2Fsys%2Fwdkb%2F%2Adefault%2Findex.do
+  → Set-Cookie: route=...
+GET https://cas.jlu.edu.cn/tpass/login?...
+  → 200, Set-Cookie: tpasssessionid=...; UqZBpD3n=...
 ```
 
-**关键点**：`#/xskcb` 是前端路由，**不会发给服务器**。所以 CAS 的 `service` 参数里带不带它都行；登录回跳后由我们补一句 `location.hash = '#/xskcb'`，就落在课表页。这正好实现你要的"登录后直接显示课表"。
+所以"登录后直接显示课表"是天然的：**service 就是课表地址本身**，登录成功 CAS 会把浏览器送回它。`#/xskcb` 只是前端路由，我们回跳后补一句 `location.hash` 即可。
 
-### 4.2 返回结构
-
-顶层是 `datas` → 若干张表 → 每张表 `rows`。课表在 `xskcb` 那张表里。
+### 4.3 返回结构
 
 ```json
-{
-  "datas": {
-    "xskcb": {
-      "rows": [
-        {
-          "KCM": "数据结构",
-          "SKJS": "张三",
-          "YPSJDD": "1-16周 星期一 第1-2节 逸夫楼101",
-          "ZCMC": "1-16周",
-          "SKXQ": "1",
-          "KSJC": "1",
-          "JSJC": "2",
-          "JASMC": "逸夫楼101",
-          "JXLDM_DISPLAY": "逸夫楼",
-          "XNXQDM": "2025-2026-1",
-          "XNXQDM_DISPLAY": "2025-2026学年第一学期",
-          "XF": "3.0"
-        }
-      ]
-    }
-  }
-}
+{"datas":{"xskcb":{"rows":[
+  {"KCM":"数据结构","SKJS":"张三","YPSJDD":"1-16周 星期一 第1-2节 逸夫楼101",
+   "ZCMC":"1-16周","SKXQ":"1","KSJC":"1","JSJC":"2",
+   "JASMC":"逸夫楼101","JXLDM_DISPLAY":"逸夫楼",
+   "XNXQDM":"2025-2026-1","XNXQDM_DISPLAY":"2025-2026学年第一学期","XF":"3.0"}
+]}}}
 ```
 
-| 字段 | 含义 | 我们的用法 |
-|---|---|---|
-| `KCM` | 课程名 | 身份键 + 显示 |
-| `SKJS` | 教师 | 显示、身份键 |
-| `YPSJDD` | 安排时间地点（可能是多段拼接） | **主解析源** |
-| `ZCMC` | 周次文本 | 兜底 / 校对 |
-| `SKXQ` / `KSJC` / `JSJC` | 星期数字 / 起止节 | 兜底（`YPSJDD` 解析失败时） |
-| `JASMC` / `JXLDM_DISPLAY` | 教室 / 教学楼 | 显示 |
-| `XNXQDM(_DISPLAY)` | 学期码 / 学期名 | **归档依据** |
-| `XF` | 学分 | 可选显示 |
+| 字段 | 用法 |
+|---|---|
+| `KCM` / `SKJS` | 课程名/教师；身份键 |
+| `YPSJDD` | 主解析源（多段拼接） |
+| `ZCMC` | 周次兜底 |
+| `SKXQ`/`KSJC`/`JSJC` | 星期/起止节兜底 |
+| `JASMC`/`JXLDM_DISPLAY` | 教室/教学楼 |
+| `XNXQDM` | 学期归档依据 |
 
-> ⚠️ 以上字段来自开源实现的行为记录，不是吉大官方文档；真机抓一次即可确认（附录 A）。
-
-### 4.3 周次与节次
-
-周次表达式至少这几种形态，解析器必须全覆盖，认不出的**原样保留 + 标黄**，不能猜：
-
-```
-1-16周            1-16周(单)        1,3,5,7周
-2-8周,10-16周     1-4周,6-9周,11-16周      待定
-```
-
-节次时间用学校官方表（2023–2024 学年第二学期起执行，[本科生院](http://jwc.jlu.edu.cn/sksj.htm)）：
+### 4.4 节次（官方表，2023–2024 第二学期起）
 
 | 节 | 时间 | 节 | 时间 |
 |---|---|---|---|
@@ -187,689 +141,565 @@ User-Agent: <和 WebView 里一致的浏览器 UA>
 | 5 | 13:30–14:15 | 11 | 20:00–20:45 |
 | 6 | 14:25–15:10 | 12 | 20:45–21:30 |
 
-注意：晚上 9、10 节**之间不休息**；下午 5、6 节之间 10 分钟。这类细节必须能改（见 §9.4），因为不同校区/季节可能不一样。
+> 参考实现内置的表是"连续"的（8:45 就上第二节），和官方不一致——这就是"时间轴必须可调"的现实理由。
 
-### 4.4 三条获取路径（A + B 都要，C 兜底）
+### 4.5 周次表达式
 
-| 路径 | 做法 | 优点 | 缺点 | 用在哪 |
-|---|---|---|---|---|
-| **A. 页面捕获** | WebView 里注入脚本，包 `fetch`/`XMLHttpRequest`，命中 `cxxszhxqkb.do` 就把响应体 `postMessage` 给原生 | 不用猜参数、不用管学期码；用户看到的和拿到的必然一致 | 依赖 WebView 稳定；页面若改用别的传输方式要跟进 | **首次导入 / 登录后自动导入** |
-| **B. 原生二跳** | 用 A 拿到的 Cookie，直接 `URLSession`：激活 `wdkb` → `dqxnxq` → `cxxszhxqkb` | 快（<1s）、无 UI、可后台刷新 | 需要 Cookie 有效；参数/UA 要跟页面一致 | **日常「同步」按钮 / 自动检查更新** |
-| **C. 兜底** | 粘贴 JSON、导入 `.ics`、纯手动录入 | 永不失效；换学校也能用 | 麻烦 | 接口改版 / 非校园网 / 调试 |
+`1-16周` / `1-16周(单)` / `1,3,5,7周` / `2-8周,10-16周` / `待定`。
+认不出就保留原文 + 标黄，不猜。
 
-> 设计上把三者都收敛成同一个产物：`ImportedSemester`。后面所有逻辑（解析、diff、合并）只认这个结构。
+### 4.6 本轮实测记录（2026-11-05，本机、非校园网）
 
-### 4.5 待真机验证（M0 的一部分）
+| # | 实测 | 结果 |
+|---|---|---|
+| 1 | `cas.jlu.edu.cn` | 200，标题「智慧校园」；公网可达 |
+| 2 | `iedu.jlu.edu.cn` | 公网可达；`/` 302 到门户；`wdkb` 302 到 CAS |
+| 3 | CAS 三个 tab | 扫码登录（默认）/ 密码登录 / 手机登录 |
+| 4 | 密码模板 | 只有 `#un`、`#pd`，**没有图形验证码**；验证码在「手机登录」tab（`#code`、`/tpass/code`） |
+| 5 | 密码提交 | `rsa = strEnc(un+pd+lt,'1','2','3')`，表单 POST；`des.js` 是学校自定义实现 |
+| 6 | `strEnc('test','1','2','3')` | `D8D35E5019288C41`，与标准 3DES-ECB（`c80c8db3…`）**不一致** → 移植要按它的位序来 |
+| 7 | 扫码二维码内容 | `https://cas.jlu.edu.cn/tpass/qyQrLogin?uuid=<uuid>&service=<编码后前100字符>` |
+| 8 | 扫码轮询 | 每 3s `GET /tpass/checkQRCodeScan?uuid=...`；未扫码返回空 body；成功后页面直接 reload |
+| 9 | `qyQrLogin` | 302 到 `open.weixin.qq.com` 企业微信 OAuth（appid `ww3b03…`） → 扫码走「智慧吉大」 |
+| 10 | 380 宽下的 CAS 页 | 横向溢出，tab 被切、字号巨大（见下图）→ 不适合直接嵌面板 |
 
-| # | 未知 | 怎么验 | 影响 |
-|---|---|---|---|
-| V1 | `cxxszhxqkb.do` 到底是 POST 还是 GET、参数名大小写 | DevTools 抓一次 | 决定 B 路径 |
-| V2 | 一次返回是否包含**全部周次**（不是只本周） | 看行数与 `YPSJDD` | 决定要不要按周循环拉 |
-| V3 | 传历史 `XNXQDM` 能不能拉到往期学期 | 改参数试 | 决定"补拉历史学期"能否做 |
-| V4 | CAS 是否弹图形验证码/二次验证 | 无痕窗口登录一次 | 决定"静默重登"可行性 |
-| V5 | `iedu` 证书是否被 macOS 信任 | `openssl s_client` / 浏览器看锁 | 决定要不要做 TOFU 信任 |
-| V6 | WebVPN 下的课表 URL 长什么样 | 校外登录 WebVPN 复制地址 | 决定校外兜底方案 |
-| V7 | Cookie 有效期多久 | 隔天再打开 | 决定同步频率 |
-| V8 | 页面发请求时是否带额外 header（如签名） | 看 Request Headers | 决定 B 路径能否完全复刻 |
+**仍未验证**：扫码成功那一刻轮询返回什么、reload 后是否直接 302 到 iedu、密码登录是否还要微信二次验证、Cookie 名称与有效期。
+
+### 4.7 待真机验证
+
+| # | 未知 | 怎么验 |
+|---|---|---|
+| V1 | 扫码成功后轮询的返回与 Set-Cookie | 真机扫一次，抓包 |
+| V2 | reload 后是否 302 到 iedu（建立会话） | 同上 |
+| V3 | 密码登录是否需要微信二次验证 | 真机用错/对密码各试一次 |
+| V4 | `cxxszhxqkb.do` POST/GET、参数大小写 | DevTools 抓页面自己的请求 |
+| V5 | 一次是否返回整学期（不是单周） | 看 `YPSJDD` 的行数与周次 |
+| V6 | 历史 `XNXQDM` 能否拉往期 | 改参数试 |
+| V7 | `iedu` 是否真的"仅校内" | 校外网络再试一次 |
 
 ---
 
-## 5. 总体架构
-
-### 5.1 分层
+## 5. 架构（v1：没有 WebView、没有窗口）
 
 ```
-┌──────────────────────────── App (SwiftUI) ────────────────────────────┐
-│ TimetablePanel(380)   TimetableWindow(编辑)   ImportWindow(WKWebView)  │
-│        │                    │                        │               │
-│        └──────── TimetableController (@MainActor) ────┘               │
-│                    状态机 / 预览 / 冲突 / 撤销                          │
-└───────────────┬───────────────────────────────┬───────────────────────┘
+┌──────────────────── JLU Gate 菜单栏面板 (380) ────────────────────┐
+│  课表 tab                                                          │
+│   ├─ 未登录：QR 卡（原生画码 + 轮询） / 账号密码卡（原生表单）      │
+│   ├─ 已登录：周方格流 ⇄ 单日时间轴 / 导入预览 / 编辑卡              │
+│   └─ 状态条：校园网 / 代理 / 会话 / 同步                            │
+└───────────────┬───────────────────────────────┬───────────────────┘
                 │                               │
       ┌─────────▼─────────┐           ┌─────────▼──────────┐
       │ JLUGateSchedule   │           │ JLUGateNet         │
-      │ (纯逻辑, 可离线测) │           │ JwxtClient         │
-      │ Model / Parser    │           │ CampusSession      │
-      │ Merge / WeekMath  │           │ CampusTrust(TOFU)  │
-      │ Color / ICS       │           │ Preflight(代理/可达)│
+      │ 纯逻辑，可离线测   │           │ CasQRLogin         │
+      │ Model / Parser    │           │ JwxtClient         │
+      │ TimeAxis / Merge  │           │ CampusSession      │
+      │ Color / ICS       │           │ Preflight          │
       └─────────┬─────────┘           └─────────┬──────────┘
-                │                               │
-      ┌─────────▼───────────────────────────────▼──────────┐
-      │ TimetableStore (actor, 原子写, 快照)                │
-      │ ~/Library/Application Support/JLUGate/timetable/    │
-      └────────────────────────────────────────────────────┘
+                └──────────────┬────────────────┘
+                     ┌─────────▼──────────┐
+                     │ TimetableStore     │
+                     │ actor + 原子写 + 快照│
+                     └────────────────────┘
 ```
 
-**分层原则**：
-- `JLUGateSchedule` 不 import WebKit/Network，能 `swift test` 离线跑完解析与合并；
-- 登录方式（WebView / 原生 / 粘贴）只是"**产出 Cookie 或 JSON**"的策略，换掉不影响下游；
-- UI 只做展示与手势，业务判断全在 Controller / 纯函数里。
+**关键决定**：登录不是"打开一个网页"，而是"**用 HTTP 完成 CAS 会话**"，产物只有一份 Cookie。这样：
 
-### 5.2 新增文件（建议）
+- 不需要 WKWebView，历史崩溃风险归零；
+- 不需要窗口，全部内容在 380 面板；
+- 扫码（学校主推）和密码（备选）只是两种"拿 Cookie"的方式。
+
+### 5.1 新增文件
 
 | 文件 | 层 | 职责 |
 |---|---|---|
 | `Sources/JLUGateSchedule/Model.swift` | Schedule | `TimetableArchive` / `Semester` / `Course` / `Meeting` / `WeekPattern` / `Event` |
-| `.../WeekMath.swift` | Schedule | 第几周、日期↔周次、跨学期边界 |
-| `.../PeriodProfile.swift` | Schedule | 作息表、节次→时间、默认吉大表 |
-| `.../JwxtParser.swift` | Schedule | `datas.*.rows` → `ImportedSemester`；`YPSJDD`/周次解析 |
+| `.../TimeAxis.swift` | Schedule | 分钟↔y、节次参考线、重叠分列、不规整判定 |
+| `.../PeriodProfile.swift` | Schedule | 作息表（可编辑、多套） |
+| `.../JwxtParser.swift` | Schedule | `datas.*.rows` → `ImportedSemester`；周次/时间解析 |
 | `.../TimetableMerge.swift` | Schedule | 三方合并、diff、冲突 |
 | `.../ColorPalette.swift` | Schedule | 稳定配色、对比度 |
-| `.../ICSExport.swift` | Schedule | 导出 `.ics`（RFC 5545） |
-| `Sources/JLUGateNet/CampusSession.swift` | Net | Cookie 存取（Keychain/0600）、WKWebView ↔ 原生迁移 |
-| `Sources/JLUGateNet/JwxtClient.swift` | Net | 二跳请求、错误分类 |
-| `Sources/JLUGateNet/CampusTrust.swift` | Net | 校园站点证书 TOFU（仅 `*.jlu.edu.cn`） |
-| `Sources/JLUGateNet/TimetablePreflight.swift` | Net | 复用 `ProxyModeAnalyzer` + `ReachabilityService` 做预检 |
-| `App/Sources/Timetable*.swift` | App | 面板、窗口、导入窗、编辑器、手势 |
-
-> `Package.swift` 加 target + test target；`App/project.yml` 加依赖；`App-Compat/Sources` 同步一份 View。
-
-### 5.3 控制器状态机
-
-```
-idle
- ├─(打开课表/同步)→ preflight ─┬─ ok ──→ sessionCheck ─┬─ valid ──→ fetching → review → commit
- │                             │                       └─ expired ─→ loginWindow ─→ capturing → review
- │                             ├─ proxyGlobal ─→ 提示加 DIRECT 规则（可重试）
- │                             ├─ notCampus    ─→ 提示先连校园网 / 用 WebVPN
- │                             └─ certUntrusted → 指纹确认（仅 jlu 域）
- └─(首次)→ importWindow(URL) → login → capturing → review → commit
-```
-
-`review` 是**必须**的一步：哪怕只有"无变化"也要告诉用户结论；有变化就进 diff 面板。
+| `.../ICSExport.swift` | Schedule | 导出 `.ics` |
+| `Sources/JLUGateNet/CasQRLogin.swift` | Net | UUID、二维码 URL、轮询、会话判定 |
+| `Sources/JLUGateNet/CasPasswordLogin.swift` | Net | 可选：表单 POST（需 DES 移植） |
+| `Sources/JLUGateNet/JwxtClient.swift` | Net | `dqxnxq` + `cxxszhxqkb` + 错误分类 |
+| `Sources/JLUGateNet/CampusSession.swift` | Net | Cookie 持久化（Keychain/0600） |
+| `Sources/JLUGateNet/TimetablePreflight.swift` | Net | 路由/可达性预检 |
+| `App/Sources/Timetable*.swift` | App | 登录卡、周视图、日视图、编辑卡、同步预览 |
 
 ---
 
-## 6. 登录与会话
+## 6. 登录
 
-### 6.1 主路径：独立窗口里的 WKWebView
+### 6.1 主路径：原生扫码（推荐）
 
-**为什么必须独立窗口**：popover 里塞 WebView 是已知崩溃源；而且登录页需要键盘焦点、要能开新标签、要能记住密码管理器。
-
-**窗口生命周期（关键，历史崩溃大概率就出在这）**：
-
-```swift
-final class ImportWindowController: NSWindowController {
-    private let webView: WKWebView
-    init(...) {
-        let cfg = WKWebViewConfiguration()
-        cfg.websiteDataStore = .default()          // 持久 Cookie：下次不用重新登录
-        cfg.userContentController.add(handler, name: "timetable")
-        cfg.userContentController.addUserScript(hookScript)  // atDocumentStart
-        webView = WKWebView(frame: .zero, configuration: cfg)
-        let window = NSWindow(contentRect: ..., styleMask: [.titled, .closable, .resizable], ...)
-        window.isReleasedWhenClosed = false        // ← 不加这句就是 use-after-free
-        window.contentView = webView
-        super.init(window: window)
-    }
-}
+```
+1) GET  https://cas.jlu.edu.cn/tpass/login?service=<wdkb URL>   ← 拿 tpasssessionid
+2) uuid = UUID()
+3) 面板画二维码：https://cas.jlu.edu.cn/tpass/qyQrLogin?uuid=<uuid>&service=<encoded 前100>
+4) 每 2s：GET /tpass/checkQRCodeScan?uuid=<uuid>&random=<r>
+5) 轮询返回非空（或状态变化）→ GET 第 1 步的登录 URL
+6) 若 302 到 iedu → 会话建立；否则回到 3 重新生成
+7) POST dqxnxq.do → XNXQDM
+8) POST cxxszhxqkb.do → 课表 JSON
 ```
 
-> 我的判断：当年的 SIGABRT 更像是 `NSWindow` 被释放后仍在 display cycle 里被访问（默认 `isReleasedWhenClosed = true`），而不是 WebKit 本身的问题。M0 用最朴素的窗口验证一次就能证实/证伪。
+- 二维码用 CoreImage `CIFilter.qrCodeGenerator` 生成，153×153，面板里正好；
+- 状态：等待扫码 / 已扫码（如果接口给）/ 成功 / 失效（60s 换码）；
+- 扫码成功后如果 CAS 不认（少见），退回"网页登录"。
 
-**注入的钩子**（简化）：
+**为什么这是最合适的**：学校把扫码放在第一个 tab；它不需要密码、不需要验证码、不需要 WebView；面板里一张 QR + 一行状态就够。
 
-```js
-// atDocumentStart, forMainFrameOnly: false
-(function () {
-  const send = (url, text) => {
-    try { window.webkit.messageHandlers.timetable.postMessage({ url, text }); } catch (e) {}
-  };
-  const hit = u => /cxxszhxqkb\.do/i.test(u);
-  const of = window.fetch;
-  window.fetch = function (...args) {
-    const p = of.apply(this, args);
-    p.then(r => { if (hit(r.url)) r.clone().text().then(t => send(r.url, t)); }).catch(() => {});
-    return p;
-  };
-  const open = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function (m, u, ...rest) {
-    this.addEventListener('load', () => {
-      if (hit(u)) send(String(u), this.responseText);
-    });
-    return open.call(this, m, u, ...rest);
-  };
-})();
-```
+### 6.2 备选：账号密码（原生表单 + 预填）
 
-**收尾逻辑**：
-1. `didFinish` 时看 URL：落在 `cas.jlu.edu.cn` → 状态"等你登录"；
-2. 落在 `iedu.jlu.edu.cn` 且没有 `#/xskcb` → `evaluateJavaScript("location.hash='#/xskcb'")`；
-3. 捕获到响应 → 停止收集（去抖 1.2s）→ 解析 → 弹"导入/更新"确认；
-4. 25s 没捕获到 → 提示"页面好像没加载课表，点这里重试 / 换成粘贴导入"。
+- 面板里放一个 3 行表单：账号（从 `config.account` 预填）、密码（从 `CredentialStore` 预填，默认隐藏）、[登录]；
+- **预填是确定的**：`#un` / `#pd` 都在 DOM 里；原生表单更是直接带值；
+- **难点在提交**：需要复刻 `strEnc`。实测它**不是标准 3DES**（§4.6 #6），得按 `des.js` 的位序移植，约 1–2 天（含用 Node 生成向量做对拍）；
+- **未知**：密码后是否还要微信二次验证（页面提示"密码登录：微信验证码通过智慧吉大发送"）。
 
-**默认不自动填充**（遵守 D-001）。可以给一个显式开关「帮我把账号填上」，只做 `value = ...` 不自动提交；关掉就完全手输。
+**建议**：M2 先只做扫码；密码放 M2.5，做完 DES 再上线。在没做完之前，密码入口点了显示"请先用扫码登录"（而不是假装能用）。
 
-### 6.2 可选快路径：原生 CAS
+### 6.3 最后手段：网页登录
 
-参考实现证明 TPASS 可以纯原生登录：GET 登录页拿 `lt/execution` → `rsa = DES(用户名+密码+lt)` → POST。好处是**无 WebView、可静默重登**；坏处是要实现 TPASS 的 DES 细节、要处理验证码、CAS 一改就崩。
+如果哪天 CAS 加了新验证（滑块、二次确认），或者用户就是不想扫码：
 
-**建议**：v1 不做。等 A 路径跑顺了，如果发现"每天都要重新登录"很烦，再把"用已存密码静默重登"作为**可选开关**加上（失败自动回落到网页登录）。这样风险可控。
+- 打开 `WKWebView` 加载 CAS 页，自动切到密码 tab 并预填 `#un`/`#pd`（**不自动提交**）；
+- v1 硬约束是"不开独立窗口"，所以它只能放在面板内 —— 但面板里 380 宽实测很难看（§4.6 #10）；
+- 因此：**默认不做**。真要做，先解决"面板内 WebView 不崩"（M0 里顺手验一下），再决定放面板还是 sheet。
 
-### 6.3 会话存储
+### 6.4 会话与安全
 
-- WebView 用 `.default()` 数据仓库，Cookie 由 WebKit 自己持久化；
-- 原生请求需要同一份 Cookie：`WKWebsiteDataStore.default().httpCookieStore.getAllCookies` → 过滤 `.jlu.edu.cn` → 存 `CampusSession`；
-- `CampusSession` 落盘沿用 `CredentialStore` 的双后端：正式签名 → Keychain；ad-hoc → 0600 文件；
-- 提供「退出登录」= 清 WebView 数据 + 清 `CampusSession`。
+- Cookie 存 `CampusSession`：正式签名 → Keychain；ad-hoc → 0600 文件；
+- 提供「退出登录」清 Cookie；
+- 日志不打印 Cookie/密码/课程名；
+- 不做后台轮询；只在用户点「课表」或「同步」时发请求；
+- 不做证书绕过；`iedu` 目前是正常证书（实测 200），若将来不受信，只对 `*.jlu.edu.cn` 做一次性指纹确认。
 
-### 6.4 安全边界
+### 6.5 规则模式预检
 
-- **不做**：绕过证书校验、把 Cookie 写日志、把课表/学号发到任何服务器；
-- 证书不受信时（V5），只对 `*.jlu.edu.cn` 弹一次"指纹确认"，把 SPKI SHA-256 存下来做 TOFU；换证书要重新确认；
-- 课表文件 0600；崩溃报告与诊断导出**不包含**课程名/教室；
-- 导出 ICS/JSON 只在用户点按钮时发生，路径由用户选。
-
-### 6.5 代理 / 规则模式
-
-“规则模式能不能用”本质是：**去 `iedu.jlu.edu.cn` 的流量有没有被 TUN 接管**。做法：
-
-1. 读路由（复用 `ProxyModeAnalyzer`）→ `direct / ruleSplit / global / tunnelIdle`；
-2. 同时探一次 `iedu.jlu.edu.cn`（复用 `ReachabilityService`，只发 HEAD/GET，不带凭据）；
-3. 组合出结论：
-
-| 路由 | 探测 | 结论 | 给的下一步 |
-|---|---|---|---|
-| ruleSplit / direct | 通 | ✅ 可以 | 直接进 |
-| global | 通 | ⚠️ 能通但绕路 | "能用，但登录/同步可能慢；建议给 `jlu.edu.cn` 加 DIRECT" |
-| global | 不通 | ❌ 被代理吞了 | 复制规则：`DOMAIN-SUFFIX,jlu.edu.cn,DIRECT` + `IP-CIDR,10.0.0.0/8,DIRECT` |
-| direct | 不通 | ❌ 不在校园网/未认证 | "先连校园网并认证；校外用 WebVPN 地址" |
-
-规则片段一键复制，不自动改用户的代理配置（那是另一个 App 的地盘）。
+| 路由 | 探测 | 提示 |
+|---|---|---|
+| direct / ruleSplit | 通 | 直接进 |
+| global | 通 | "能用，但慢；建议 `DOMAIN-SUFFIX,jlu.edu.cn,DIRECT`" |
+| global | 不通 | 复制 `DOMAIN-SUFFIX,jlu.edu.cn,DIRECT` + `IP-CIDR,10.0.0.0/8,DIRECT` |
+| direct | 不通 | 先连校园网；校外可直接试（实测公网可达），不行再用 WebVPN |
 
 ---
 
 ## 7. 数据模型
 
-### 7.1 存储位置
+### 7.1 存储
 
 ```
 ~/Library/Application Support/JLUGate/timetable/
-├── timetable.json           # 全部学期（一个文件，原子写，0600）
-├── timetable.backup.json    # 上一版
-└── snapshots/               # 最近 10 次提交前的快照（可回滚）
-    └── 2026-11-05T09-12-33Z.json
+├── timetable.json           # 全部学期，0600，原子写
+├── timetable.backup.json
+└── snapshots/               # 最近 10 次提交前
 ```
 
-**为什么不用 `config.json`**：配置很小、要向前兼容、每次启动读；课表会长到几百 KB，且有独立版本节奏。分开存，互不拖累。
-
-### 7.2 结构（Swift）
+### 7.2 结构（关键部分）
 
 ```swift
 public struct TimetableArchive: Codable, Sendable {
-    public var schemaVersion: Int = 1
-    public var semesters: [Semester] = []          // 多学期并存，按 firstWeekMonday 排序
+    public var schemaVersion = 1
+    public var semesters: [Semester] = []
     public var activeSemesterID: UUID?
-    public var periodProfiles: [PeriodProfile] = [.jluDefault]  // 作息表可复用
-    public var colorOverrides: [String: Int] = [:] // colorKey -> 调色板下标
-    public var updatedAt: Date = .now
+    public var periodProfiles: [PeriodProfile] = [.jluDefault]
+    public var colorOverrides: [String: Int] = [:]
 }
 
 public struct Semester: Codable, Sendable, Identifiable {
     public var id: UUID
-    public var code: String?            // "2025-2026-1"（来自 XNXQDM）
-    public var title: String            // "2025–2026 学年 第一学期"
-    public var firstWeekMonday: String  // "2025-09-01"（存字符串，避时区坑）
-    public var weekCount: Int           // 20
+    public var code: String?             // "2025-2026-1"
+    public var title: String
+    // ── 学期日历（三个都能改）──
+    public var firstWeekStart: String    // 第 1 周第 1 天的日期，如 "2025-09-01"
+    public var weekStartsOn: Int         // 1=周一 … 7=周日（只影响分栏和"本周"边界）
+    public var weekCount: Int            // 一共几周，默认 20
     public var periodProfileID: UUID
     public var courses: [Course]
     public var events: [ScheduleEvent]
-    public var overrides: [SessionOverride]  // 本周临时调课/停课/补课
-    public var importMeta: ImportMeta?       // 来源 URL、时间、原始行数
-    public var createdAt: Date
-    public var updatedAt: Date
+    public var overrides: [SessionOverride]
+    public var importMeta: ImportMeta?
 }
 
-public struct Course: Codable, Sendable, Identifiable {
+/// 作息表：节数、每节起止、课间、放学
+public struct PeriodProfile: Codable, Sendable, Identifiable {
     public var id: UUID
-    public var name: String
-    public var teacher: String
-    public var note: String
-    public var credit: Double?
-    public var colorKey: String          // 默认 = 归一化课名（"数据结构"）
-    public var colorIndex: Int?          // 用户手动改色
-    public var meetings: [Meeting]
-    public var sourceKey: String?        // 教务来源稳定键（手工课为 nil）
-    public var origin: Origin            // .imported / .manual / .copied
-    public var hidden: Bool              // 软删除（防止下次同步复活）
-    public var edits: [String: FieldEdit] // 字段级"我改过"
+    public var name: String              // "本部 · 春秋" / "某校区"
+    public var periods: [Period]         // 有序；数量 = 一天几节（1...16）
+    public var gapLabels: [Int: String]  // afterPeriod -> "午休" / "晚餐"（可选）
+    public var dismissLabel: String      // 最后一节结束 = 放学
+}
+
+public struct Period: Codable, Sendable, Hashable {
+    public var index: Int                // 1...N
+    public var startMinute: Int          // 距 00:00，08:00 = 480
+    public var endMinute: Int            // 08:45 = 525
+    // 相邻两节的课间 = 下一节.start - 本节.end
+    // 最后一节之后**没有**课间：那是放学
+}
+
+/// 只看不改的显示偏好
+public struct DisplaySettings: Codable, Sendable {
+    public var showOffWeekCourses = true   // 非本周：淡显；关掉就完全不画
+    public var showSaturday = true
+    public var showSunday = false
+    public var defaultView: ViewMode = .week
+}
+
+/// 一门课的时间：常规按节次，特殊按真实钟点
+public enum MeetingTime: Codable, Sendable, Hashable {
+    case periods(start: Int, end: Int)     // 1...12，交给作息表换算
+    case clock(startMinute: Int, endMinute: Int)  // 08:30–10:05，不规整
 }
 
 public struct Meeting: Codable, Sendable, Identifiable {
     public var id: UUID
-    public var weekday: Int              // 1...7
-    public var startPeriod: Int          // 1...12（坐标是节次，不是钟点）
-    public var endPeriod: Int
+    public var weekday: Int
     public var weeks: WeekPattern
     public var location: String
-    public var timeOverride: ClockRange? // 例外：这门课就是 14:00–15:30
+    public var time: MeetingTime
+    public var note: String
     public var edits: [String: FieldEdit]
 }
+```
 
+**为什么用枚举**：常规课跟着作息表走（改作息自动重算），特殊课保存真实钟点（永远不规整）。两种都能画在同一条时间轴上。
+
+### 7.3 周次
+
+```swift
 public struct WeekPattern: Codable, Sendable, Hashable {
-    public var ranges: [WeekRange]       // [1...16]
-    public var parity: Parity            // .all / .odd / .even
-    public var unknownText: String?      // "待定" 原样留着，UI 标黄
-    public func weekSet() -> Set<Int>    // 合并/比较用这个
+    public var ranges: [WeekRange]
+    public var parity: Parity        // all / odd / even
+    public var unknownText: String?  // "待定"
+    public func weekSet() -> Set<Int>
 }
+```
 
-/// 三方合并的关键：记下"我改的时候，学校那边是什么值"
+### 7.4 三方合并的关键
+
+```swift
 public struct FieldEdit: Codable, Sendable {
-    public var value: String
-    public var importedValueAtEdit: String?
+    public var value: String                 // 我改成的值
+    public var importedValueAtEdit: String?  // 我改的时候学校是什么
     public var at: Date
 }
 ```
 
-### 7.3 JSON 样例
-
-```json
-{
-  "schemaVersion": 1,
-  "activeSemesterID": "6F1C…",
-  "semesters": [{
-    "id": "6F1C…",
-    "code": "2025-2026-1",
-    "title": "2025–2026 学年 第一学期",
-    "firstWeekMonday": "2025-09-01",
-    "weekCount": 20,
-    "courses": [{
-      "id": "A2…",
-      "name": "数据结构",
-      "teacher": "张三",
-      "colorKey": "数据结构",
-      "meetings": [{
-        "weekday": 1, "startPeriod": 1, "endPeriod": 2,
-        "weeks": { "ranges": [{"start": 1, "end": 16}], "parity": "all" },
-        "location": "逸夫楼101"
-      }],
-      "origin": "imported",
-      "hidden": false,
-      "edits": { "teacher": { "value": "张三（调）", "importedValueAtEdit": "张三", "at": "2026-03-01T…" } }
-    }],
-    "events": [],
-    "overrides": []
-  }]
-}
-```
-
-### 7.4 迁移
-
-- 顶层 `schemaVersion`；每次读先跑迁移链（v1 → v2 …），迁移函数是纯函数、有测试；
-- 读失败**绝不覆盖**：照 `ConfigStore` 的做法留 `timetable.unreadable-<时间>.json` 再回退备份；
-- 未识别字段用 `decodeIfPresent` 兜默认值（和 `AppConfig` 同一套纪律）。
+没有 `importedValueAtEdit` 就分不清"谁改的"，只能覆盖用户。
 
 ---
 
-## 8. 导入、更新与合并
+## 8. 导入 / 更新 / 多学期
 
-### 8.1 管线
+（与 v0.1 一致，压缩）
+
+- 管线：`JSON → JwxtParser → ImportedSemester → Merge → 预览 → 提交（先快照）`；
+- 身份键：课程 = `KCM + SKJS`；时段 = 课程 + 周几 + 起止；地点/周次是属性；
+- 合并矩阵：没改过→跟学校；改过且学校没动→留；改到一处→收敛；都改→冲突（默认留我）；
+- 预览：`＋2 ～3 －1 ⚠1`，可"全部采用学校/只应用无冲突/逐项"；
+- 多学期：`XNXQDM` 决定写哪个学期；不存在就新建；历史只增不删；可"从上一学期复制"；
+- 自动同步默认关；有变化只提示，不自动应用。
+
+---
+
+## 9. 显示与纠错（本轮重点）
+
+### 9.1 两个视图，都塞得进 380
+
+**A. 周方格流（默认）**
 
 ```
-原始响应(JSON) → JwxtParser → ImportedSemester
-                              ├─ courses: [ImportedCourse]（含 warnings）
-                              └─ code/title
-        ↓
-   TimetableMerge.apply(incoming, into: archive)
-        ├─ .unchanged
-        ├─ .changes([Change])       // 新增/修改/删除/冲突
-        └─ .conflicts([Conflict])
-        ↓
-   review UI → commit → TimetableStore.save(snapshot first)
+周一 3   [数据结构 08:00] [物理实验 08:30 偏轴] [大学英语 13:30]
+周二 4   [高等数学 10:00] [社团例会 19:00 活动]
+...
 ```
 
-### 8.2 身份键（决定"谁是谁"）
+- 7 行 × 每行若干 70×56 的方块；
+- 方块里只有课名 + 时间（+ 偏轴/活动角标）；
+- 完全不依赖坐标轴 → 不规整时间天然成立；
+- 一眼看全周，380 宽刚好。
 
-- **课程级**：`normalize(KCM)` + `SKJS`；
-- **上课时段级**：课程键 + `weekday` + `startPeriod` + `endPeriod`；
-- **地点/周次**是属性，不参与身份——否则教室一换就变成"删一门加一门"；
-- 同一门课同一天同一节但周次不同（单双周分开排）→ 合并 `weekSet`，保留两条 `WeekPattern` 供展示；
-- 手工新增的课 `sourceKey = nil`，永远不参与"被学校删除"。
+![周方格流](mock/week-squares.png)
 
-### 8.3 三方合并（这是"能反复更新"的核心）
+**B. 单日真时间轴**
 
-对每个字段（名称/教师/地点/节次/周次）：
+```
+08:00 ┤ ┌──────────────┐
+      │ │ 数据结构      │ ┌──────────────┐
+09:00 ┤ └──────────────┘ │ 物理实验 8:30 │
+      │                  └──────────────┘
+10:00 ┤
+```
 
-| 本地 | 学校新值 | 结果 |
+- y 轴 = **真实分钟**，不是节次序号；
+- 节次线只是参考线（可关）；
+- 08:30 的课就画在 8:30，露出参考线之外 → 一看就知道"这节不规整"；
+- 重叠的课自动并排（lane）；
+- 上下滑动/捏合缩放时间范围。
+
+> 这直接回答"不要盲目让所有课强行对齐"：**对齐是参考，不是规则**。
+
+![单日真时间轴](mock/day-axis.png)
+
+### 9.2 时间轴可调
+
+| 可调项 | 入口 | 效果 |
 |---|---|---|
-| 没改过（无 `FieldEdit`） | 变了 | 用学校值，标"已更新" |
-| 没改过 | 没变 | 不动 |
-| 改过（`value`） | 等于 `importedValueAtEdit`（学校没动） | **保留本地** |
-| 改过 | 等于 `value`（改到一块去了） | 收敛，删掉 `FieldEdit` |
-| 改过 | 既不是本地值也不是编辑时的学校值 | **冲突**：默认留本地，列表里让你二选一 |
-| 本地隐藏（tombstone） | 又出现了 | 保持隐藏，提示"学校又排回来了" |
-| 本地改过 | 学校删了 | 保留 + 提示"学校已撤课，要删吗" |
+| 一天显示范围 | 日视图上下拖 / 设置 | 07:30–22:00 变 08:00–21:00 |
+| 缩放 | 捏合 / 密度按钮 | 紧凑/舒适 |
+| 节次表 | 设置 → 作息 | 改起止、增删节、多套（本部/校区/夏季） |
+| 单节课时间 | 点方块 → 时间 | 按节次 ↔ 按钟点 切换 |
+| 学期日历 | 学期设置 | 第一周开始日 / 每周起始日 / 总周数，改完周次与日期全部重算 |
 
-> 一句话：**存了 `importedValueAtEdit`，才知道"到底是谁改的"**。没有它就只能猜，猜错就会覆盖用户。
+改作息时：`periods` 类型的课自动跟着变；`clock` 类型的课不动（它本来就不规整）。
 
-### 8.4 变更预览
+### 9.3 不规整的视觉语言
 
-```
-本次同步：新增 2 · 修改 3 · 删除 1 · 冲突 1
-┌──────────────────────────────────────────────┐
-│ ＋ 人工智能导论   周四 5-6 节  1-16 周         │
-│ ～ 数据结构       教室 逸夫楼101 → 理化楼203   │
-│ ～ 大学英语       周次 1-16 → 1-8,10-16       │
-│ － 体育（游泳）                                │
-│ ⚠ 高等数学       你改成"王老师"，学校改成"李老师" │
-│                   [用我的] [用学校的]          │
-└──────────────────────────────────────────────┘
-        [全部采用学校]  [只应用无冲突项]  [取消]
-```
+| 状态 | 表现 |
+|---|---|
+| 常规（按节次） | 左色条 + 正常圆角 |
+| 偏轴（钟点与节次对不上） | 左色条变虚线 + 时间文字橙色 + 小角标"偏轴" |
+| 与别人重叠 | 并排 + 细分割线（不遮字） |
+| 非本周 | 35% 透明 + 虚线框 |
+| 临时调课 | 角标"调"；停课划线；补课虚线 |
+| 活动 | 紫色虚线边 + "活动"角标 |
 
-应用后弹一条"已更新，可撤销"，撤销就是把快照写回去。
-
-### 8.5 多学期
-
-- 每次同步先取 `dqxnxq.do` 的当前学期码；返回的 `XNXQDM` 决定写进哪个学期；
-- 学期不存在 → 新建（可选"从上一学期复制课程"，因为很多课跨学期重复）；
-- **历史学期只增不删**；已结束的学期在列表里标"已结束"，仍可查看/导出；
-- 若 V3 验证通过（接口支持传历史 `XNXQDM`），提供"补拉往期"；否则只能从本学期开始积累；
-- 切换学期不改变 `activeSemesterID` 之外的数据，互不影响。
-
-### 8.6 自动同步
-
-- 默认**关**。开启后：启动时若距上次同步 > 12h 且 Cookie 有效 → 后台拉一次；
-- 有变化只发通知 + 角标，**不自动应用**（避免把用户改的东西悄悄冲掉）；
-- 无变化静默。
-
----
-
-## 9. 纠错机制（你说的"调节"）
-
-核心思想：**课表以「周几 + 第几节 + 哪些周」为坐标，钟点由作息表算出来**。这样改作息不会破坏课表，改课表也不用手算时间。
-
-### 9.1 网格手势
+### 9.4 编辑（都在面板内，内联卡片）
 
 | 操作 | 结果 |
 |---|---|
-| 点空格 | 新建：课程 / 活动（二选一） |
-| 点卡片 | 详情浮层：地点、教师、周次、颜色、备注、删除 |
-| 拖卡片 | 移动；松手问"仅本周 / 从本周起 / 整门课" |
-| 拖卡片上下边缘 | 改节数（1→2 节） |
-| 右键 | 复制、隐藏、改色、导出该门课 |
-| ⌘Z | 撤销（编辑与同步共用一个 undo 栈） |
-| 拖入 `.ics` / JSON | 导入外部课表 |
+| 点方块 | 下方展开编辑卡：课名/教师/地点/周次/颜色/时间 |
+| 时间 | 两个模式：按节次（1–12 选择器）/ 按钟点（时间选择器） |
+| 拖方块（日视图） | 改时间；松手问"仅本周 / 此后 / 整门" |
+| 拉边缘 | 改节数/时长 |
+| 长按 | 快捷菜单：复制、隐藏、改色、删除 |
+| 周次 | 1–20 方格 + 文本框双向同步（`1-8,10-16(单)`） |
+| 冲突 | 允许并存，编辑卡里列冲突对象 |
 
-### 9.2 周次编辑
+### 9.5 临时调整层
 
-- 一排 1…20 的方格，点选/框选；单双周开关；
-- 文本框与方格双向同步：输入 `1-8,10-16(单)` 立刻体现在格子上；
-- 解析失败不覆盖原文，标红并保留 `unknownText`。
+`SessionOverride`：停课 / 调课 / 补课，按日期存，不动模板；导出 ICS 时展开。
 
-### 9.3 「本周调整」层（真实校园生活必备）
+### 9.6 学期与周次（回答你的三个问题）
 
-课程是"模板"，某一周可能被调走/停掉/补一次。三者都不改模板，只加一条 `SessionOverride`：
+| 设置 | 默认 | 说明 |
+|---|---|---|
+| 一学期几周 | **20 周** | 1…30 可改；周次选择器的上限；调大不丢数据 |
+| 第一周从哪天开始 | 从学期码推断：秋季 ≈ 9 月第一个周一；春季 ≈ 2 月最后一个周一 | **第一次导入时弹一次确认**，显示"第 1 周 9/1–9/7"；可手动改 |
+| 每周从周几开始 | **周一** | 可选周日；只影响分栏顺序与"本周"边界，不影响周次编号 |
+| 学期结束 | 自动 = 第一周开始 + 周数×7 − 1 | 只读展示 |
 
-```swift
-public struct SessionOverride {
-    public var date: String          // 2026-03-09
-    public var courseID: UUID?
-    public var kind: Kind            // .cancelled / .moved / .extra
-    public var newStart: Int?        // moved/extra：新节次
-    public var newEnd: Int?
-    public var newLocation: String?
-    public var note: String
-}
+课程周次编辑（点方块 → 编辑卡）：
+
+```
+周次   第 [ 1 ] 周  →  第 [16] 周     ☐ 单周  ☐ 双周
+       [更多]  自定义：1-8,10-16(单)
 ```
 
-- 网格上：停课划一道灰线；调课在原位置留"→周四 5-6"的小字；补课用虚线框；
-- 导出 ICS 时按"模板 + override"展开成实际发生的事件；
-- 同步时 override **永远不被覆盖**（它本来就不是学校数据）。
+- 默认就是"起始周 / 结束周"两个 stepper，覆盖 90% 场景；
+- 单双周、离散周、多段周放"更多"里，文本框与方格双向同步；
+- 校验：起始 ≤ 结束，范围落在 `1...weekCount`；超出只警告不丢数据；
+- 展示：`1–16 周`、`1–16 周（单）`、`1,3,5–9 周`。
 
-### 9.4 作息表（时间）
+### 9.7 作息表：节数、课间、放学
 
-- 内置官方 12 节表（§4.3），**可编辑**：改名、改起止、增删节次、加"午休/晚休"分隔；
-- 多套作息并存（本部 / 某校区 / 夏季），学期引用其中一套；
-- 改完立刻重算所有卡片上的钟点，课程数据一个字节不动；
-- 单节课的例外（`timeOverride`）只影响那一节。
+编辑的是 `PeriodProfile`，不是每门课。改完所有 `periods` 课自动重算，`clock` 课不动。
 
-> 参考实现里内置的节次时间是"连续"的（少了 8:45–8:55 这种课间），和官方表不一致——这正说明"必须可改 + 默认值要准"。
+```
+节次   开始    结束    之后
+ 1    08:00   08:45   课间 10 分钟
+ 2    08:55   09:40   课间 20 分钟
+ 3    10:00   10:45   课间 10 分钟
+ 4    10:55   11:40   午休 110 分钟
+ 5    13:30   14:15   课间 10 分钟
+ …
+ 9    18:20   19:05   课间 0 分钟   ← 晚上两小节之间不休息
+10    19:05   19:50   课间 10 分钟
+11    20:00   20:45   课间 0 分钟
+12    20:45   21:30   **放学**      ← 不是课间
+```
 
-### 9.5 学期边界
+- **节数**：默认 12，1…16 可增删；删掉的节如果被课程引用，先提示再改；
+- **每节起止**：5 分钟粒度，可单节微调，也可"从第 N 节起整体 +5 分钟"；
+- **课间**：相邻两节的空隙，改它默认顺延后面所有节（有开关可只改这一段）；
+- **放学**：最后一节结束就是放学，**编辑器和时间轴都不给它加"休息"块**；时间轴到这儿就结束（最多留一点视觉留白）；
+- **午休/晚餐**：长空隙可命名，显示在时间轴上，但不算"课间"；
+- **多套作息**：本部/校区/夏季各一套，学期选一套；有"恢复官方表"。
 
-- 第一周周一：默认从学期码推断（秋季≈9 月第一个周一，春季≈2 月最后一周一），**显式让用户确认**；
-- 总周数默认 20，可改；
-- 今天落在第几周由 `WeekMath` 纯函数算，有测试覆盖跨年、开学前、放假后。
+![课表设置：学期周数 / 第一周 / 每周起始日 / 显示开关 / 作息表（最后一格是"放学"，不是课间）](mock/settings.png)
 
-### 9.6 导入校对报告
+### 9.8 显示开关
 
-导入后先给一份"体检"，而不是直接落库：
+| 开关 | 默认 | 行为 |
+|---|---|---|
+| 显示非本周课程 | **开** | 淡显（35% + 虚线）；关掉就完全不画，周视图更干净 |
+| 显示周六 | **开** | 关掉后整列隐藏；若当天有课，底部提示"周六有 2 节，已隐藏 [显示]" |
+| 显示周日 | **关** | 同上 |
 
-| 检查 | 处理 |
-|---|---|
-| 周次没解析出来 | 标黄，要求选周次或保留原文 |
-| 地点为空 | 允许留空，提示可后补 |
-| 节次越界（13 节） | 标红，阻止提交 |
-| 两门课同格 | 允许（真实存在），但列出冲突清单 |
-| 同课名不同教师 | 视为不同课，提示是否合并 |
+三个开关存在 `DisplaySettings`，全局生效（不随学期变）；改动立即重绘，不用重新导入。
 
 ---
 
 ## 10. 颜色
 
-### 10.1 分配
+- `colorKey = 归一化课名`，`index = stableHash % 12` → 同名同色、跨学期稳定；
+- 撞色 + 黄金角扰动；
+- 浅色/深色两套色板；文字颜色按相对亮度算；
+- 手改色存 `colorIndex`，同步不覆盖；
+- 状态（偏轴/非本周/冲突/调课）用形状+文字，不只靠颜色；
+- 高对比开关。
+
+---
+
+## 11. 活动
+
+- `ScheduleEvent`：一次性 / 每周 / 按周次 / 全天；`semesterID = nil` 表示长期；
+- 与课程共用两个视图，紫色虚线样式；
+- 提醒：`UNUserNotificationCenter`，只排未来 7 天；
+- 导出 ICS；可选 EventKit（后续）。
+
+---
+
+## 12. 面板信息架构
 
 ```
-colorKey = 归一化课程名（去空格、全半角统一）
-index = stableHash(colorKey) % 12
+[课表]  ← 主面板新增入口（与"站点/体检"并列）
+
+未登录：
+┌ 课表 ─────────────────────┐
+│ 第 10 周 · 11/03–11/09    │
+│ ┌───────────────────────┐ │
+│ │      [ 二维码 ]        │ │
+│ │   用智慧吉大扫码        │ │
+│ │   等待扫码…            │ │
+│ └───────────────────────┘ │
+│ 账号密码登录 ›             │
+│ 校园网 ✓ · 规则模式 ✓      │
+└───────────────────────────┘
+
+已登录：
+┌ 课表 ─────────────────────┐
+│ 第 10 周   [周][日]  同步  │
+│ 周一 3  ███ ███ ███       │
+│ 周二 4  ███ ███           │
+│ …                          │
+│ 下一节 13:30 大学英语      │
+│ [导入/更新] [＋活动]       │
+└───────────────────────────┘
 ```
 
-- 同名同色，**跨学期、跨导入稳定**；
-- 同学期内两门课撞色 → 按黄金角二次扰动（+5），保证相邻不撞；
-- 用户改色存 `colorIndex`，同步不覆盖。
+- 无窗口、无 sheet、无 WebView（密码原生表单也在面板内）；
+- 编辑卡从底部滑入，替代弹窗；
+- 首次引导三步走：扫码 → 拉取 → 预览。
 
-### 10.2 两套色板
+### 12.1 下一节课 & 开机提醒
 
-- 浅色：`S≈0.55, B≈0.95` 的柔和底 + 深色字；
-- 深色：`S≈0.45, B≈0.55` + 浅色字；
-- 文字颜色由相对亮度算，不手写；
-- 卡片圆角 8、左侧 3pt 色条、课程名最多两行、教室省略号。
+**面板里**：顶部一行"下一节 13:30 大学英语 · 外语楼302（还有 35 分钟）"，点一下进日视图。
 
-### 10.3 状态
+**通知**（你要的"刚开机提醒"）：
 
-| 状态 | 表现 |
+| 项 | 做法 |
 |---|---|
-| 非本周 | 整体 35% 透明 + 虚线边 |
-| 冲突 | 右上角红色小三角，详情里列冲突对象 |
-| 临时调整 | 右下角"调"字角标 |
-| 手工添加 | 无角标；详情里标"我加的" |
-| 已隐藏 | 不显示，管理页可恢复 |
-
-### 10.4 可访问性
-
-- 不靠颜色单独传达信息（都有文字/角标）；
-- 色板避开红绿唯一对比（红/绿都配图标）；
-- 提供"高对比"开关（描边加深、去透明）。
+| 触发点 | App 启动（开机自启已开）、从睡眠唤醒（`NSWorkspace.didWakeNotification`）；**不轮询** |
+| 算什么 | 今天剩下的课（先按本周筛选，再套临时调整），取最近一节；活动默认不算 |
+| 条件 | 开关开 + 有通知权限 + 距开课 ≤ 6 小时 + 今天这一节没提醒过 |
+| 文案 | "今天下一节 **13:30 大学英语** · 外语楼302（还有 35 分钟）" |
+| 没课 | 不打扰（可选"今天没课了"，默认关） |
+| 去重 | `yyyy-MM-dd + meetingID` 存 UserDefaults，重启不重复 |
+| 权限 | 沿用 `Notifier.requestAuthorizationIfNeeded()`；首次开启开关时请求 |
 
 ---
 
-## 11. 活动 / 日程
+## 13. 里程碑（v0.3）
 
-### 11.1 模型
-
-```swift
-public struct ScheduleEvent: Codable, Sendable, Identifiable {
-    public var id: UUID
-    public var title: String
-    public var location: String
-    public var note: String
-    public var colorIndex: Int?
-    public var timing: EventTiming
-    public var reminderMinutes: [Int]   // 0 / 10 / 30
-    public var semesterID: UUID?        // nil = 跨学期长期活动
-}
-
-public enum EventTiming: Codable, Sendable {
-    case once(date: String, start: Int?, end: Int?)                  // 分钟数；nil = 全天
-    case weekly(weekdays: [Int], weeks: WeekPattern, start: Int, end: Int)
-    case daily(from: String, to: String, start: Int, end: Int)
-}
-```
-
-### 11.2 与课程的关系
-
-- 两套数据，共用网格与"今天"列表；
-- 活动可以"挂在某门课旁边"（如"实验课预习"），但不继承课程时间；
-- 冲突只提示不阻止（现实里就是会撞）；
-- 跨学期活动（`semesterID = nil`）在每个月都显示，适合"每周三健身"。
-
-### 11.3 提醒
-
-- `UNUserNotificationCenter`，只排未来 7 天，App 启动/切换周时滚动补排（避开 64 条上限）；
-- 冲突/停课不提醒；
-- 默认关，用户开。
-
-### 11.4 导出
-
-- **ICS**：课程按"模板 + override"展开成 `VEVENT`，`RRULE` 用 `BYDAY` + `INTERVAL`（单双周用 `INTERVAL=2`），带 `UID`/`DTSTAMP`；
-- **JSON**：整份档案（备份/迁移）；
-- 可选 **EventKit** 写入系统日历（需要用户授权，写到一个专门日历，避免污染）。
-
----
-
-## 12. 界面
-
-### 12.1 面板（380pt）
-
-```
-┌ 课表 ────────────────────────────┐
-│ 第 10 周 · 11/03–11/09      [同步]│
-│ ┌──────────────────────────────┐ │
-│ │ 一 二 三 四 五 六 日          │ │
-│ │ ▓▓ ▓▓ ·  ▓▓ ·  ·  ·          │ │  ← 12 节压缩成 40px/节
-│ │ ▓▓ ·  ▓▓ ▓▓ ·  ·  ·          │ │
-│ └──────────────────────────────┘ │
-│ 今天                                     │
-│ 08:00 数据结构 · 逸夫楼101      [进行中] │
-│ 13:30 大学英语 · 外语楼302               │
-│ 19:00 社团例会 · 活动中心（活动）        │
-│ [打开完整课表]  [＋ 加活动]              │
-└──────────────────────────────────┘
-```
-
-### 12.2 完整窗口（900×640）
-
-- 左：7 列 × 12 行网格（可缩放密度），周切换器，学期选择；
-- 右：Inspector（选中项的详情/编辑）；
-- 顶：同步状态 + 变更徽标 + 撤销；
-- 底：图例（课程/活动/调课/非本周）。
-
-### 12.3 导入窗口
-
-```
-┌ 导入课表 ────────────────────────────────┐
-│ 地址 [https://iedu.jlu.edu.cn/...xskcb] [打开]│
-│ 状态：● 等待登录 / ● 已进入课表 / ● 已捕获 32 门 │
-│ ┌─────────────────────────────────────┐ │
-│ │            (WKWebView)              │ │
-│ └─────────────────────────────────────┘ │
-│ [从当前页面导入]        [改用粘贴 JSON]   │
-└──────────────────────────────────────────┘
-```
-
-### 12.4 首次引导与失败诊断
-
-- 三步：打开 → 登录 → 导入；每步都有"卡住了？"展开项；
-- 失败按 §6.5 的表给结论，不甩"网络错误"；
-- 面板里放一个"课表"入口 + 一个"下一节课"小卡（可选，后续做）。
-
-### 12.5 文案成本
-
-新增约 **90–120 条**文案 × 3 语言；`CopyTests.fullTables` 的 711 要同步改。建议文案编号用新段（如 `TB01…`），别和现有 `T01`（站点）混。
-
----
-
-## 13. 里程碑
-
-| 阶段 | 内容 | 产出/验收 | 估时 |
+| 阶段 | 内容 | 验收 | 估时 |
 |---|---|---|---|
-| **M0 可行性验证** | ① 独立 NSWindow 装 WKWebView，加载课表 URL，登录后停留 30 分钟不崩；② 从 WebView 取 Cookie，用 `URLSession` 拉 `cxxszhxqkb.do` 拿到 JSON；③ 用真实响应跑通"字段 → 课程"的粗解析 | 一份验证记录（含崩溃/不崩、字段实际形态）；决定主路径 | 1–2 天 |
-| **M1 数据层** | `JLUGateSchedule` target：模型、周次解析、`YPSJDD` 解析、周次计算、作息表、存储与迁移 | 单测全绿；能读写 `timetable.json`；假数据可渲染 | 3–4 天 |
-| **M2 导入闭环** | 导入窗（WebView + 钩子 + 状态机）、Cookie 持久化、预览与提交、错误分类 | 真机走通"打开→登录→导入"；二次打开免登录 | 4–5 天 |
-| **M3 编辑与更新** | 网格编辑/拖拽/周次、作息表编辑、diff + 三方合并、撤销、多学期管理 | 改完再同步不丢改动；冲突可解决；可回滚 | 5–6 天 |
-| **M4 活动与提醒** | 事件模型/编辑器/重复规则、今日视图、通知、ICS 导出 | 能加活动并按时提醒；导出可被系统日历识别 | 3–4 天 |
-| **M5 打磨** | 颜色与密度、三语文案、无障碍、面板紧凑视图、隐私审查、文档 | `make ci` 全绿；隐私扫描干净；截图 | 3–4 天 |
+| **M0 验证** | ① 真机扫码一次，抓 `checkQRCodeScan` 成功返回 + reload 后的 302；② 用 CasCookie 拉 `cxxszhxqkb.do` 得到 JSON；③ 380 面板里画 QR + 轮询 + 状态；④ 确认密码是否需要二次验证 | 一份验证记录；决定密码路径 | 1–2 天 |
+| **M1 数据/时间轴** | 模型、周次解析、`YPSJDD` 解析、`PeriodProfile`、`TimeAxis`（分钟↔y、重叠分列）、存储 | 单测全绿；假数据能画两种视图 | 3–4 天 |
+| **M2 扫码导入** | 原生 QR + 轮询 + Cookie + `dqxnxq` + `cxxszhxqkb` + 预览 + 提交 | 真机：打开→扫码→导入 | 3–4 天 |
+| **M3 编辑/设置** | 内联编辑、拖拽、**起止周 / 学期日历 / 作息表（节数·课间·放学）/ 显示开关**、三方合并、快照/撤销、学期管理 | 改完再同步不丢；冲突可解；改作息后课表重算正确 | 6–7 天 |
+| **M4 活动/提醒** | 事件、编辑器、**开机/唤醒"下一节"通知**、ICS | 能加活动；开机收到一次准确提醒 | 3–4 天 |
+| **M5 打磨** | 两种视图切换、颜色、三语、无障碍、隐私、文档 | `make ci` 绿 | 3 天 |
 
-合计约 **19–25 人日**（业余 4–6 周）。M0 之后可以砍范围：只做 M1+M2+M3 就是"能导入、能改、能更新"的最小可用版。
+合计 **19–23 人日**。M0 之后可砍 M3/M4 先上"只读 + 扫码 + 同步"。
 
 ---
 
-## 14. 风险登记
+## 14. 风险
 
-| 风险 | 概率 | 影响 | 对策 | 触发降级 |
-|---|---|---|---|---|
-| WKWebView 仍崩 | 中 | 高（登录路径没了） | M0 先验；独立窗口 + `isReleasedWhenClosed=false`；崩了只影响导入窗 | 降级到"原生 CAS"或"系统浏览器 + 粘贴 JSON" |
-| 教务接口/页面改版 | 中 | 中 | 解析与取数分离；保留 C 路径；字段缺失不崩 | 提示"接口变了"，引导粘贴 |
-| CAS 要验证码/二次验证 | 中 | 中 | 只做人工网页登录，不绕过 | 每次都手登，可接受 |
-| 证书不受信 | 中 | 中 | TOFU + 指纹确认，仅限 `jlu.edu.cn` | 提示手动信任，不做全局放开 |
-| 全局代理吞掉校园域 | 高 | 中 | 预检 + DIRECT 规则片段 | 用户改规则后重试 |
-| 同步覆盖用户改动 | 中 | 高（信任崩塌） | 三方合并 + 快照 + 撤销 + 默认不自动应用 | 出问题一键回滚 |
-| 学期/周次错位 | 中 | 中 | 第一周周一显式确认 + 预览 | 手动改 |
-| 隐私泄漏（课表/学号/MAC） | 低 | 高 | 0600、日志脱敏、扫描脚本、导出由用户触发 | 删数据 + 修日志 |
-| App-Compat 双份源码漏改 | 中 | 低 | 逻辑下沉；UI 双份有清单 | 编译期就会报错 |
-| 范围膨胀（做成"校园 App"） | 高 | 中 | 明确非目标；先 M1–M3 | 砍 M4/M5 |
+| 风险 | 概率 | 影响 | 对策 |
+|---|---|---|---|
+| 扫码成功回调与预期不符 | 中 | 中 | M0 真机抓一次；失败退回密码/网页 |
+| 密码登录要微信二次验证 | 中高 | 中 | 密码路径先不做；以扫码为主 |
+| `strEnc` 移植出错 | 中 | 中 | 用 Node 生成向量对拍；失败就不做原生密码 |
+| 教务接口改字段 | 中 | 中 | 解析容错 + 导入体检 + 保留原始 JSON |
+| 380 面板信息密度不够 | 中 | 中 | 两种视图 + 可折叠；真机调 |
+| 同步覆盖手改 | 中 | 高 | 三方合并 + 快照 + 撤销 |
+| 隐私（Cookie/课表） | 低 | 高 | 0600/Keychain、日志脱敏、扫描脚本 |
+| 双份 App/App-Compat | 中 | 低 | 逻辑下沉，UI 双份清单 |
 
 ---
 
 ## 15. 测试与隐私
 
-**单测（离线，进 `make test`）**
-- 周次表达式：`1-16`、`1-16(单)`、`1,3,5`、`2-8,10-16`、`待定`、空；
-- `YPSJDD` 多段：`1-16周 星期一 第1-2节 A楼101, 1-8周 星期三 第5-6节 B楼202`；
-- 兜底字段（`SKXQ/KSJC/JSJC`）；
-- 三方合并矩阵的每一行；
-- 周次/日期计算（跨年、开学前、第 21 周）；
-- 配色稳定性（同名同色、跨学期一致）；
-- ICS 生成（单双周 RRULE）。
-
-**夹具**
-- 只用合成数据（张三/数据结构/逸夫楼101），**不放真实响应**；
-- 真实响应只在本机 `/tmp` 里验证，验完删；`privacy-scan` 会拦学号/IP。
-
-**手工验收**
-- 断网、退出登录、Cookie 过期、切换学期、改作息、调课、删课、重复导入、冲突解决、撤销。
+- 单测：周次表达式、起止周校验、`YPSJDD` 多段、时间轴换算（分钟/节次/偏轴）、重叠分列、合并矩阵、配色稳定、ICS；
+- 作息：节数增删、课间顺延、**最后一节之后不产生"休息"块**、跨午休的时间轴；
+- 显示：周日隐藏但有课时的提示、非本周开关；
+- 提醒：开机只发一次、同一天不重复、无课不发；
+- 夹具全合成（张三/数据结构/逸夫楼101），真实响应只放 `/tmp`，验完删；
+- 扫码/登录用手工验收清单（无法自动化）；
+- 日志不出现 Cookie、密码、课程名；诊断导出不含课表。
 
 ---
 
-## 16. 不做什么
+## 16. 不做
 
-- 不做抢课/自动提交/验证码识别；
-- 不做成绩、考试（可后续复用会话，但不是这次）；
-- 不做云端同步/分享码/社交；
-- 不做后台常驻轮询；
-- 不为了"看起来功能多"而做导出到 Notion/飞书。
+抢课、成绩/考试（后续可复用会话）、自动提交、绕过验证码/二次验证、后台轮询、云同步、独立窗口（v1）。
 
 ---
 
 ## 17. 需要你拍板
 
-1. **登录主路径**：先做 WebView（贴近你的描述，但有崩溃风险），还是先做原生 CAS（稳，但要处理验证码，且要决定"能不能用已存密码"）？
-   我的建议：**M0 先用一天验证 WebView；不崩就走 WebView**，崩了再换。
-2. **能不能用统一身份认证密码做原生登录**？如果只允许网页手输，就永远不做静默重登。
-3. **编辑界面**：开独立窗口（推荐，信息密度够）还是硬塞进 380 面板（不用窗口，但编辑很憋）？
-4. **活动要不要写进系统日历**（EventKit）？要的话首次会弹权限。
-5. **自动同步**默认开还是关？我倾向**默认关**，只在打开课表时提示"有 3 处变化"。
-6. **历史学期**：只从本学期开始积累，还是要我尝试"补拉往期"（依赖 V3 验证）？
+1. **扫码能不能作为主路径**？（你已经在用「智慧吉大」吗？）
+2. **密码登录**：接受"移植学校 DES 做原生"（1–2 天，无 WebView）吗？还是先不做密码、只留扫码？
+3. **默认视图**：周方格流还是单日时间轴？（我倾向周方格流做默认，点某天进时间轴）
+
+以下四条我先按默认写进方案了，觉得不对再说：
+
+| 项 | 默认值 |
+|---|---|
+| 一学期几周 | **20 周**（可改 1–30） |
+| 第一周从哪天开始 | 从学期码推断（秋 9 月第一个周一 / 春 2 月最后一个周一），**导入时确认一次** |
+| 每周从周几开始 | **周一**（可选周日） |
+| 显示 | 非本周**淡显**、周六**显示**、周日**隐藏**（有课会给提示） |
+| 开机提醒 | **开**，只在 6 小时内有课时发一次 |
 
 ---
 
-## 附录 A：怎么抓一次真实响应（M0 用）
+## 18. 验证产物
 
-1. 校园网内，浏览器登录教务 → 打开课表页；
-2. DevTools → Network → 过滤 `cxxszhxqkb` → 刷新/切周；
-3. 右键请求 → **Copy as cURL**；响应 → Save all as HAR/JSON；
-4. 把 JSON 存到 `/tmp/jlu-schedule.json`，用最小脚本验证字段；
-5. **验证完删除**，不要 `git add`（`privacy-scan.sh` 会拦学号）。
+- [周方格流](mock/week-squares.png)：380×520，7 行方块
+- [单日真时间轴](mock/day-axis.png)：含 8:30 偏轴课、重叠并排
+- [课表设置](mock/settings.png)：学期日历 + 显示开关 + 作息表（含"放学"）
+- [CAS 登录页 @380](mock/cas-380.png)：真实页面塞进面板的样子（说明为什么不做网页登录）
 
-## 附录 B：参考资料
+![CAS 登录页在 380 宽下](mock/cas-380.png)
 
-- 吉大本科教学作息时间表：<http://jwc.jlu.edu.cn/sksj.htm>
-- 吉大教务入口（CAS 链接可见）：<http://jwc.jlu.edu.cn/>
-- 参考实现（GPL-3.0，仅参考行为）：<https://github.com/JFyuhong/JLU_schedule>
-- 小爱课表吉大适配：<https://github.com/Temsys-Shen/AiScheduleForNewJLU>
-- 吉大课表 Flutter 实现：<https://github.com/con9uer666/jlu-mobile-schedule>
-- 强智系课表 API 思路：<https://github.com/inannan423/classCrawl>
-- ClassIsland 档案/时间表模型：<https://docs.classisland.tech/app/profile/>
-- iCalendar 规范：<https://datatracker.ietf.org/doc/html/rfc5545>
-- 本仓库连接冻结规则：`docs/connection-freeze.md`
+## 附录：抓真实响应（M0）
+
+1. 校园网/公网均可，浏览器打开课表 URL → 登录（扫码最快）；
+2. DevTools → Network → 过滤 `cxxszhxqkb` → 切周触发；
+3. 右键 → Copy as cURL；响应存 `/tmp/jlu.json`；
+4. 用最小脚本核对字段；
+5. 验完删除，别 `git add`。
+
+## 参考
+
+- 作息表：<http://jwc.jlu.edu.cn/sksj.htm>
+- 参考实现（GPL，仅行为参考）：<https://github.com/JFyuhong/JLU_schedule>
+- 小爱适配：<https://github.com/Temsys-Shen/AiScheduleForNewJLU>
+- ClassIsland 时间表模型：<https://docs.classisland.tech/app/profile/>
+- ICS：<https://datatracker.ietf.org/doc/html/rfc5545>
