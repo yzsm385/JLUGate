@@ -49,6 +49,17 @@ struct SelfServiceGuideCard: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            // 换寝室时可能弹出「用户迁移」页面：提醒截图保存 MAC / 新旧 IP
+            HStack(alignment: .top, spacing: 5) {
+                Image(systemName: "camera.viewfinder")
+                    .font(.system(size: bodySize))
+                    .foregroundStyle(.orange)
+                Text(Copy.t("G38"))
+                    .font(.system(size: bodySize))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             // 文案变长（尤其英文）后，两个按钮并排会被截断：改成竖排，各占一行
             VStack(alignment: .leading, spacing: 6) {
                 Button {
