@@ -41,6 +41,20 @@ struct SettingsView: View {
                 Label(Copy.t("S01"), systemImage: "questionmark.bubble")
             }
 
+            Section(languageSectionTitle) {
+                Picker(languagePickerTitle, selection: Binding(
+                    get: { model.languageCode },
+                    set: { model.setLanguage($0) })) {
+                    Text(followSystemLabel).tag("system")
+                    ForEach(CopyLanguage.allCases, id: \.rawValue) { lang in
+                        Text(lang.displayName).tag(lang.rawValue)
+                    }
+                }
+                Text(languageHint)
+                    .font(.system(size: 9)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             Section(Copy.t("S02")) {
                 TextField(Copy.t("S03"), text: $draft.account)
                 SecureField(Copy.t("S04"), text: $draft.password)
@@ -266,6 +280,40 @@ struct SettingsView: View {
             draft.dns = profile.dns.joined(separator: ",")
             draft.registeredMAC = profile.registeredMAC ?? ""
             draft.password = CredentialStore.password(for: newValue) ?? ""
+        }
+    }
+
+    // MARK: 语言
+
+    private var languageSectionTitle: String {
+        switch Copy.language {
+        case .zhHans: "语言"
+        case .zhHant: "語言"
+        case .en: "Language"
+        }
+    }
+
+    private var languagePickerTitle: String {
+        switch Copy.language {
+        case .zhHans: "界面语言"
+        case .zhHant: "介面語言"
+        case .en: "Interface language"
+        }
+    }
+
+    private var followSystemLabel: String {
+        switch Copy.language {
+        case .zhHans: "跟随系统"
+        case .zhHant: "跟隨系統"
+        case .en: "Follow system"
+        }
+    }
+
+    private var languageHint: String {
+        switch Copy.language {
+        case .zhHans: "切换后立即生效（面板会按新语言重建一次）。"
+        case .zhHant: "切換後立即生效（面板會按新語言重建一次）。"
+        case .en: "Applies immediately (the panel is rebuilt once)."
         }
     }
 

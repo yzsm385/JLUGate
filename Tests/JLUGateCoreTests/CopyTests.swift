@@ -6,13 +6,14 @@ import Foundation
 struct CopyTests {
     @Test("按系统首选语言选简体 / 繁體 / English")
     func languageSelection() {
-        #expect(Copy.resolveLanguage(environment: [:], preferred: ["zh-Hans-CN"]) == .zhHans)
-        #expect(Copy.resolveLanguage(environment: [:], preferred: ["zh-Hant-TW"]) == .zhHant)
-        #expect(Copy.resolveLanguage(environment: [:], preferred: ["zh-HK"]) == .zhHant)
-        #expect(Copy.resolveLanguage(environment: [:], preferred: ["zh-TW"]) == .zhHant)
-        #expect(Copy.resolveLanguage(environment: [:], preferred: ["en-US"]) == .en)
-        #expect(Copy.resolveLanguage(environment: [:], preferred: []) == .en)
-        #expect(Copy.resolveLanguage(environment: ["JLUGATE_LANG": "en"], preferred: ["zh-Hans-CN"]) == .en)
+        #expect(Copy.resolveLanguage(preferred: ["zh-Hans-CN"]) == .zhHans)
+        #expect(Copy.resolveLanguage(preferred: ["zh-Hant-TW"]) == .zhHant)
+        #expect(Copy.resolveLanguage(preferred: ["zh-HK"]) == .zhHant)
+        #expect(Copy.resolveLanguage(preferred: ["zh-TW"]) == .zhHant)
+        #expect(Copy.resolveLanguage(preferred: ["en-US"]) == .en)
+        #expect(Copy.resolveLanguage(preferred: []) == .en)
+        // 环境变量 / 设置里的选择在 Copy.language 里统一处理，这里只测系统语言映射
+        #expect(Copy.resolveLanguage(preferred: ["zh-Hans-CN", "en-US"]) == .zhHans)
     }
 
     @Test("三种语言都收齐了全部 711 条")
@@ -20,6 +21,18 @@ struct CopyTests {
         #expect(Copy.entryCount(.zhHans) == 711)
         #expect(Copy.entryCount(.zhHant) == 711)
         #expect(Copy.entryCount(.en) == 711)
+    }
+
+    @Test("设置里选的界面语言能覆盖系统语言")
+    func override() {
+        let original = Copy.storedOverride
+        defer { Copy.storedOverride = original }
+        Copy.storedOverride = .zhHant
+        #expect(Copy.language == .zhHant)
+        #expect(Copy.t("M32").contains("設定"))
+        Copy.storedOverride = .en
+        #expect(Copy.language == .en)
+        #expect(Copy.t("M32").contains("Settings"))
     }
 
     @Test("取文案：非空、不含未替换的占位符残留（静态条目）")

@@ -24,7 +24,30 @@ public enum CopyLanguage: String, Sendable, CaseIterable {
 enum CopyTables {}
 
 public enum Copy {
-    public static let language: CopyLanguage = resolveLanguage()
+    /// 语言切换后广播，App 收到后重建界面（纯 SwiftUI 不会因为全局变量变化自己刷新）
+    public static let languageChangedNotification = Notification.Name("dev.jlugate.languageChanged")
+    private static let overrideKey = "JLUGate.languageOverride"
+
+    /// 用户在设置里选的语言；nil = 跟随系统
+    public static var storedOverride: CopyLanguage? {
+        get { UserDefaults.standard.string(forKey: overrideKey).flatMap(CopyLanguage.init(rawValue:)) }
+        set {
+            if let newValue {
+                UserDefaults.standard.set(newValue.rawValue, forKey: overrideKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: overrideKey)
+            }
+            NotificationCenter.default.post(name: languageChangedNotification, object: nil)
+        }
+    }
+
+    /// 最终生效的语言：用户在设置里选的 > 环境变量（调试/CI）> 系统首选
+    public static var language: CopyLanguage {
+        if let stored = storedOverride { return stored }
+        if let forced = ProcessInfo.processInfo.environment["JLUGATE_LANG"]
+            .flatMap(CopyLanguage.init(rawValue:)) { return forced }
+        return resolveLanguage()
+    }
 
     public static func t(_ key: String) -> String {
         if let value = table[language]?[key], !value.isEmpty { return value }
@@ -66,11 +89,7 @@ public enum Copy {
         return result
     }
 
-    static func resolveLanguage(environment: [String: String] = ProcessInfo.processInfo.environment,
-                                preferred: [String] = Locale.preferredLanguages) -> CopyLanguage {
-        if let forced = environment["JLUGATE_LANG"].flatMap(CopyLanguage.init(rawValue:)) {
-            return forced
-        }
+    static func resolveLanguage(preferred: [String] = Locale.preferredLanguages) -> CopyLanguage {
         guard let first = preferred.first?.lowercased() else { return .en }
         if first.hasPrefix("zh") {
             // 繁体：zh-Hant / zh-TW / zh-HK / zh-MO

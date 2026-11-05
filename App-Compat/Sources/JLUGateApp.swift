@@ -80,6 +80,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: NSApplication.didBecomeActiveNotification,
             object: nil
         )
+        FileLogger.shared.log("界面语言：\(Copy.language.rawValue)（\(Copy.storedOverride == nil ? "跟随系统" : "设置里选的")）")
+        // 界面语言变了：SwiftUI 不会因为全局变量变化自己刷新，重建面板内容
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(languageDidChange),
+            name: Copy.languageChangedNotification,
+            object: nil
+        )
 
         _ = SingleInstance.claim { NSApp.terminate(nil) }
 
@@ -252,6 +260,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { @MainActor in
             try? await Task.sleep(for: delay)
             self.checkStatusItemPlacement()
+        }
+    }
+
+    /// 语言切换后重建面板（关掉再按新语言打开，设置页仍停在设置）
+    @objc private func languageDidChange() {
+        let wasShown = popover?.isShown == true
+        if wasShown { popover?.performClose(nil) }
+        popover = nil
+        FileLogger.shared.log("界面语言切换为 \(Copy.language.rawValue)，重建面板")
+        guard wasShown else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            self.showPanel()
         }
     }
 

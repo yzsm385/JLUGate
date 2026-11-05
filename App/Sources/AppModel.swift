@@ -151,6 +151,17 @@ final class AppModel {
         return CredentialStore.verifiedAt(account: config.account) != nil
     }
 
+    // MARK: 界面语言
+
+    /// "system" 表示跟随系统
+    var languageCode: String { Copy.storedOverride?.rawValue ?? "system" }
+
+    /// 切换界面语言（存进偏好，App 重建面板后立即生效）
+    func setLanguage(_ code: String) {
+        Copy.storedOverride = (code == "system") ? nil : CopyLanguage(rawValue: code)
+        FileLogger.shared.log("界面语言切换为 \(languageCode)")
+    }
+
     /// 站点合集里"复制账号"用
     var account: String { config.account }
 

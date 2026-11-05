@@ -54,7 +54,7 @@ struct WizardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(18)
-            .jluGlassCard(cornerRadius: 18)
+            .jluGlassCard(cornerRadius: 24)
 
             if let errorText {
                 Label(errorText, systemImage: "exclamationmark.triangle.fill")
@@ -311,15 +311,22 @@ struct WizardView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
-                Picker(Copy.t("W34"), selection: Binding(
-                    get: { model.config.interfaceLock ?? "" },
-                    set: { model.selectInterface($0.isEmpty ? nil : $0) })) {
-                    Text(Copy.t("W35")).tag("")
-                    ForEach(model.interfaceCandidates) { candidate in
-                        Text("\(candidate.name)  \(candidate.macForAuthentication ?? "—")").tag(candidate.name)
+                // 标题单独一行：英文标题很长，和 Picker 并排会把选中值挤成一个字
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Copy.t("W34"))
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Picker("", selection: Binding(
+                        get: { model.config.interfaceLock ?? "" },
+                        set: { model.selectInterface($0.isEmpty ? nil : $0) })) {
+                        Text(Copy.t("W35")).tag("")
+                        ForEach(model.interfaceCandidates) { candidate in
+                            Text("\(candidate.name)  \(candidate.macForAuthentication ?? "—")").tag(candidate.name)
+                        }
                     }
+                    .labelsHidden()
+                    .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: 360)
             }
 
             // 分隔符由界面画出来：IP 四格、MAC 六格，填满自动跳下一格
@@ -337,7 +344,7 @@ struct WizardView: View {
                                     hint: Copy.t("W40"),
                                     onSubmit: focusNextField)
                 GridRow {
-                    Text("DNS").frame(width: 72, alignment: .leading).foregroundStyle(.secondary)
+                    Text("DNS").frame(width: 92, alignment: .leading).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 6) {
                         AddressField(kind: .ipv4, text: Binding(
                             get: { FieldFormatting.ipv4ListInput(dns).components(separatedBy: ", ").first ?? "" },

@@ -33,7 +33,7 @@ struct ConnectionStatusView: View {
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(nsColor: .textBackgroundColor).opacity(0.5),
-                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
 
             if !model.recentLog.isEmpty {

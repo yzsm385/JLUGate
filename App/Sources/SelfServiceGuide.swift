@@ -74,7 +74,7 @@ struct SelfServiceGuideCard: View {
         .padding(compact ? 9 : 12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.blue.opacity(0.07),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
     // MARK: 展开后的步骤

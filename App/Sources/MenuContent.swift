@@ -122,7 +122,7 @@ struct MenuContent: View {
         }
         .padding(16)
         .frame(width: 320, alignment: .leading)
-        .jluGlassStatus(cornerRadius: 18, tint: model.statusColor)
+        .jluGlassStatus(cornerRadius: 26, tint: model.statusColor)
     }
 
     // MARK: 状态卡
@@ -292,7 +292,7 @@ struct MenuContent: View {
                     .font(.caption2)
                 }
                 .padding(10)
-                .jluGlassCard(cornerRadius: 12)
+                .jluGlassCard(cornerRadius: 18)
             }
 
             if model.portalLimitNotice != nil, !model.state.isOnline {
@@ -313,7 +313,7 @@ struct MenuContent: View {
                     .buttonStyle(.bordered)
                 }
                 .padding(10)
-                .jluGlassCard(cornerRadius: 12)
+                .jluGlassCard(cornerRadius: 18)
             } else if model.canOpenPortalLogin {
                 Button {
                     model.openPortalLogin()
@@ -394,7 +394,7 @@ struct MenuContent: View {
 
     private var footer: some View {
         // 380 宽放不下一行 7 个按钮：改成两行、等宽网格，图标在上文字在下
-        HStack(spacing: 2) {
+        HStack(spacing: 6) {
             footerButton(Copy.t("M32"), "gearshape") { model.presentSettings() }
             footerButton(Copy.t("M33"), "link") { model.show(.sites) }
             footerButton(Copy.t("M34"), "network") { model.presentNetworkDetail() }
@@ -402,7 +402,7 @@ struct MenuContent: View {
             footerButton(Copy.t("M36"), "stethoscope") { model.show(.inspect) }
             footerButton(Copy.t("M37"), "power") { NSApplication.shared.terminate(nil) }
         }
-        .padding(.horizontal, 2)
+        .padding(.horizontal, 0)
     }
 
     private func footerButton(_ title: String, _ symbol: String,
@@ -412,9 +412,9 @@ struct MenuContent: View {
         return Button(action: action) {
             VStack(spacing: 2) {
                 Image(systemName: symbol).font(.system(size: 13))
-                Text(label).font(.system(size: 9.5))
+                Text(label).font(.system(size: 8.5))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.65)
+                    .minimumScaleFactor(0.55)
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 4)

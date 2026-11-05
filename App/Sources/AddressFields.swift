@@ -44,12 +44,22 @@ struct AddressField: View {
     var body: some View {
         HStack(spacing: 3) {
             ForEach(parts.indices, id: \.self) { index in
-                TextField("", text: binding(for: index))
-                    .labelsHidden()
-                    .textFieldStyle(.roundedBorder)      // 系统圆角框
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 12, design: .monospaced))
-                    .frame(width: kind.segmentWidth, height: 22)
+                // macOS 的单行 TextField 会忽略 multilineTextAlignment：
+                // 没聚焦时用一层居中的 Text 显示数值，聚焦时让 TextField 自己接管输入。
+                ZStack {
+                    TextField("", text: binding(for: index))
+                        .labelsHidden()
+                        .textFieldStyle(.roundedBorder)      // 系统圆角框
+                        .multilineTextAlignment(.center)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(focused == index ? Color.primary : Color.clear)
+                        .frame(width: kind.segmentWidth, height: 22)
+                    if focused != index, !parts[index].isEmpty {
+                        Text(parts[index])
+                            .font(.system(size: 12, design: .monospaced))
+                            .allowsHitTesting(false)
+                    }
+                }
                     .focused($focused, equals: index)
                     .onSubmit { advance(from: index) }
                     .onKeyPress(.leftArrow) {
@@ -172,8 +182,9 @@ struct LabeledAddressField: View {
             HStack(alignment: .center, spacing: 8) {
                 Text(title)
                     .font(.caption)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(width: 64, alignment: .leading)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 92, alignment: .leading)
                     .foregroundStyle(.secondary)
                 AddressField(kind: kind, text: $text, onSubmit: onSubmit)
             }
@@ -182,7 +193,7 @@ struct LabeledAddressField: View {
                     .font(.system(size: 9))
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 72)
+                    .padding(.leading, 100)
             }
         }
     }
