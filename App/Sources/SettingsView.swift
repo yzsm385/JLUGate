@@ -116,9 +116,7 @@ struct SettingsView: View {
                     LabeledAddressField(title: Copy.t("S23"), kind: .ipv4, text: $draft.gateway,
                                         hint: Copy.t("S24"),
                                         onSubmit: focusNextField)
-                    LabeledAddressField(title: "DNS", kind: .ipv4, text: Binding(
-                        get: { draft.dns.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? "" },
-                        set: { draft.dns = $0 }),
+                    LabeledAddressField(title: "DNS", kind: .ipv4, text: dnsPrimaryBinding,
                                         hint: Copy.t("S25"))
                     LabeledAddressField(title: Copy.t("S26"), kind: .mac, text: $draft.registeredMAC,
                                         hint: Copy.t("S27"),
@@ -281,6 +279,18 @@ struct SettingsView: View {
             draft.registeredMAC = profile.registeredMAC ?? ""
             draft.password = CredentialStore.password(for: newValue) ?? ""
         }
+    }
+
+    /// 只编辑首选 DNS，保留逗号后面的备选
+    private var dnsPrimaryBinding: Binding<String> {
+        Binding(
+            get: { draft.dns.components(separatedBy: ",").first?.trimmingCharacters(in: .whitespaces) ?? "" },
+            set: { newValue in
+                var parts = draft.dns.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                if parts.isEmpty { parts = [""] }
+                parts[0] = newValue
+                draft.dns = parts.joined(separator: ",")
+            })
     }
 
     // MARK: 语言

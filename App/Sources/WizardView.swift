@@ -303,6 +303,18 @@ struct WizardView: View {
             gateway: profile?.gateway, mac: profile?.registeredMAC)
     }
 
+    /// 只编辑首选 DNS，但保留备选（逗号后面的部分）
+    private var dnsPrimaryBinding: Binding<String> {
+        Binding(
+            get: { FieldFormatting.ipv4ListInput(dns).components(separatedBy: ", ").first ?? "" },
+            set: { newValue in
+                var parts = dns.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                if parts.isEmpty { parts = [""] }
+                parts[0] = newValue
+                dns = parts.joined(separator: ",")
+            })
+    }
+
     private var networkStep: some View {
         VStack(alignment: .leading, spacing: 10) {
             // 先让用户/程序确定用哪块网卡，避免"明明登记了却被判不匹配"
@@ -343,14 +355,10 @@ struct WizardView: View {
                 LabeledAddressField(title: Copy.t("W39"), kind: .ipv4, text: $gateway,
                                     hint: Copy.t("W40"),
                                     onSubmit: focusNextField)
-                GridRow {
-                    Text("DNS").frame(width: 72, alignment: .leading).foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 6) {
-                        AddressField(kind: .ipv4, text: Binding(
-                            get: { FieldFormatting.ipv4ListInput(dns).components(separatedBy: ", ").first ?? "" },
-                            set: { dns = FieldFormatting.ipv4ListInput($0) }))
-                    }
-                }
+                // 和上面几行用同一种行结构：否则 Grid 给这格的宽度不够，
+                // 4 个输入框会被压缩，一格只放得下一个数字
+                LabeledAddressField(title: "DNS", kind: .ipv4, text: dnsPrimaryBinding,
+                                    hint: nil, onSubmit: focusNextField)
                 LabeledAddressField(title: Copy.t("W41"), kind: .mac, text: $mac,
                                     hint: Copy.t("W42"),
                                     onSubmit: finish)
