@@ -31,7 +31,21 @@ JLU Gate 想把这三个门并成一个闸口 🚪✨。账号密码填一次，
 
 > 💡 这个"没认证"不是程序有问题，纯粹是我没买 Apple 开发者账号（¥688/年）；放行一次之后，往后打开都不会再问。
 
-装好之后想更新就省事了 🎉：在 App 里「设置 → 更新 → 检查更新」，有新版它会自己下载、退出、替换、再打开，不用手动覆盖 ZIP。
+### 🔄 自动更新：从 1.0.0 才开始有
+
+| 你手上的版本 | 能不能自动更新 |
+|---|---|
+| 0.1.x / 0.2.0 / 0.2.1 | ❌ 不能，连「检查更新」都没有 |
+| 0.2.2 – 0.3.17 | 🟡 只能「检查更新 + 打开下载链接」，替换还得手动拖 |
+| **1.0.0** | ✅ 第一个带一键更新的正式版 |
+| **1.0.1 及以后** | ✅ 一键更新，还会自动挑对包、装完清理安装包 |
+
+⚠️ 两个坑先说清楚：
+
+- **macOS 14 / 15 的同学**：1.0.0 的适配包是按 macOS 26 编译的，在 14/15 上根本打不开（会提示"不能与此版本的 macOS 配合使用"）。所以旧系统要**手动装一次 1.0.1 的 Compat 包**，从 1.0.1 起才能用面板上的「更新」自动升级。
+- **macOS 26 的同学**：1.0.0 可以一键更新，但旧更新器拿到的是 Release 里排第一的 Compat 包（没有 Liquid Glass）。想要新界面，手动下 `JLU-Gate-v1.0.1.zip` 或 `.dmg`。
+
+装好 1.0.1 之后，更新只需要一步：面板上点「更新」→ 自动查最新 → 下载 → 退出替换 → 重新打开，安装包会自动删掉，不占空间。
 
 ---
 
@@ -185,7 +199,21 @@ JLU Gate merges those three doors into one gateway 🚪✨. Enter credentials on
 
 > 💡 The "unverified" warning isn't a bug; I simply don't have an Apple Developer account (¥688/year). After allowing it once, it won't ask again.
 
-Updating is effortless afterward 🎉: in the app go to **Settings → Update → Check for Updates**; new versions download, quit, replace, and relaunch automatically.
+Auto-update only exists from **1.0.0** onward:
+
+| Your version | Auto-update? |
+|---|---|
+| 0.1.x / 0.2.0 / 0.2.1 | ❌ No—not even an update check |
+| 0.2.2 – 0.3.17 | 🟡 Check + open the download link only; replacing is still manual |
+| **1.0.0** | ✅ First release with one-click update |
+| **1.0.1+** | ✅ One-click, picks the right build, and removes the downloaded package |
+
+⚠️ Two caveats:
+
+- **macOS 14 / 15**: the 1.0.0 Compat build was compiled against macOS 26 and won't launch on 14/15. Install the **1.0.1 Compat** build once by hand; from 1.0.1 on, the in-app **Update** button works.
+- **macOS 26**: 1.0.0 can update itself, but the old updater grabs the first ZIP in the release—the Compat build (no Liquid Glass). For the main build, download `JLU-Gate-v1.0.1.zip` or `.dmg` manually.
+
+Once you're on 1.0.1, updating is one click: **Update** in the panel → check → download → quit & replace → relaunch, and the downloaded package is removed automatically.
 
 ---
 
