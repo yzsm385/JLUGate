@@ -28,6 +28,10 @@ struct WizardView: View {
     @State private var mask = ""
     @State private var gateway = ""
     @State private var dns = ""
+    /// DNS 三选一：campus / public / custom（默认学校 DNS）
+    @State private var dnsChoice = "campus"
+    /// 上一次自动填进网关的值：用户没改过就继续跟着 IP 更新
+    @State private var gatewayAutoFilled = ""
     @State private var mac = ""
     @State private var errorText: String?
     @State private var hasSavedProfile = false
@@ -355,10 +359,25 @@ struct WizardView: View {
                 LabeledAddressField(title: Copy.t("W39"), kind: .ipv4, text: $gateway,
                                     hint: Copy.t("W40"),
                                     onSubmit: focusNextField)
-                // 和上面几行用同一种行结构：否则 Grid 给这格的宽度不够，
-                // 4 个输入框会被压缩，一格只放得下一个数字
-                LabeledAddressField(title: "DNS", kind: .ipv4, text: dnsPrimaryBinding,
-                                    hint: nil, onSubmit: focusNextField)
+                // DNS：先给学校默认值，再给公共备选，最后才是自定义
+                GridRow {
+                    Text("DNS")
+                        .font(.caption)
+                        .frame(width: 64, alignment: .leading)
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Picker("", selection: dnsChoiceBinding) {
+                            Text(dnsChoiceLabels.campus).tag("campus")
+                            Text(dnsChoiceLabels.public).tag("public")
+                            Text(dnsChoiceLabels.custom).tag("custom")
+                        }
+                        .labelsHidden()
+                        if dnsChoice == "custom" {
+                            AddressField(kind: .ipv4, text: dnsPrimaryBinding,
+                                         onSubmit: focusNextField)
+                        }
+                    }
+                }
                 LabeledAddressField(title: Copy.t("W41"), kind: .mac, text: $mac,
                                     hint: Copy.t("W42"),
                                     onSubmit: finish)
@@ -366,6 +385,7 @@ struct WizardView: View {
 
             Label(Copy.t("W43"),
                   systemImage: "info.circle")
+                .onAppear { syncNetworkDefaults() }
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -468,14 +488,55 @@ struct WizardView: View {
             ?? suggestion.mac ?? ""
     }
 
-    /// IP 填完后：掩码空着就补 255.255.255.0；网关空着就按同网段补 .254
+    /// IP 填完后：掩码空着就补 255.255.255.0；网关跟着 IP 补 .254（用户改过就不动）
     private func autofillNeighbours(from address: String) {
         let parts = address.split(separator: "·").map(String.init)
         guard parts.count == 4 else { return }
         if mask.isEmpty { mask = "255·255·255·0" }
-        if gateway.isEmpty {
-            gateway = "\(parts[0])·\(parts[1])·\(parts[2])·254"
+        let guess = "\(parts[0])·\(parts[1])·\(parts[2])·254"
+        if gateway.isEmpty || gateway == gatewayAutoFilled {
+            gateway = guess
+            gatewayAutoFilled = guess
             suggestionNote = Copy.f("W51", gateway)
+        }
+    }
+
+    private var dnsChoiceLabels: (campus: String, public: String, custom: String) {
+        switch Copy.language {
+        case .zhHans: return ("学校 DNS（10.10.10.10）", "公共 DNS（223.5.5.5）", "自定义…")
+        case .zhHant: return ("學校 DNS（10.10.10.10）", "公用 DNS（223.5.5.5）", "自訂…")
+        case .en: return ("Campus DNS (10.10.10.10)", "Public DNS (223.5.5.5)", "Custom…")
+        }
+    }
+
+    /// 选 DNS：学校 / 公共 直接写值，自定义保留当前值让用户改
+    private var dnsChoiceBinding: Binding<String> {
+        Binding(
+            get: { dnsChoice },
+            set: { newValue in
+                dnsChoice = newValue
+                switch newValue {
+                case "campus": dns = "10.10.10.10"
+                case "public": dns = "223.5.5.5"
+                default: break
+                }
+            })
+    }
+
+    /// 进入网络步时把默认值补齐：掩码 255.255.255.0、DNS 选择跟现值对齐
+    private func syncNetworkDefaults() {
+        if mask.isEmpty { mask = "255·255·255·0" }
+        // IP 已经有了但网关还空着：直接按同网段补 .254（用户随时能改）
+        if gateway.isEmpty, let guess = Self.gatewayGuess(from: ip) {
+            gateway = guess
+            gatewayAutoFilled = guess
+        }
+        let first = dns.split(separator: ",").first.map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        switch first {
+        case "": dnsChoice = "campus"; dns = "10.10.10.10"
+        case "10.10.10.10": dnsChoice = "campus"
+        case "223.5.5.5": dnsChoice = "public"
+        default: dnsChoice = "custom"
         }
     }
 
