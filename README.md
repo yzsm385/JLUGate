@@ -97,95 +97,20 @@ JLU Gate 想把这三个门并成一个闸口 🚪✨。账号密码填一次，
 
 ---
 
-## 🧑‍💻 给开发者的几条底线
+## 📚 更多文档
 
-这几条是开发时给自己立的规矩，也是这个项目能放心做下去的前提：
+详细的开发者文档都搬到 [Wiki](https://github.com/yzsm385/JLUGate/wiki) 了（中英双语，每页顶部可切语言）：
 
-1. 🚫 **开发机不做任何真实联网验证**。不认证、不抓校园网的包；唯一允许的"联网"是跟 `127.0.0.1` 上的模拟网关说话。
-2. 📐 **报文只能照 [docs/CHECKLIST.md](docs/CHECKLIST.md) 里的偏移填**，不许自创字段。偏移和抓包对不上时，以抓包为准，差异记在 [docs/progress.md](docs/progress.md) §4。
-3. 🔍 **先怀疑环境，再怀疑凭据**。接口、MAC、DHCP、路由任何一项不对，都不发认证包。
-
----
-
-## 🚀 快速开始
-
-```bash
-make test            # 193 条单元测试（编码器黄金向量 + 状态机 + 通道 + 探针/选路/网页认证/路由守卫）
-make self-test       # 对 127.0.0.1 的模拟网关跑 challenge → 登录 → 保活 全流程
-make portal-self-test# 对 127.0.0.1 的模拟门户跑 302 → 登录页 → POST → 204
-make ci              # 上面三件 + 隐私扫描（和 GitHub Actions 跑的一致）
-make dump-login      # 离线打印 342 字节登录包，人工核对偏移
-```
-
-下面这些都是只读诊断，不改任何系统状态，随时能跑：
-
-```bash
-swift run jlugate-probe --interfaces     # 网卡 / MAC / IPv4
-swift run jlugate-probe --route-check    # 10.100.61.3 的出口是不是被 TUN 接管、ConfigMethod 是不是 Manual
-swift run jlugate-probe --detect         # 只判定走哪条链路（发 1 个 challenge，不认证；真机用）
-swift run jlugate-probe --net-detail     # 网口 / 路由 / DNS / VPN 快照，每个字段都带一句白话解释
-swift run jlugate-probe --ping           # 网关、公网延迟（直连 vs 默认出口含 VPN）
-swift run jlugate-probe --speed          # 下载测速（直连 vs VPN）
-```
-
----
-
-## 🧪 真机验证（只能在那台插着校园网线的 Mac 上做）
-
-```bash
-make release-probe        # universal 二进制
-./.build/apple/Products/Release/jlugate-probe --login \
-    --account <学号> --password <密码> --mac <登记MAC> --seconds 60
-```
-
-判定标准很简单：**能登录、能撑 10 分钟不掉线** ✅。把终端输出和 `tcpdump -i en7 -n "udp port 61440"` 的抓包贴回来就行。完整流程见 [docs/runbook.md](docs/runbook.md)。
-
----
-
-## 📂 目录
-
-| 路径 | 是什么 |
+| Wiki 页 | 内容 |
 |---|---|
-| `Sources/JLUGateCore` | 编解码 / 摘要 / 状态 / 退避 / 错误（纯协议，没有 I/O） |
-| `Sources/JLUGateNet` | BSD 与 NW 两套 UDP 通道、网卡与路由解析、`DrcomEngine` actor |
-| `Sources/jlugate-probe` | 诊断 + 离线自测的命令行工具 |
-| `App/` | SwiftUI 菜单栏应用（macOS 26，Liquid Glass；XcodeGen 工程描述在 `App/project.yml`） |
-| `App-Compat/` | 旧版适配（macOS 14，普通材质、无 Liquid Glass；和 `App/` 同源，只换 `AppearanceCompat`） |
-| `Tools/mock-gateway` | 按帧表应答的 Dr.Com 模拟网关（支持丢包 / 延迟 / 拒绝） |
-| `Tools/mock-portal` | 模拟校园网页认证（302 → 登录页 → POST → 204） |
-| `Fixtures/` | 抓包样本（含凭据摘要，**不要公开**） |
-| `docs/` | CHECKLIST / PLAN / protocol-findings / progress / runbook |
+| [功能详解](https://github.com/yzsm385/JLUGate/wiki/Features) | 三网接入 / 参数与 MAC / 吉大入口 / 网络体检 / 代理路由 / 界面状态 / 更新卸载 / 安全克制，每块展开讲 |
+| [快速开始](https://github.com/yzsm385/JLUGate/wiki/Quick-Start) | `make` 命令、`jlugate-probe` 只读诊断 |
+| [构建与运行](https://github.com/yzsm385/JLUGate/wiki/Build) | 新版（macOS 26）/ 旧版适配（macOS 14）的构建、签名、打包 |
+| [连接路径冻结](https://github.com/yzsm385/JLUGate/wiki/Freeze-Policy) | 哪些文件冻结了、为什么、怎么改才不违反 |
+| [真机验证](https://github.com/yzsm385/JLUGate/wiki/Real-Device-Test) | 在真实校园网环境验证登录和保活的完整流程 |
+| [隐私与安全](https://github.com/yzsm385/JLUGate/wiki/Privacy) | Fixtures 脱敏、凭据存放、隐私扫描、发布流程 |
 
----
-
-## 🛠️ 构建 / 运行 App
-
-没有开发者账号也能在本机跑起来（ad-hoc 签名，不能分发、不能公证）：
-
-```bash
-make app-bundle     # → dist/JLU Gate.app（菜单栏常驻，macOS 26，Liquid Glass）
-open "dist/JLU Gate.app"
-
-make app-compat      # → dist/JLU Gate (Compat).app（macOS 14，普通材质，老系统用）
-open "dist/JLU Gate (Compat).app"
-```
-
-有账号、要签名和公证时，走 XcodeGen（新版在 `App/`，旧版在 `App-Compat/`）：
-
-```bash
-brew install xcodegen
-cd App && xcodegen generate && open JLUGate.xcodeproj        # 新版
-cd App-Compat && xcodegen generate && open JLUGate.xcodeproj # 旧版适配
-```
-
----
-
-## 🔒 隐私
-
-- 🧼 仓库里的 `Fixtures/` 已经**全部脱敏**（合成账号、保留地址、重算摘要），可以公开。
-- 🔐 真实凭据和原始抓包只放在 `local/PRIVATE.md`：被 `.gitignore` 排除，而且 `.git/hooks/pre-commit` 会拦下误提交。详见 [SECURITY.md](SECURITY.md)。
-- 🚫 任何 `*.pcap` / `*.har` 都不入库。
-- ✅ 推送前跑 `./scripts/privacy-scan.sh`；发布流程见 [docs/PUBLISH.md](docs/PUBLISH.md)。
+> 📖 English versions of all Wiki pages are available—click **🇬🇧 English** at the top of any Wiki page.
 
 ---
 
@@ -252,6 +177,6 @@ This tool was written by one person based on their own JLU pain points, so **cov
 
 > ⚠️ No real credentials accepted. Don't paste plaintext passwords or raw captures in Issues/PRs; see [SECURITY.md](SECURITY.md) for redaction rules.
 
-> 📖 The full developer guide (build, tests, freeze policy, privacy) remains in Chinese above—scroll up to **🚀 快速开始** and beyond.
+> 📖 Full developer docs (build, tests, freeze policy, real-device testing, privacy) are in the [Wiki](https://github.com/yzsm385/JLUGate/wiki)—English versions available, click **🇬🇧 English** at the top of any Wiki page.
 
 </details>
