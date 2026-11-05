@@ -68,21 +68,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.showPanel()
             }
         }
-
-        // 从访达手动打开（不是登录项拉起）：直接把面板亮出来。
-        // 菜单栏工具双击后什么都不弹，用户根本不知道图标躲在右上角，会以为"无响应"。
-        let launchedByUser = (notification.userInfo?[NSApplication.launchIsDefaultUserInfoKey] as? Bool) ?? true
-        FileLogger.shared.log("启动：launchedByUser=\(launchedByUser)")
-        if launchedByUser,
-           DevOverrides.startPanelName == nil,
-           !DevOverrides.openPanelOnLaunch,
-           !CommandLine.arguments.contains("--open-panel"),
-           !DevOverrides.autostart {
-            Task { @MainActor in
-                try? await Task.sleep(for: .milliseconds(500))
-                self.showPanel()
-            }
-        }
     }
 
     static func panel(named name: String) -> AppModel.Panel? {

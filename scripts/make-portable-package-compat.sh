@@ -69,6 +69,59 @@ echo "如果还是没有，把上面的输出和 ~/Library/Logs/JLUGate/agent.lo
 INSTALL
 chmod +x "$STAGE/Install JLU Gate.command"
 
+cat > "$STAGE/诊断 JLU Gate.command" <<'DIAG'
+#!/bin/bash
+# 双击它：把系统版本、二进制信息、直接运行 App 的报错（dyld/崩溃）一次性
+# 收集到桌面 jlu-diag.txt。把那个文件发我，就能确定为什么打不开。
+set -u
+OUT="$HOME/Desktop/jlu-diag.txt"
+HERE="$(cd "$(dirname "$0")" && pwd)"
+APP="/Applications/JLU Gate (Compat).app"
+[ -d "$APP" ] || APP="$HERE/JLU Gate (Compat).app"
+BIN="$APP/Contents/MacOS/JLUGate"
+{
+  echo "==== sw_vers ===="
+  sw_vers
+  echo "==== uname ===="
+  uname -a
+  echo "==== arch ===="
+  echo "本机: $(arch)"
+  echo "==== App 是否存在 ===="
+  ls -ld "$APP" 2>&1 || echo "（/Applications 里没有，用解压目录里的那份路径）"
+  echo "==== Info.plist ===="
+  plutil -p "$APP/Contents/Info.plist" 2>&1 | head -20
+  if [ -x "$BIN" ]; then
+    echo "==== vtool ===="
+    vtool -show-build "$BIN" 2>&1 | head -20
+    echo "==== otool -L（强链接的库）===="
+    otool -L "$BIN" 2>&1 | head -30
+    echo "==== 直接运行二进制（5 秒后采样）===="
+    "$BIN" &
+    PID=$!
+    sleep 5
+    if kill -0 "$PID" 2>/dev/null; then
+      echo "进程仍在运行 pid=$PID（没有秒退；看右上角菜单栏有没有盾牌图标）"
+      kill -9 "$PID" 2>/dev/null || true
+    else
+      echo "进程 5 秒内已退出（启动即崩/被拦）。上面可能有 dyld 的报错。"
+    fi
+  else
+    echo "二进制不存在或不可执行: $BIN"
+  fi
+  echo "==== agent.log 最后 30 行 ===="
+  tail -30 "$HOME/Library/Logs/JLUGate/agent.log" 2>&1
+  echo "==== 最近的 JLUGate 崩溃报告 ===="
+  ls -lt "$HOME/Library/Logs/DiagnosticReports/" 2>/dev/null | grep -i jlu | head -3
+  cat "$HOME/Library/Logs/DiagnosticReports/JLUGate"*.ips 2>/dev/null | head -60
+  echo "==== quarantine ===="
+  xattr -l "$APP" 2>&1 | head
+} > "$OUT" 2>&1
+echo "已生成：$OUT"
+echo "把这个文件发我即可。"
+open -R "$OUT"
+DIAG
+chmod +x "$STAGE/诊断 JLU Gate.command"
+
 cat > "$STAGE/Uninstall JLU Gate.command" <<'UNINSTALL'
 #!/bin/bash
 # 把 JLU Gate 从这台机器上彻底清掉：应用、配置、日志、钥匙串条目。
