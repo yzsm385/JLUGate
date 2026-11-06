@@ -55,6 +55,13 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
+            Section {
+                FreshmanTipsCard()
+                    .padding(.vertical, 2)
+            } header: {
+                Text(Copy.t("R15"))
+            }
+
             Section(Copy.t("S02")) {
                 TextField(Copy.t("S03"), text: $draft.account)
                 SecureField(Copy.t("S04"), text: $draft.password)

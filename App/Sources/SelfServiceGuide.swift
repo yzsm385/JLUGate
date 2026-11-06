@@ -260,3 +260,35 @@ struct SelfServiceHintRow: View {
         }
     }
 }
+
+/// 新生三张卡：校园卡 / 电话卡 / 校园网。放在「萌新指南」里，平时折叠、想看再看。
+struct FreshmanTipsCard: View {
+    private var tips: [(String, String, String)] {
+        [
+            ("creditcard", Copy.t("R09"), Copy.t("R10")),
+            ("iphone", Copy.t("R11"), Copy.t("R12")),
+            ("wifi", Copy.t("R13"), Copy.t("R14")),
+        ]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(Array(tips.enumerated()), id: \.offset) { index, tip in
+                if index > 0 { Divider().opacity(0.35) }
+                HStack(alignment: .top, spacing: 6) {
+                    Image(systemName: tip.0)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.blue)
+                        .frame(width: 16)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(tip.1).font(.system(size: 11, weight: .semibold))
+                        Text(tip.2)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+        }
+    }
+}

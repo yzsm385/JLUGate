@@ -16,7 +16,8 @@ struct JLUSiteDirectoryTests {
         for site in JLUSiteDirectory.all {
             let url = site.url
             #expect(url != nil, "\(site.host) URL 非法")
-            #expect(url?.scheme == "https")
+            #expect(url?.scheme == site.scheme)
+            #expect(["http", "https"].contains(url?.scheme ?? ""))
             #expect(url?.host == site.host)
         }
     }

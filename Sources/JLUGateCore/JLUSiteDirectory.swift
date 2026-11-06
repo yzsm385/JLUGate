@@ -48,9 +48,29 @@ public struct JLUSite: Sendable, Equatable, Identifiable, Hashable {
     public let note: String
     /// 是否支持"复制账号/密码"辅助登录
     public let supportsCredentialPrefill: Bool
+    /// http / https（个别学校站点只有 http）
+    public let scheme: String
+    /// 域名后面的路径（比如 zhxg 的 `/xg/`、第二课堂的 `/jlu-2c/`）
+    public let path: String
+
+    public init(title: String, host: String, category: Category, access: Access,
+                note: String, supportsCredentialPrefill: Bool,
+                scheme: String = "https", path: String = "") {
+        self.title = title
+        self.host = host
+        self.category = category
+        self.access = access
+        self.note = note
+        self.supportsCredentialPrefill = supportsCredentialPrefill
+        self.scheme = scheme
+        self.path = path
+    }
 
     public var id: String { host }
-    public var url: URL? { URL(string: "https://\(host)/") }
+    public var url: URL? {
+        let suffix = path.isEmpty ? "" : "/" + path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        return URL(string: "\(scheme)://\(host)\(suffix)/")
+    }
     public var isCampusRelevant: Bool { access != .publicSite }
 }
 
@@ -97,6 +117,39 @@ public enum JLUSiteDirectory {
               access: .publicSite, note: Copy.t("TD33"), supportsCredentialPrefill: false),
         .init(title: Copy.t("TD34"), host: "news.jlu.edu.cn", category: .info,
               access: .publicSite, note: Copy.t("TD35"), supportsCredentialPrefill: false),
+
+        // 学习与教务：选课 / 二课堂 / 考试报名
+        .init(title: Copy.t("TD36"), host: "icourses.jlu.edu.cn", category: .study,
+              access: .campusOnly, note: Copy.t("TD37"), supportsCredentialPrefill: true),
+        .init(title: Copy.t("TD48"), host: "classroom.univteam.com", category: .study,
+              access: .publicSite, note: Copy.t("TD49"), supportsCredentialPrefill: false,
+              path: "jlu-2c"),
+        .init(title: Copy.t("TD42"), host: "registry.jlu.edu.cn", category: .study,
+              access: .publicSite, note: Copy.t("TD43"), supportsCredentialPrefill: false,
+              scheme: "http"),
+        .init(title: Copy.t("TD44"), host: "kszx.jlu.edu.cn", category: .study,
+              access: .publicSite, note: Copy.t("TD45"), supportsCredentialPrefill: false,
+              scheme: "http"),
+        .init(title: Copy.t("TD50"), host: "cet-bm.neea.edu.cn", category: .study,
+              access: .publicSite, note: Copy.t("TD51"), supportsCredentialPrefill: false,
+              scheme: "http"),
+        .init(title: Copy.t("TD52"), host: "www.chinaneccs.cn", category: .study,
+              access: .publicSite, note: Copy.t("TD53"), supportsCredentialPrefill: false,
+              scheme: "http"),
+
+        // 办事与校务：智慧学工 / 校园卡 / 缴费 / 学工部
+        .init(title: Copy.t("TD38"), host: "zhxg.jlu.edu.cn", category: .office,
+              access: .campusOnly, note: Copy.t("TD39"), supportsCredentialPrefill: true,
+              path: "xg"),
+        .init(title: Copy.t("TD40"), host: "dsf.jlu.edu.cn", category: .office,
+              access: .campusOnly, note: Copy.t("TD41"), supportsCredentialPrefill: true,
+              scheme: "http"),
+        .init(title: Copy.t("TD54"), host: "cwsf.jlu.edu.cn", category: .office,
+              access: .publicSite, note: Copy.t("TD55"), supportsCredentialPrefill: true,
+              scheme: "http"),
+        .init(title: Copy.t("TD46"), host: "xsc.jlu.edu.cn", category: .office,
+              access: .publicSite, note: Copy.t("TD47"), supportsCredentialPrefill: false,
+              scheme: "http"),
     ]
 
     public static func sites(in category: JLUSite.Category) -> [JLUSite] {
