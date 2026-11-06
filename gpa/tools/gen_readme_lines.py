@@ -25,7 +25,7 @@ def main():
         code = os.path.basename(f)[:-5]
         lines = d.get('lines') or []
         total_lines += len(lines)
-        cohorts = sorted({l.get('cohort') for l in lines if l.get('cohort')},
+        cohorts = sorted({str(l.get('cohort')) for l in lines if l.get('cohort')},
                          key=lambda c: int(str(c).replace('届', '') or 0))
         scope = d.get('scope') or {}
         one = scope.get('summary') or ''
