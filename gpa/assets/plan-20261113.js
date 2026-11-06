@@ -518,7 +518,9 @@
             unsureBox.appendChild(hint);
           }
           unsureBox.appendChild(makeRow(c));
-        } else if (!hardExcluded(c)) {
+        } else {
+          /* 硬排除课程也渲染进 DOM：默认由 CSS（body:not(.show-excluded) .plan-row.row-hard）隐藏，
+             勾「显示不计入课程」时可见可勾，而不是从 DOM 里彻底消失 */
           box.appendChild(makeRow(c));
         }
       });
