@@ -8,13 +8,15 @@
   ];
   var params = new URLSearchParams(window.location.search);
   var planId = (params.get("plan") || "").trim();
+  var version = (params.get("v") || "").trim();
+  var localKey = (params.get("local") || "").trim();
   var title = document.getElementById("planTitle");
   var meta = document.getElementById("planMeta");
   var list = document.getElementById("planList");
   var status = document.getElementById("planStatus");
   var search = document.getElementById("planSearch");
   var clearBtn = document.getElementById("clearPlan");
-  var stateKey = "jlu-plan-v1-" + planId;
+  var stateKey = "jlu-plan-v1-" + (localKey ? "local-" + localKey : planId);
   var state = { checked: {}, gpa: {} };
   var plan = null;
 
@@ -24,7 +26,7 @@
     if (list) list.innerHTML = "<p class='fine'>请回到首页，重新选择学院和专业。</p>";
   }
 
-  if (!planId || !/^[0-9a-f]{16,40}$/i.test(planId)) {
+  if (!localKey && (!planId || !/^[0-9a-f]{16,40}$/i.test(planId))) {
     fail("地址里缺少 plan 参数。");
     return;
   }
@@ -185,13 +187,34 @@
     updateStats();
   }
 
-  var s = document.createElement("script");
-  s.src = "data/plans/" + planId + ".js";
-  s.onload = function () {
-    plan = window.GPA_PLAN;
-    if (!plan || !plan.courses) { fail("方案数据为空。"); return; }
+  if (localKey) {
+    try {
+      plan = JSON.parse(localStorage.getItem("jlu-plan-local-" + localKey) || "null");
+    } catch (e) { plan = null; }
+    if (!plan || !plan.courses) { fail("本地导入的方案不存在或已损坏。"); return; }
     render();
-  };
-  s.onerror = function () { fail("读取 data/plans/" + planId + ".js 失败。"); };
-  document.head.appendChild(s);
+  } else {
+    var s = document.createElement("script");
+    s.src = "data/plans/" + planId + ".js" + (version ? "?v=" + encodeURIComponent(version) : "");
+    s.onload = function () {
+      plan = window.GPA_PLAN;
+      if (!plan || !plan.courses) { fail("方案数据为空。"); return; }
+      render();
+    };
+    s.onerror = function () { fail("读取 data/plans/" + planId + ".js 失败。"); };
+    document.head.appendChild(s);
+  }
+
+  var downloadBtn = document.getElementById("downloadPlan");
+  if (downloadBtn) downloadBtn.addEventListener("click", function () {
+    if (!plan) return;
+    var blob = new Blob([JSON.stringify(plan, null, 2)], { type: "application/json" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (plan.meta && plan.meta.planName ? plan.meta.planName : "培养方案") + ".json";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    status.textContent = "已下载本专业方案；可回到首页“导入方案”离线打开。";
+  });
 })();

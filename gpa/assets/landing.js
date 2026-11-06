@@ -16,6 +16,8 @@
   var manualBtn = document.getElementById("manualBtn");
   var accountResult = document.getElementById("accountResult");
   var refreshBtn = document.getElementById("refreshBtn");
+  var importBtn = document.getElementById("importBtn");
+  var importFile = document.getElementById("importFile");
 
   if (!data || !data.colleges) {
     if (hint) hint.textContent = "专业索引没有加载成功；请确认 data/plans-index.js 存在。";
@@ -239,6 +241,27 @@
       } finally {
         refreshBtn.disabled = false;
       }
+    });
+  }
+
+  if (importBtn && importFile) {
+    importBtn.addEventListener("click", function () { importFile.click(); });
+    importFile.addEventListener("change", function () {
+      var file = importFile.files && importFile.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        try {
+          var obj = JSON.parse(String(reader.result || ""));
+          if (!obj || !obj.courses || !obj.courses.length) throw new Error("no courses");
+          var key = "local-" + Date.now();
+          localStorage.setItem("jlu-plan-local-" + key, JSON.stringify(obj));
+          location.href = "plan.html?local=" + encodeURIComponent(key);
+        } catch (e) {
+          say("导入失败：这个文件不是本工具导出的培养方案 JSON。");
+        }
+      };
+      reader.readAsText(file, "utf-8");
     });
   }
 

@@ -3,6 +3,7 @@
 - data/plans/<PYFADM>.js：每个专业一份课程目录
 - data/plans-index.js：学院 → 专业索引
 """
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -81,16 +82,16 @@ for p in plans:
             "collegeCode": code,
             "major": major,
             "totalPlanCredits": total,
-            "source": "2026级主修培养方案（教务系统）",
+            "source": "%d级主修培养方案（教务系统）" % year,
         },
         "courses": courses,
     }
-    (OUT / (pid + ".js")).write_text(
-        "window.GPA_PLAN = " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";\n",
-        encoding="utf-8")
+    text = "window.GPA_PLAN = " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";\n"
+    (OUT / (pid + ".js")).write_text(text, encoding="utf-8")
     written += 1
+    version = hashlib.sha1(text.encode("utf-8")).hexdigest()[:10]
 
-    route = "plan.html?plan=" + pid
+    route = "plan.html?plan=" + pid + "&v=" + version
     if code == "55" and major == "软件工程" and year == 2026:
         route = "software.html?cohort=2026"
 
@@ -101,6 +102,7 @@ for p in plans:
         "year": year,
         "credits": total,
         "courses": len(courses),
+        "version": version,
         "route": route,
     })
 
