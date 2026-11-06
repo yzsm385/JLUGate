@@ -199,6 +199,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let inspect = NSMenuItem(title: Copy.t("N04"), action: #selector(inspectFromMenu), keyEquivalent: "")
         inspect.target = self
         menu.addItem(inspect)
+        let gpa = NSMenuItem(title: Copy.t("GPA01"), action: #selector(gpaFromMenu), keyEquivalent: "g")
+        gpa.target = self
+        menu.addItem(gpa)
         let settings = NSMenuItem(title: Copy.t("N05"), action: #selector(settingsFromMenu), keyEquivalent: ",")
         settings.target = self
         menu.addItem(settings)
@@ -216,6 +219,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func disconnectFromMenu() { model?.disconnect() }
     @objc private func refreshFromMenu() { model?.refreshDiagnostics() }
     @objc private func inspectFromMenu() { model?.show(.inspect) }
+    @objc private func gpaFromMenu() {
+        guard let model else { return }
+        NSWorkspace.shared.open(model.gpaURL)
+    }
     @objc private func settingsFromMenu() { model?.presentSettings() }
     @objc private func quitFromMenu() { NSApp.terminate(nil) }
 
@@ -406,6 +413,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: Copy.t("N10"), action: nil, keyEquivalent: "")
+        let gpa = NSMenuItem(title: Copy.t("GPA01"), action: #selector(gpaFromMenu), keyEquivalent: "g")
+        gpa.target = self
+        appMenu.addItem(gpa)
         appMenu.addItem(.separator())
         let quit = NSMenuItem(title: "退出 JLU Gate", action: #selector(quitFromMenu), keyEquivalent: "q")
         quit.target = self

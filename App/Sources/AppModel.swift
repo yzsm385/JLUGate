@@ -165,6 +165,14 @@ final class AppModel {
     /// 站点合集里"复制账号"用
     var account: String { config.account }
 
+    /// GPA / 保研测算网页。账号只放在 fragment，避免出现在服务器日志里。
+    var gpaURL: URL {
+        var c = URLComponents(string: "https://yzsm385.github.io/JLUGate/")!
+        let a = account.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !a.isEmpty { c.fragment = "account=" + a }
+        return c.url!
+    }
+
     // MARK: 我的学院（学号识别）
 
     var studentID: String { config.studentID }

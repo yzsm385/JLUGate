@@ -289,4 +289,19 @@
     var plan = pickPlan(g);
     if (plan) window.location.href = plan.route;
   });
+
+  // App 深链：https://yzsm385.github.io/JLUGate/#account=zhangsw2123
+  // 账号只放 fragment，不会出现在服务器日志里。
+  function fromHash() {
+    var raw = (location.hash || "").replace(/^#/, "");
+    if (!raw) return;
+    var hp = new URLSearchParams(raw);
+    var qp = new URLSearchParams(location.search || "");
+    var a = hp.get("account") || qp.get("account");
+    if (a && accountInput) {
+      accountInput.value = a;
+      detect();
+    }
+  }
+  fromHash();
 })();
