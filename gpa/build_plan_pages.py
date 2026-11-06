@@ -88,11 +88,13 @@ for p in plans:
         "courses": courses,
     }
     text = "window.GPA_PLAN = " + json.dumps(data, ensure_ascii=False, separators=(",", ":")) + ";\n"
-    (OUT / (pid + ".js")).write_text(text, encoding="utf-8")
+    year_dir = OUT / str(year)
+    year_dir.mkdir(parents=True, exist_ok=True)
+    (year_dir / (pid + ".js")).write_text(text, encoding="utf-8")
     written += 1
     version = hashlib.sha1(text.encode("utf-8")).hexdigest()[:10]
 
-    route = "plan.html?plan=" + pid + "&v=" + version
+    route = "plan.html?plan=%s&v=%s&y=%d" % (pid, version, year)
     if code == "55" and major == "软件工程" and year == 2026:
         route = "software.html?cohort=2026"
 

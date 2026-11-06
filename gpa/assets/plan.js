@@ -9,6 +9,7 @@
   var params = new URLSearchParams(window.location.search);
   var planId = (params.get("plan") || "").trim();
   var version = (params.get("v") || "").trim();
+  var year = (params.get("y") || "").trim();
   var localKey = (params.get("local") || "").trim();
   var title = document.getElementById("planTitle");
   var meta = document.getElementById("planMeta");
@@ -195,7 +196,8 @@
     render();
   } else {
     var s = document.createElement("script");
-    s.src = "data/plans/" + planId + ".js" + (version ? "?v=" + encodeURIComponent(version) : "");
+    s.src = "data/plans/" + (year && /^20\d{2}$/.test(year) ? year + "/" : "") + planId + ".js" +
+      (version ? "?v=" + encodeURIComponent(version) : "");
     s.onload = function () {
       plan = window.GPA_PLAN;
       if (!plan || !plan.courses) { fail("方案数据为空。"); return; }
