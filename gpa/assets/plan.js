@@ -19,6 +19,8 @@
   var clearBtn = document.getElementById("clearPlan");
   var stateKey = "jlu-plan-v1-" + (localKey ? "local-" + localKey : planId);
   var state = { checked: {}, gpa: {} };
+  var onlyFirst3Input = document.getElementById("onlyFirst3");
+  var onlyFirst3 = localStorage.getItem("jlu-plan-first3") !== "0";
   var targetInput = document.getElementById("targetGpa");
   var target = Number(localStorage.getItem("jlu-plan-target")) || 3.46;
   var plan = null;
@@ -50,6 +52,7 @@
     var sel = 0, selCr = 0, graded = 0, gradedCr = 0, weighted = 0, remCr = 0, remCount = 0;
     plan.courses.forEach(function (c) {
       if (!state.checked[c.key]) return;
+      if (onlyFirst3 && c.sem >= 7) return;
       sel++;
       selCr += num(c.credit);
       var g = state.gpa[c.key];
@@ -141,6 +144,7 @@
     }).forEach(function (sem) {
       var sec = document.createElement("section");
       sec.className = "plan-sem";
+      sec.dataset.sem = String(sem);
       var h = document.createElement("h3");
       h.textContent = sem === 0 ? "未标注学期（英语分级 / 四史等）" : "第 " + sem + " 学期 · " + (SEM[sem] || "其他");
       sec.appendChild(h);
@@ -162,7 +166,7 @@
         row.hidden = !hit;
         if (hit) shown++;
       });
-      sec.hidden = shown === 0;
+      sec.hidden = shown === 0 || (onlyFirst3 && Number(sec.dataset.sem) >= 7);
     });
   }
 
@@ -200,11 +204,21 @@
   var selectRequired = document.getElementById("selectRequired");
   if (selectRequired) selectRequired.addEventListener("click", function () {
     plan.courses.forEach(function (c) {
-      if (c.type === "必修") state.checked[c.key] = true;
+      if (c.type === "必修" && (!onlyFirst3 || c.sem < 7)) state.checked[c.key] = true;
     });
     save(); renderList(); updateStats();
-    status.textContent = "已全选必修；其中可能含英语/方向分流课，请按实际取消不修读的课程。";
+    status.textContent = "已选必修（" + (onlyFirst3 ? "不含大四" : "含大四") + "）；可能含英语/方向分流，请按实际取消。";
   });
+
+  if (onlyFirst3Input) {
+    onlyFirst3Input.checked = onlyFirst3;
+    onlyFirst3Input.addEventListener("change", function () {
+      onlyFirst3 = this.checked;
+      try { localStorage.setItem("jlu-plan-first3", onlyFirst3 ? "1" : "0"); } catch (e) { /* ignore */ }
+      applySearch();
+      updateStats();
+    });
+  }
 
   search.addEventListener("input", applySearch);
   clearBtn.addEventListener("click", function () {
