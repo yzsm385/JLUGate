@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
-"""从 2026 主修培养方案批量 JSON 生成：
-- data/plans/<PYFADM>.js：每个专业一份课程目录
+"""从 2022–2026 主修培养方案批量 JSON 生成：
+- data/plans/<年份>/<PYFADM>.js：每个专业一份课程目录
 - data/plans-index.js：学院 → 专业索引
 """
 import hashlib

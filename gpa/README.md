@@ -101,7 +101,7 @@ gpa/
 ├── software.html                   # 软件工程专门版
 ├── plan.html                       # 通用 2022–2026 专业目录计算器
 ├── data/plans-index.js             # 48 学院 / 1030 方案索引
-├── data/plans/                     # 每个方案的课程目录（1030 个 js）
+├── data/plans/2022–2026/           # 按年份分目录，每年 199–222 个方案 js
 ├── computer.html                   # 计算机科学与技术版计算器
 ├── COMPUTER_REVIEW.md              # 计算机 43 门课与 2026 分数线核对
 ├── BONUS_RULES.md                  # 25 届软件加分规则（按图片；科研/竞赛）
