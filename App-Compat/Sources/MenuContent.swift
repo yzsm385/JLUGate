@@ -76,6 +76,7 @@ struct MenuContent: View {
             VStack(alignment: .leading, spacing: 10) {
                 statusCard
                 actionButtons
+                gpaEntry
             }
 
             if let care = DormSchedule.care(at: careNow) {
@@ -448,6 +449,41 @@ struct MenuContent: View {
         if model.isOffCampus {
             WebVPNAssistCard()
         }
+    }
+
+    /// GPA / 保研：直接交给系统浏览器，避免面板内的 WKWebView 崩溃风险。
+    private var gpaEntry: some View {
+        Link(destination: model.gpaURL) {
+            HStack(spacing: 9) {
+                Image(systemName: "chart.bar.doc.horizontal")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(Copy.t("GPA01"))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Text(Copy.t("GPA02"))
+                        .font(.system(size: 9))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+                Image(systemName: "arrow.up.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(.primary.opacity(0.04))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .stroke(.primary.opacity(0.08), lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     private var footer: some View {
