@@ -598,8 +598,9 @@ func runSelfTest(_ options: Options) -> Int32 {
     }
     _ = semaphore.wait(timeout: .now() + options.seconds + 15)
 
-    // 让网关自己跑完 --duration（自测时长 + 4s），这样才能拿到它的断言结论
-    let exitDeadline = Date().addingTimeInterval(6)
+    // 让网关自己跑完 --duration（自测时长 + 4s）再收结论。
+    // 以前只等 6 秒，机器慢一点就会在网关打印 OK 之前把它掐掉 → CI 偶发失败。
+    let exitDeadline = Date().addingTimeInterval(options.seconds + 8)
     while process.isRunning && Date() < exitDeadline {
         Thread.sleep(forTimeInterval: 0.1)
     }
