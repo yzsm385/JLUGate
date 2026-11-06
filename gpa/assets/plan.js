@@ -19,6 +19,8 @@
   var clearBtn = document.getElementById("clearPlan");
   var stateKey = "jlu-plan-v1-" + (localKey ? "local-" + localKey : planId);
   var state = { checked: {}, gpa: {} };
+  var targetInput = document.getElementById("targetGpa");
+  var target = Number(localStorage.getItem("jlu-plan-target")) || 3.46;
   var plan = null;
 
   function fail(msg) {
@@ -45,7 +47,7 @@
   function num(x) { return Number(x) || 0; }
 
   function calc() {
-    var sel = 0, selCr = 0, graded = 0, gradedCr = 0, weighted = 0;
+    var sel = 0, selCr = 0, graded = 0, gradedCr = 0, weighted = 0, remCr = 0, remCount = 0;
     plan.courses.forEach(function (c) {
       if (!state.checked[c.key]) return;
       sel++;
@@ -55,22 +57,37 @@
         graded++;
         gradedCr += num(c.credit);
         weighted += Number(g) * num(c.credit);
+      } else {
+        remCount++;
+        remCr += num(c.credit);
       }
     });
+    var need = remCr > 0 ? (target * selCr - weighted) / remCr : null;
     return {
       sel: sel, selCr: selCr, graded: graded, gradedCr: gradedCr,
-      gpa: gradedCr > 0 ? weighted / gradedCr : null
+      remCr: remCr, remCount: remCount,
+      gpa: gradedCr > 0 ? weighted / gradedCr : null,
+      need: need
     };
   }
 
   function updateStats() {
     var r = calc();
     document.getElementById("selCredits").textContent = r.selCr.toFixed(1);
-    document.getElementById("selSub").textContent = r.sel + " 门课程（已录 " + r.graded + " 门）";
+    document.getElementById("selSub").textContent = r.sel + " 门课程 · 已录 " + r.graded + " 门 / 待录 " + r.remCount + " 门";
     document.getElementById("planGpa").textContent = r.gpa == null ? "—" : r.gpa.toFixed(6);
     document.getElementById("gpaSub").textContent = r.gradedCr > 0
       ? r.gradedCr.toFixed(1) + " 学分计入 GPA"
       : "录入绩点后显示";
+    if (r.remCr <= 0) {
+      document.getElementById("needGpa").textContent = "—";
+      document.getElementById("needSub").textContent = "已全部录入；最终 " +
+        (r.gpa == null ? "—" : r.gpa.toFixed(6)) + (r.gpa == null ? "" : (r.gpa >= target ? "，达到目标" : "，未达目标"));
+    } else {
+      document.getElementById("needGpa").textContent = r.need == null ? "—" : Math.max(0, r.need).toFixed(3);
+      document.getElementById("needSub").textContent = "剩余 " + r.remCr.toFixed(1) + " 学分" +
+        (r.need > 4.0 ? " · 目标偏高（需 >4.0）" : (r.need < 0 ? " · 已超过目标" : ""));
+    }
   }
 
   function makeRow(c) {
@@ -165,6 +182,26 @@
     }
   });
 
+  if (targetInput) {
+    targetInput.value = target.toFixed(2);
+    targetInput.addEventListener("input", function () {
+      var v = Number(targetInput.value);
+      if (!isFinite(v)) return;
+      target = Math.max(0, Math.min(4, v));
+      try { localStorage.setItem("jlu-plan-target", String(target)); } catch (e) { /* ignore */ }
+      updateStats();
+    });
+  }
+
+  var selectRequired = document.getElementById("selectRequired");
+  if (selectRequired) selectRequired.addEventListener("click", function () {
+    plan.courses.forEach(function (c) {
+      if (c.type === "必修") state.checked[c.key] = true;
+    });
+    save(); renderList(); updateStats();
+    status.textContent = "已全选必修；其中可能含英语/方向分流课，请按实际取消不修读的课程。";
+  });
+
   search.addEventListener("input", applySearch);
   clearBtn.addEventListener("click", function () {
     state = { checked: {}, gpa: {} };
@@ -182,8 +219,6 @@
       " · " + (m.totalPlanCredits ? "计划 " + m.totalPlanCredits + " 学分" : "");
     document.getElementById("badgeCollege").textContent = m.college || "—";
     document.getElementById("badgeCredits").textContent = "计划 " + (m.totalPlanCredits || "—") + " 学分";
-    document.getElementById("planCredits").textContent = m.totalPlanCredits ? m.totalPlanCredits.toFixed(1) : "—";
-    document.getElementById("planCourses").textContent = plan.courses.length + " 门目录课程";
     renderList();
     updateStats();
   }

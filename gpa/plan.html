@@ -23,7 +23,7 @@
 </header>
 
 <main class="wrap">
-  <section class="stats three" aria-label="总览">
+  <section class="stats four" aria-label="总览">
     <div class="stat primary">
       <div class="label">已勾选学分</div>
       <div class="value" id="selCredits">0.0</div>
@@ -35,15 +35,24 @@
       <div class="sub" id="gpaSub">录入绩点后显示</div>
     </div>
     <div class="stat">
-      <div class="label">计划学分</div>
-      <div class="value small" id="planCredits">—</div>
-      <div class="sub" id="planCourses">—</div>
+      <div class="label">目标 GPA</div>
+      <div class="target-row">
+        <input id="targetGpa" type="text" inputmode="decimal" value="3.46" aria-label="目标 GPA">
+        <span class="unit">/ 4.0</span>
+      </div>
+      <div class="sub" id="targetSub">按当前勾选学分反推</div>
+    </div>
+    <div class="stat">
+      <div class="label">剩余需平均</div>
+      <div class="value small" id="needGpa">—</div>
+      <div class="sub" id="needSub">勾选并录入后显示</div>
     </div>
   </section>
 
   <section class="panel">
     <div class="plan-tools">
       <input id="planSearch" type="search" placeholder="搜索课程名 / 代码 / 课组" autocomplete="off">
+      <button class="btn" type="button" id="selectRequired">全选必修</button>
       <button class="btn" type="button" id="downloadPlan">下载本专业方案</button>
       <button class="btn" type="button" id="clearPlan">清空勾选</button>
     </div>
