@@ -36,14 +36,25 @@
     return;
   }
 
+  var hasSaved = false;
   try {
-    var saved = JSON.parse(localStorage.getItem(stateKey) || "{}");
+    var rawSaved = localStorage.getItem(stateKey);
+    hasSaved = rawSaved !== null;
+    var saved = JSON.parse(rawSaved || "{}");
     state.checked = saved.checked || {};
     state.gpa = saved.gpa || {};
   } catch (e) { /* ignore */ }
 
   function save() {
     try { localStorage.setItem(stateKey, JSON.stringify(state)); } catch (e) { /* ignore */ }
+  }
+
+  function defaultSelect() {
+    if (hasSaved) return;
+    plan.courses.forEach(function (c) {
+      if (!onlyFirst3 || c.sem < 7) state.checked[c.key] = true;
+    });
+    save();
   }
 
   function num(x) { return Number(x) || 0; }
@@ -254,6 +265,7 @@
       plan = JSON.parse(localStorage.getItem("jlu-plan-local-" + localKey) || "null");
     } catch (e) { plan = null; }
     if (!plan || !plan.courses) { fail("本地导入的方案不存在或已损坏。"); return; }
+    defaultSelect();
     render();
   } else {
     var s = document.createElement("script");
@@ -262,6 +274,7 @@
     s.onload = function () {
       plan = window.GPA_PLAN;
       if (!plan || !plan.courses) { fail("方案数据为空。"); return; }
+      defaultSelect();
       render();
     };
     s.onerror = function () { fail("读取 data/plans/" + planId + ".js 失败。"); };
