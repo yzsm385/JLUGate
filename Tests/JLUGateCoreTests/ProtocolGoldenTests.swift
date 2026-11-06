@@ -236,3 +236,31 @@ struct FrameClassificationTests {
         #expect(kinds.filter { $0 == "keepAliveB" }.count == 24)
     }
 }
+
+@Suite("网关实际回包：272 字节的保活 B 应答")
+struct KeepAliveBLongReplyTests {
+    /// 真机日志里的头部：07 06 10 01 0b 06 dc 02 ...
+    private var payload: Data {
+        var bytes: [UInt8] = [
+            0x07, 0x06, 0x10, 0x01, 0x0B, 0x06, 0xDC, 0x02,
+            0x7C, 0x4A, 0xED, 0x6A, 0x00, 0x00, 0x00, 0x00,
+            0xA8, 0xAC, 0x00, 0x00, 0x4F, 0xE4, 0x16, 0xC1,
+            0x00, 0x00, 0x00, 0x00, 0xDC, 0x02, 0x00, 0x00,
+        ]
+        bytes.append(contentsOf: [UInt8](repeating: 0, count: 272 - bytes.count))
+        return Data(bytes)
+    }
+
+    @Test("272 字节的类型 7 报文要认成保活 B 应答，而不是未知报文")
+    func classify() {
+        let frame = DrcomCodec().classify(payload)
+        guard case .keepAliveBReply(let reply) = frame else {
+            Issue.record("分类结果不是 keepAliveBReply：\(frame)")
+            return
+        }
+        #expect(reply.round == 0x06)
+        #expect(reply.seq == 0x06)
+        #expect(reply.session == 0x02DC)
+        #expect(reply.raw.count == 272)
+    }
+}

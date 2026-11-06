@@ -467,11 +467,13 @@ public actor DrcomEngine {
     private func stayOnline(context: SessionContext, ticket initialTicket: SessionTicket,
                             epoch: UInt64) async throws {
         var ticket = initialTicket
-        // 抓包里保活 B 的轮次从 0x05 起（A 型用 0x04 之前的号），这里按同一口径起算。
-        var round: UInt8 = 0x03
+        // 抓包里保活 B 的轮次从 0x05 起（A 型用 0x04 之前的号）。
+        // round 在循环里先 +1，所以这里放 0x04，第一轮 B 就是 05/06。
+        var round: UInt8 = 0x04
         var misses = 0
         var bMisses = 0
         var loggedFirstB = false
+        var loggedBReply = false
         var packetSeq: UInt8 = 1
         var mirror: UInt32 = 0
 
@@ -515,10 +517,17 @@ public actor DrcomEngine {
                         try await context.channel.send(datagram)
                         packetSeq &+= 1
                         let incoming = try await receive(matching: { frame in
-                            if case .keepAliveBRequest = frame { true } else { false }
+                            switch frame {
+                            case .keepAliveBRequest, .keepAliveBReply: true
+                            default: false
+                            }
                         }, timeout: configuration.keepAliveInterval)
                         if case .keepAliveBRequest = incoming.frame {
                             packetSeq &+= 1
+                        }
+                        if case .keepAliveBReply(let reply) = incoming.frame, !loggedBReply {
+                            loggedBReply = true
+                            emit(.log("保活 B 应答：类型 7 子类型 \(reply.round) 长度 \(reply.raw.count)（已识别，不再当未知报文）"))
                         }
                         if let reply = try? codec.parseKeepAliveBReply(incoming.payload) {
                             mirror = reply.mirror

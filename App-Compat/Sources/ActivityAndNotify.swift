@@ -13,10 +13,12 @@ final class ActivityKeeper {
 
     var isHolding: Bool { token != nil }
 
+    /// 在线期间：既不 App Nap，也不让系统"待机"睡过去。
+    /// 网关一断保活就判离线，睡眠期间发不出包，所以宁愿占着这条断言。
     func begin(reason: String = Copy.t("N11")) {
         guard token == nil else { return }
         token = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiatedAllowingIdleSystemSleep],
+            options: [.userInitiated, .idleSystemSleepDisabled],
             reason: reason)
     }
 

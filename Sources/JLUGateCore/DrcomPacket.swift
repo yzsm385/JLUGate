@@ -196,6 +196,14 @@ public struct KeepAliveBReply: Sendable, Equatable {
     public var session: UInt16
     public var mirror: UInt32
     public var raw: [UInt8]
+
+    public init(round: UInt8, seq: UInt8, session: UInt16, mirror: UInt32, raw: [UInt8]) {
+        self.round = round
+        self.seq = seq
+        self.session = session
+        self.mirror = mirror
+        self.raw = raw
+    }
 }
 
 // MARK: - 帧分类

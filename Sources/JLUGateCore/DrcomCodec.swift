@@ -429,6 +429,17 @@ public struct DrcomCodec: DrcomCodecProtocol, Sendable {
             return .keepAliveARequest
         case (PacketLayout.KeepAliveA.replyKind, PacketLayout.Length.keepAliveAReply):
             if let status = try? parseKeepAliveAReply(data) { return .keepAliveAReply(status) }
+        case (PacketLayout.KeepAliveB.kind, let length) where length > PacketLayout.Length.keepAliveB:
+            // 实测吉林大学网关回的保活应答是 272 字节（不是抓包里的 40 字节）：
+            // 类型 7、子类型 6，前面 40 字节的结构和请求一样。以前当"未知报文"丢掉，
+            // 引擎就一直以为保活 B 没人应答。
+            let seq = (try? reader.u8(at: PacketLayout.KeepAliveB.seqOffset)) ?? 0
+            let round = (try? reader.u8(at: PacketLayout.KeepAliveB.roundOffset)) ?? 0
+            let session = (try? reader.u16(at: PacketLayout.KeepAliveB.sessionOffset, endian: .little)) ?? 0
+            let mirror = (try? reader.u32(at: PacketLayout.KeepAliveB.mirrorOffset, endian: .little)) ?? 0
+            return .keepAliveBReply(KeepAliveBReply(round: round, seq: seq,
+                                                    session: session, mirror: mirror,
+                                                    raw: Array(data)))
         case (PacketLayout.KeepAliveB.kind, PacketLayout.Length.keepAliveB):
             let seq = (try? reader.u8(at: PacketLayout.KeepAliveB.seqOffset)) ?? 0
             let round = (try? reader.u8(at: PacketLayout.KeepAliveB.roundOffset)) ?? 0

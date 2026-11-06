@@ -422,6 +422,8 @@ final class AppModel {
     @ObservationIgnored private var onlineWatchTask: Task<Void, Never>?
     /// 最近一次"静默断网"强制重连的时间（防止探测目标被拦时反复重登）
     @ObservationIgnored private var lastForcedReauthAt: Date?
+    /// 最近一次收到网关保活应答的时间（用来发现"包停了"）
+    @ObservationIgnored private var lastTrafficAt: Date?
     @ObservationIgnored private lazy var portalBrowser = WKPortalBrowser(model: self)
     @ObservationIgnored private let interfacesProvider = SystemInterfaceProvider()
     @ObservationIgnored private let activityKeeper = ActivityKeeper()
@@ -1040,6 +1042,15 @@ final class AppModel {
                                               timeout: .seconds(2))
                 let outcome = await probe.run(interface: interface, dnsServers: servers)
                 if Task.isCancelled || !self.state.isOnline { return }
+                // 保活停了？超过 120 秒没收到网关应答就认为通道哑了（睡眠/定时器被挂起等）
+                if let last = self.lastTrafficAt, Date().timeIntervalSince(last) > 120 {
+                    FileLogger.shared.log("在线巡检：保活已 \(Int(Date().timeIntervalSince(last))) 秒没有应答，主动重连")
+                    self.recentLog.insert("保活停了，正在重新认证", at: 0)
+                    self.lastTrafficAt = nil
+                    self.retry()
+                    return
+                }
+
                 switch SessionLiveness.verdict(outcome) {
                 case .online:
                     intercepted = 0
@@ -1886,6 +1897,7 @@ final class AppModel {
             case .traffic(let seconds, let stats):
                 secondsOnline = seconds
                 trafficStats = stats
+                lastTrafficAt = Date()
                 if portalViewerURL != nil, seconds <= 2 {
                     Task { await self.cachePortalPageIfPossible() }
                 }
