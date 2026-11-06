@@ -82,7 +82,10 @@
     document.getElementById("gpaSub").textContent = r.gradedCr > 0
       ? r.gradedCr.toFixed(1) + " 学分计入 GPA"
       : "录入绩点后显示";
-    if (r.remCr <= 0) {
+    if (r.sel === 0) {
+      document.getElementById("needGpa").textContent = "—";
+      document.getElementById("needSub").textContent = "先勾选课程";
+    } else if (r.remCr <= 0) {
       document.getElementById("needGpa").textContent = "—";
       document.getElementById("needSub").textContent = "已全部录入；最终 " +
         (r.gpa == null ? "—" : r.gpa.toFixed(6)) + (r.gpa == null ? "" : (r.gpa >= target ? "，达到目标" : "，未达目标"));
@@ -235,8 +238,13 @@
     title.textContent = m.planName;
     meta.textContent = (m.college ? m.college + " · " : "") + (m.major || "") +
       " · " + (m.totalPlanCredits ? "计划 " + m.totalPlanCredits + " 学分" : "");
+    var ym = String(m.planName || "").match(/(20\d{2})级/);
+    var yText = ym ? ym[1] : "";
     document.getElementById("badgeCollege").textContent = m.college || "—";
+    document.getElementById("badgeYear").textContent = yText ? yText + " 主修目录" : "主修目录";
     document.getElementById("badgeCredits").textContent = "计划 " + (m.totalPlanCredits || "—") + " 学分";
+    var fine = document.getElementById("planFine");
+    if (fine) fine.textContent = (yText || "当前") + " 推免细则以学院当年通知为准：这里只列培养方案全部课程，默认不勾选。勾选你实际修读/计入的课程，再录绩点；每门都可取消。勾选与成绩只保存在本机。";
     renderList();
     updateStats();
   }

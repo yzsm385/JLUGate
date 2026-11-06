@@ -1,0 +1,17 @@
+/* 保研科目“仅供参考”提示：所有页面共用 */
+.ref-warning{
+  display:flex;gap:11px;align-items:flex-start;
+  margin:14px 0 0;padding:13px 15px;
+  background:linear-gradient(180deg,#fff8e8,#fff3d6);
+  border:1px solid #efc36a;border-left:5px solid #d98b00;
+  border-radius:12px;color:#634400;
+  font-size:13px;line-height:1.65;
+  box-shadow:0 2px 8px rgba(160,105,0,.08);
+}
+.ref-warning .warn-icon{font-size:20px;line-height:1.2;flex:none}
+.ref-warning b{color:#8a4b00}
+.ref-warning .warn-sub{display:block;margin-top:2px;color:#7a5a1a;font-size:12px}
+@media(max-width:640px){
+  .ref-warning{margin-top:12px;padding:11px 12px;font-size:12.5px}
+  .ref-warning .warn-icon{font-size:18px}
+}

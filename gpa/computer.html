@@ -6,6 +6,7 @@
 <title>吉大计算机 GPA · 保研测算器</title>
 <meta name="description" content="吉林大学计算机科学与技术专业 GPA 与保研测算：按 2026 届推免成绩单矩阵的 43 门课程逐课录入绩点，实时计算推免学业 GPA，并给出剩余课程目标建议。">
 <link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/warn.css">
 </head>
 <body>
 <header class="hero">
@@ -96,6 +97,10 @@
     <textarea id="reportBox" readonly hidden></textarea>
   </details>
 
+  <div class="ref-warning" role="note">
+    <span class="warn-icon">⚠️</span>
+    <div><b>保研科目仅供参考</b>：下面列出的课程和勾选项来自培养方案与学院公开材料，尚未逐项核对。有些课程实际不算，或不同年级/专业口径不同；请按学院当年细则，把不算的课程取消勾选。<span class="warn-sub">不确定的科目先不要勾；以学院推免细则和当年通知为准。</span></div>
+  </div>
   <section id="semesters" class="semesters" aria-label="按学期录入"></section>
 
   <section class="panel advice" id="advicePanel">
