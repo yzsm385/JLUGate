@@ -52,12 +52,32 @@
   function defaultSelect() {
     if (hasSaved) return;
     plan.courses.forEach(function (c) {
+      if (isForeign(c) || isHistory(c)) return;
       if (!onlyFirst3 || c.sem < 7) state.checked[c.key] = true;
     });
     save();
   }
 
   function num(x) { return Number(x) || 0; }
+
+  function isForeign(c) {
+    var t = (c.name || "") + " " + (c.note || "");
+    return /(大学英语|英语A|英语B|综合英语|学科英语|英语听说|学术英语|英语预备|B级班|C级班|预备级|免修级|大学日语|大学德语|大学法语|大学俄语|大学西班牙|日语|德语|法语|俄语|西班牙语)/.test(t);
+  }
+
+  function isHistory(c) {
+    return /四史/.test((c.name || "") + " " + (c.note || ""));
+  }
+
+  function langOf(c) {
+    var t = (c.name || "") + " " + (c.note || "");
+    if (/日语/.test(t)) return "日语";
+    if (/德语/.test(t)) return "德语";
+    if (/法语/.test(t)) return "法语";
+    if (/俄语/.test(t)) return "俄语";
+    if (/西班牙语/.test(t)) return "西班牙语";
+    return "英语";
+  }
 
   function calc() {
     var sel = 0, selCr = 0, graded = 0, gradedCr = 0, weighted = 0, remCr = 0, remCount = 0;
@@ -145,10 +165,90 @@
     return row;
   }
 
+  function renderChoicePanels() {
+    var foreign = plan.courses.filter(isForeign);
+    var history = plan.courses.filter(isHistory);
+
+    if (foreign.length) {
+      var sec = document.createElement("section");
+      sec.className = "choice-panel";
+      var h = document.createElement("h3");
+      h.textContent = "外语（单独选择）";
+      sec.appendChild(h);
+      var hint = document.createElement("p");
+      hint.className = "choice-hint";
+      hint.textContent = "先选语种，再展开对应课程；外语默认不勾选。";
+      sec.appendChild(hint);
+
+      var langs = [];
+      foreign.forEach(function (c) {
+        var l = langOf(c);
+        if (langs.indexOf(l) < 0) langs.push(l);
+      });
+      var selected = "";
+      foreign.forEach(function (c) { if (state.checked[c.key] && !selected) selected = langOf(c); });
+
+      var sel = document.createElement("select");
+      sel.id = "foreignLang";
+      sel.className = "choice-select";
+      var o0 = document.createElement("option");
+      o0.value = ""; o0.textContent = "请选择语种"; sel.appendChild(o0);
+      langs.forEach(function (l) {
+        var o = document.createElement("option"); o.value = l; o.textContent = l; sel.appendChild(o);
+      });
+      sel.value = selected;
+      sec.appendChild(sel);
+
+      var groups = {};
+      foreign.forEach(function (c) {
+        var l = langOf(c);
+        if (!groups[l]) {
+          groups[l] = document.createElement("div");
+          groups[l].className = "lang-group";
+          groups[l].dataset.lang = l;
+          groups[l].hidden = l !== selected;
+          sec.appendChild(groups[l]);
+        }
+        groups[l].appendChild(makeRow(c));
+      });
+      list.appendChild(sec);
+    }
+
+    if (history.length) {
+      var hs = document.createElement("section");
+      hs.className = "choice-panel";
+      var hh = document.createElement("h3");
+      hh.textContent = "四史（4 选 1，单独选择）";
+      hs.appendChild(hh);
+      var hp = document.createElement("p");
+      hp.className = "choice-hint";
+      hp.textContent = "四史默认不勾选；请只选你实际修读 / 计入的一门。";
+      hs.appendChild(hp);
+      var hsel = document.createElement("select");
+      hsel.id = "historyPick";
+      hsel.className = "choice-select";
+      var ho0 = document.createElement("option");
+      ho0.value = ""; ho0.textContent = "不选 / 请选择"; hsel.appendChild(ho0);
+      var current = "";
+      history.forEach(function (c) {
+        var o = document.createElement("option");
+        o.value = c.key;
+        o.textContent = c.name + " · " + num(c.credit) + " 学分" + (c.note ? " · " + c.note : "");
+        hsel.appendChild(o);
+        if (state.checked[c.key]) current = c.key;
+      });
+      hsel.value = current;
+      hs.appendChild(hsel);
+      list.appendChild(hs);
+    }
+  }
+
   function renderList() {
     list.innerHTML = "";
+    renderChoicePanels();
     var bySem = {};
     plan.courses.forEach(function (c) {
+      if (isForeign(c) || isHistory(c)) return;
       (bySem[c.sem] = bySem[c.sem] || []).push(c);
     });
     Object.keys(bySem).map(Number).sort(function (a, b) {
@@ -160,7 +260,7 @@
       sec.className = "plan-sem";
       sec.dataset.sem = String(sem);
       var h = document.createElement("h3");
-      h.textContent = sem === 0 ? "未标注学期（英语分级 / 四史等）" : "第 " + sem + " 学期 · " + (SEM[sem] || "其他");
+      h.textContent = sem === 0 ? "未标注学期" : "第 " + sem + " 学期 · " + (SEM[sem] || "其他");
       sec.appendChild(h);
       var box = document.createElement("div");
       box.className = "plan-rows";
@@ -186,6 +286,22 @@
 
   list.addEventListener("change", function (e) {
     var el = e.target;
+    if (el.id === "foreignLang") {
+      var lang = el.value;
+      document.querySelectorAll(".lang-group").forEach(function (g) {
+        g.hidden = g.dataset.lang !== lang;
+      });
+      return;
+    }
+    if (el.id === "historyPick") {
+      plan.courses.forEach(function (c) {
+        if (isHistory(c)) delete state.checked[c.key];
+      });
+      if (el.value) state.checked[el.value] = true;
+      save();
+      updateStats();
+      return;
+    }
     if (el.matches("input[type=checkbox]")) {
       var key = el.dataset.key;
       if (el.checked) state.checked[key] = true;
@@ -218,7 +334,7 @@
   var selectRequired = document.getElementById("selectRequired");
   if (selectRequired) selectRequired.addEventListener("click", function () {
     plan.courses.forEach(function (c) {
-      if (c.type === "必修" && (!onlyFirst3 || c.sem < 7)) state.checked[c.key] = true;
+      if (c.type === "必修" && !isForeign(c) && !isHistory(c) && (!onlyFirst3 || c.sem < 7)) state.checked[c.key] = true;
     });
     save(); renderList(); updateStats();
     status.textContent = "已选必修（" + (onlyFirst3 ? "不含大四" : "含大四") + "）；可能含英语/方向分流，请按实际取消。";
