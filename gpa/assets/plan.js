@@ -1,5 +1,5 @@
 (function () {
-  var SEM = { 1: "大一上", 2: "大一下", 3: "大二上", 4: "大二下", 5: "大三上", 6: "大三下", 7: "大四上", 8: "大四下" };
+  var SEM = { 0: "未标注", 1: "大一上", 2: "大一下", 3: "大二上", 4: "大二下", 5: "大三上", 6: "大三下", 7: "大四上", 8: "大四下" };
   var GPA_OPTIONS = [
     ["4.0", "4.0 · 90–100"], ["3.7", "3.7 · 87–89.9"], ["3.3", "3.3 · 84–86.9"],
     ["3.0", "3.0 · 80–83.9"], ["2.7", "2.7 · 77–79.9"], ["2.3", "2.3 · 74–76.9"],
@@ -134,11 +134,15 @@
     plan.courses.forEach(function (c) {
       (bySem[c.sem] = bySem[c.sem] || []).push(c);
     });
-    Object.keys(bySem).map(Number).sort(function (a, b) { return a - b; }).forEach(function (sem) {
+    Object.keys(bySem).map(Number).sort(function (a, b) {
+      if (a === 0) return 1;
+      if (b === 0) return -1;
+      return a - b;
+    }).forEach(function (sem) {
       var sec = document.createElement("section");
       sec.className = "plan-sem";
       var h = document.createElement("h3");
-      h.textContent = "第 " + sem + " 学期 · " + (SEM[sem] || "其他");
+      h.textContent = sem === 0 ? "未标注学期（英语分级 / 四史等）" : "第 " + sem + " 学期 · " + (SEM[sem] || "其他");
       sec.appendChild(h);
       var box = document.createElement("div");
       box.className = "plan-rows";

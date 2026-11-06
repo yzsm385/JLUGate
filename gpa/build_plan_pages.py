@@ -25,16 +25,18 @@ for src in sorted(glob(SRC_GLOB)):
             seen.add(pid0)
             plans.append(p)
 
-SEM = {
-    "2026-2027-1": 1, "2026-2027-2": 2,
-    "2027-2028-1": 3, "2027-2028-2": 4,
-    "2028-2029-1": 5, "2028-2029-2": 6,
-    "2029-2030-1": 7, "2029-2030-2": 8,
-}
-
-
-def sem_of(x):
-    return SEM.get((x or "").split(",")[0].strip(), 8)
+def sem_of(x, entry_year):
+    """相对入学年的学期：2023-2024-1 → 1，绝不再按固定 2026 年表映射。
+    没有学期字段的（英语分级/四史等）放到 0=未标注，而不是硬塞进大四。
+    """
+    s = (x or "").split(",")[0].strip()
+    m = re.match(r"^(\d{4})-(\d{4})-([12])$", s)
+    if not m:
+        return 0
+    start = int(m.group(1))
+    term = int(m.group(3))
+    n = (start - entry_year) * 2 + term
+    return n if 1 <= n <= 8 else 0
 
 
 def clean(s):
@@ -64,7 +66,7 @@ for p in plans:
             continue
         courses.append({
             "key": "p%03d" % i,
-            "sem": sem_of(c.get("XNXQ")),
+            "sem": sem_of(c.get("XNXQ"), year),
             "code": c.get("KCH") or "",
             "name": c.get("KCM") or "",
             "credit": cr,
