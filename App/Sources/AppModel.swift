@@ -954,6 +954,10 @@ final class AppModel {
         let portalProbe: any ConnectivityProbing = devPortal.map { DevPortalProbe(base: $0) }
             ?? ConnectivityProbe()
 
+        // 闭包里不能碰 main-actor 属性：先把静默登录要用的凭据取出来
+        let silentCredentials = PortalCredentials(account: config.account,
+                                                  password: password,
+                                                  clientMAC: profile?.registeredMAC)
         let factory: @Sendable (AccessLink, InterfaceSnapshot) -> any AuthProvider = { link, _ in
             if link.usesDrcomUDP {
                 let engine = DrcomEngine(configuration: engineConfiguration,
@@ -964,10 +968,13 @@ final class AppModel {
                                          backoff: backoff)
                 return DrcomAuthProvider(engine: engine, link: link)
             }
-            return PortalEngine(probe: portalProbe,
-                                browser: browser,
-                                detector: PortalDetector(configuredURL: portalEntry),
-                                configuration: portalConfiguration)
+            let engine = PortalEngine(probe: portalProbe,
+                                      browser: browser,
+                                      detector: PortalDetector(configuredURL: portalEntry),
+                                      configuration: portalConfiguration)
+            // 静默网页认证：直接把账号密码交给引擎（只在内存里，不落盘）
+            Task { await engine.setCredentials(silentCredentials) }
+            return engine
         }
 
         let devPreference: LinkPreference? = devPortal != nil ? .jluWiFi : (devServer != nil ? .wired : nil)

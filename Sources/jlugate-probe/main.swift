@@ -40,6 +40,8 @@ struct Options {
     var portalPort = 18080
     var dnsServers: [String] = []
     var portalPath = "Tools/mock-portal/portal_server.py"
+    /// `--portal-entry <url>`：静默登录测试用的门户入口
+    var portalEntry = "http://net.jlu.edu.cn/"
 }
 
 func parseOptions(_ arguments: [String]) -> Options {
@@ -77,6 +79,7 @@ func parseOptions(_ arguments: [String]) -> Options {
         case "--nonce2": options.nonce2 = value()
         case "--gateway-port": options.gatewayPort = Int(value()) ?? options.gatewayPort
         case "--portal-port": options.portalPort = Int(value()) ?? options.portalPort
+        case "--portal-entry": options.portalEntry = value()
         case "--dns": options.dnsServers = value().split(separator: ",").map(String.init)
         default:
             if key.hasPrefix("--") { options.command = String(key.dropFirst(2)) }
@@ -439,6 +442,15 @@ func runPortalCheck(_ options: Options) -> Int32 {
                               browser: SilentPortalBrowser(),
                               detector: PortalDetector(),
                               configuration: configuration)
+    // 调试用：有账号密码就试一次后台静默登录（不弹网页）
+    if !options.account.isEmpty, !options.password.isEmpty {
+        let account = options.account
+        let password = options.password
+        let credentials = PortalCredentials(account: account, password: password,
+                                            clientMAC: interface.mac)
+        Task { await engine.setCredentials(credentials) }
+        print("静默登录：已注入账号 \(account)（密码不打印）")
+    }
 
     let semaphore = DispatchSemaphore(value: 0)
     let box = PortalStateBox()
@@ -888,6 +900,15 @@ case "detect":
     exit(runDetect(options))
 case "portal-check":
     exit(runPortalCheck(options))
+case "eportal-login":
+    let semaphore = DispatchSemaphore(value: 0)
+    Task.detached {
+        _ = await EportalProbeCLI.run(entry: options.portalEntry,
+                                      account: options.account, password: options.password)
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 30)
+    exit(0)
 case "net-detail":
     exit(runNetDetail(options))
 case "ping":

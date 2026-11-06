@@ -74,6 +74,9 @@ public actor PortalEngine: AuthProvider {
     private var lastNotice: String?
     private var lastPromptAt: ContinuousClock.Instant?
     private var currentInterface: InterfaceSnapshot?
+    /// 静默登录用的账号密码（由 App 层注入；不写日志、不落盘）
+    private var credentials: PortalCredentials?
+    private var interfaceIP: String? { currentInterface?.ipv4 }
 
     public init(probe: any ConnectivityProbing = ConnectivityProbe(),
                 browser: any PortalBrowser,
@@ -132,6 +135,11 @@ public actor PortalEngine: AuthProvider {
 
     /// 菜单里要显示的说明（被踢原因 / 重进代价）。
     public func noticeText() -> String? { lastNotice }
+
+    /// 注入静默登录用的凭据（App 层在 connect 前调用）。
+    public func setCredentials(_ credentials: PortalCredentials?) {
+        self.credentials = credentials
+    }
 
     /// 用户点"重新抢回在线"：立刻走一次登录（会踢掉队列第二台，UI 需先提示）。
     public func reclaim() async {
@@ -290,9 +298,33 @@ public actor PortalEngine: AuthProvider {
         return false
     }
 
-    /// 决策 D-001：只弹窗，不预填、不代填。
+    /// 先试"后台静默登录"（直接 POST 门户接口，不弹网页）；
+    /// 接口不认（老版门户 / 改版）再退回浏览器。
     private func presentLogin(url: URL) async -> PortalLoginResult {
         lastPromptAt = clock.now()
+
+        if let credentials, !credentials.account.isEmpty, !credentials.password.isEmpty {
+            emit(.note(Copy.t("R29")))
+            let outcome = await EportalClient(timeout: configuration.probeInterval)
+                .login(entry: url, account: credentials.account, password: credentials.password,
+                       clientIP: interfaceIP, clientMAC: credentials.clientMAC)
+            switch outcome {
+            case .success:
+                emit(.note(Copy.t("R28")))
+                return .succeeded
+            case .kicked(let message):
+                emit(.note(Copy.t("R27") + "（\(message)）"))
+                lastNotice = Copy.t("R27")
+                return .succeeded
+            case .failed(let message):
+                emit(.note("静默登录失败：\(message)"))
+                setState(.failed(.rejected(reason: message)))
+                return .failed(reason: message)
+            case .unsupported:
+                emit(.note("门户接口不支持静默登录，改用浏览器"))
+            }
+        }
+
         let result = await browser.presentLogin(url: url)
         if case .succeeded = result {
             emit(.note("网页登录流程返回成功"))

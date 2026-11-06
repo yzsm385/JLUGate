@@ -89,13 +89,23 @@ public struct PortalDetector: Sendable {
                 }
                 return PortalEntry(url: configured, source: .configured)
             }
-            // 没配置就用网关根路径试一次（captive portal 基本都在网关 80 端口）
-            if let url = URL(string: "http://\(interface.ipv4 ?? "10.100.61.3")/") {
-                if let entry = try? await inspect(url, interface: interface) {
+            // 没配置：先按"网关根路径"试（captive portal 基本都在网关 80 端口），
+            // 再试吉大已知门户（net.jlu.edu.cn 是 Dr.COM 的网页登录页）。
+            // 顺序很重要：**先试学校已知门户**（net.jlu.edu.cn 是 Dr.COM 登录页），
+            // 再试"网关/本机 IP 根路径"。以前先试本机 IP，结果拿到 http://10.66.51.154/
+            // 这种打不开的地址，用户看到的门户页就是空的。
+            var candidates = Self.knownJLUEntries
+            if let ip = interface.ipv4, let url = URL(string: "http://\(ip)/") {
+                candidates.append(url)
+            }
+            for url in candidates {
+                if let entry = await verifiedEntry(url, interface: interface) {
                     return entry
                 }
+            }
+            if let first = candidates.first {
                 _ = statusCode
-                return PortalEntry(url: url, source: .pageInspection)
+                return PortalEntry(url: first, source: .pageInspection)
             }
             return nil
         }
@@ -114,6 +124,30 @@ public struct PortalDetector: Sendable {
         }
         return nil
     }
+
+    /// 抓页面并确认它**真的是登录页**（Dr.COM / eportal / 有表单），
+    /// 而不是随便一个能返回 200 的地址。
+    func verifiedEntry(_ url: URL, interface: InterfaceSnapshot) async -> PortalEntry? {
+        guard let page = try? await fetcher.fetch(url, interface: interface) else { return nil }
+        let body = page.body.lowercased()
+        let looksLikePortal = body.contains("dr.comwebloginid")
+            || body.contains("eportal")
+            || body.contains("ddddd")
+            || body.contains("upass")
+            || page.location != nil
+        guard looksLikePortal || page.statusCode == 302 || page.statusCode == 200 && !body.isEmpty else {
+            return nil
+        }
+        return (try? await inspect(url, interface: interface))
+            ?? PortalEntry(url: url, source: .pageInspection)
+    }
+
+    /// 吉大已知的门户入口（按优先级）。
+    /// `net.jlu.edu.cn` 是 Dr.COM 的网页登录页（用户实测浏览器就是停在这里）。
+    public static let knownJLUEntries: [URL] = [
+        URL(string: "http://net.jlu.edu.cn/")!,
+        URL(string: "http://10.100.61.3/")!,
+    ]
 
     /// 从 HTML 里抓 `<form ... action="...">`（大小写与引号都不敏感）。
     public static func formAction(in html: String, base: URL) -> URL? {
