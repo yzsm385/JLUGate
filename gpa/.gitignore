@@ -4,6 +4,8 @@ download
 
 # 本地资料与生成物
 research/
-out/
+out/*
 docs/
 .DS_Store
+# 逐院推免线汇总（README 引用的交付物，例外放行）
+!out/college-lines.md
