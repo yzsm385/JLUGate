@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>吉大计算机 GPA · 保研测算器</title>
+<meta name="description" content="吉林大学计算机科学与技术专业 GPA 与保研测算：按 2026 届推免成绩单矩阵的 43 门课程逐课录入绩点，实时计算推免学业 GPA，并给出剩余课程目标建议。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="brand"><span class="logo">JLU</span><span>GPA · 保研测算</span></div>
+    <a class="back-link" href="index.html">← 换专业</a>
+    <h1>吉林大学计算机科学与技术学院 <em>GPA 计算器</em></h1>
+    <p class="sub" id="heroSub">计算机科学与技术专业 · 2022级参考口径 · <b id="heroTotal">102.5</b> 学分 / <b id="heroCount">43</b> 门课程</p>
+    <div class="hero-badges">
+      <span>4.0 绩点制</span>
+      <span>2026 实际线 3.550730</span>
+      <span id="updated">数据更新 2026-11</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <section class="stats three" aria-label="总览">
+    <div class="stat primary">
+      <div class="label">推免学业 GPA</div>
+      <div class="value" id="gpaBaoyan">—</div>
+      <div class="bar"><i id="barBaoyan"></i></div>
+      <div class="sub" id="gpaBaoyanSub">已录入 0 / 102.5 学分</div>
+    </div>
+    <div class="stat">
+      <div class="label">目标 GPA</div>
+      <div class="target-row">
+        <input id="target" type="number" min="0" max="4" step="0.01" inputmode="decimal" aria-label="目标 GPA">
+        <span class="unit">/ 4.0</span>
+      </div>
+      <div class="presets" id="presets">
+        <button data-t="3.38">3.38</button>
+        <button data-t="3.55" class="hot">3.55</button>
+        <button data-t="3.60">3.60</button>
+        <button data-t="3.70">3.70</button>
+      </div>
+      <div class="sub">2026 实际录取线 3.550730</div>
+    </div>
+    <div class="stat">
+      <div class="label">剩余课程需平均</div>
+      <div class="value small" id="needGpa">—</div>
+      <div class="sub" id="needSub">剩余 102.5 学分</div>
+    </div>
+  </section>
+
+  <section class="verdict" id="verdict" aria-live="polite">
+    <div class="v-icon" id="verdictIcon">i</div>
+    <div class="v-body">
+      <div class="v-title" id="verdictTitle">先录入成绩</div>
+      <div class="v-text" id="verdictText">从下面任意学期开始，按课程填入绩点，结果会实时更新。</div>
+    </div>
+  </section>
+
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="输入方式">
+      <button type="button" data-mode="gpa" class="active">按绩点</button>
+      <button type="button" data-mode="score">按百分制</button>
+    </div>
+    <span class="spacer"></span>
+    <button type="button" class="btn ghost" id="demoBtn">填入示例</button>
+    <button type="button" class="btn ghost" id="csvBtn">导出 CSV</button>
+    <button type="button" class="btn danger" id="resetBtn">清空</button>
+  </div>
+
+  <details class="panel correct" id="correctPanel">
+    <summary><span class="dot"></span>纠正科目 / 添加课程（本地）</summary>
+    <p class="fine">当前按 <b>2022 级推免矩阵：43 门 / 102.5 学分</b>（企业实训 1 学分计入，劳动教育 2 学分计入）。2025 级多“国家安全教育”1 学分 → 44 门 / 103.5；2026 级培养方案未发布，暂不适用。缺课/多课可点“计入/不计入”或在下面添加。</p>
+    <form id="addCourseForm" class="add-form">
+      <select id="addSem" aria-label="学期">
+        <option value="1">大一上</option><option value="2">大一下</option>
+        <option value="3">大二上</option><option value="4">大二下</option>
+        <option value="5">大三上</option><option value="6">大三下</option>
+        <option value="7">大四上</option><option value="8">大四下</option>
+      </select>
+      <input id="addName" placeholder="课程名称" maxlength="40" required>
+      <input id="addCredit" type="number" min="0.5" max="10" step="0.5" placeholder="学分" required>
+      <select id="addType" aria-label="类型"><option>必修</option><option>实践</option><option>选修</option></select>
+      <button class="btn" type="submit">添加课程</button>
+    </form>
+    <div class="correct-actions">
+      <button class="btn ghost" type="button" id="add2025">加国家安全教育（2025级，1学分）</button>
+      <button class="btn ghost" type="button" id="resetCourses">恢复官方 43 门</button>
+      <button class="btn ghost" type="button" id="reportBtn">复制纠正报告</button>
+      <a class="btn" id="issueLink" href="#" target="_blank" rel="noopener">提交 GitHub issue</a>
+    </div>
+    <p class="fine" id="reportStatus"></p>
+    <textarea id="reportBox" readonly hidden></textarea>
+  </details>
+
+  <section id="semesters" class="semesters" aria-label="按学期录入"></section>
+
+  <section class="panel advice" id="advicePanel">
+    <h2><span class="dot"></span>给你的建议</h2>
+    <ul id="adviceList">
+      <li>录入已出成绩的课程后，这里会给出剩余课程的目标与风险提示。</li>
+    </ul>
+  </section>
+
+  <section class="panel ref">
+    <h2><span class="dot"></span>2026 计算机推免参考线</h2>
+    <div class="table-scroll">
+      <table class="ref-table">
+        <thead><tr><th>年份</th><th>拟推荐名额</th><th>年级人数</th><th>最低学业 GPA</th><th>说明</th></tr></thead>
+        <tbody id="refBody"></tbody>
+      </table>
+    </div>
+    <p class="fine">“最低学业 GPA”= 2026 年实际拟推荐 55 人中的最后一名（3.550730）。资格线为 <b>3.380000</b>（第 87 名，前 24.9%），但实际名额只有 55 人（15.7%），真正卡人的是名额。数据来自 <code>2022计算机.xlsx</code> 的 GPA 排名与《吉大 22 级保研推免统计.xlsx》。实际录取按综合成绩（学业+加分），此处用学业第 55 名近似，最终最低可能略低。</p>
+  </section>
+
+  <section class="panel rules">
+    <h2><span class="dot"></span>计分规则与数据来源</h2>
+    <div class="rules-grid">
+      <div>
+        <h3>哪些课计入</h3>
+        <ul class="rule-list" id="ruleList"></ul>
+      </div>
+      <div>
+        <h3>成绩 → 绩点换算</h3>
+        <table class="conv-table" id="convTable">
+          <thead><tr><th>百分制</th><th>绩点</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="fine">按校教字〔2016〕110 号的 10 档换算：90 分及以上 4.0，87–89 3.7，84–86 3.3，80–83 3.0，77–79 2.7，74–76 2.3，70–73 2.0，67–69 1.7，64–66 1.3，60–63 1.0。<b>按 0.1 分精度判定</b>：89.9 仍是 3.7（被卡绩），90.0 才是 4.0；60 以下为挂科，按 0 计。</p>
+      </div>
+    </div>
+
+    <p class="fine" style="margin:14px 0 0">GPA = Σ（课程绩点 × 学分）/ Σ学分；单门课程绩点保留 1 位小数，最终 GPA 保留 <b>6 位小数</b>。百分制成绩按 0.1 分精度落入档位，因此 89.9 会被卡在 3.7。</p>
+
+    <h3>数据来源</h3>
+    <ul class="sources">
+      <li><code>2022计算机.xlsx</code>（2026 届推免成绩单矩阵，43 门 / 102.5 学分）</li>
+      <li><code>吉大 22级保研推免统计.xlsx</code>（资格/实际人数、资格线）</li>
+      <li><code>计算机科学与技术学院本科培养方案2022版（2023年修订）.docx</code>（学期安排）</li>
+      <li><code>2023计算机.xlsx</code>（同结构，2023 级参考）</li>
+    </ul>
+
+    <div class="notice">
+      <b>使用前请读：</b>本页按《计算机科学与技术学院本科培养方案 2022 版（2023 年修订）》的学期安排，以及 2026 届推免成绩单矩阵 <code>2022计算机.xlsx</code> 的 43 门课程（102.5 学分）生成；课程集合、学分与矩阵逐列一致。体育、军事教育、大学英语Ⅰ/Ⅱ、通识公选、专业选修、毕业设计不在内；企业实训 1 学分在矩阵中，已计入。2026 年计算机 350 人，资格 87 人（资格线 3.380000），实际拟推荐 55 人（最低 3.550730）。结果仅供参考，不构成保研承诺。
+    </div>
+  </section>
+
+  <footer>
+    JLU GPA · 个人学习工具，非吉林大学官方系统 · 规则与名额以当年学院通知为准 · <a href="index.html">软件工程版</a>
+  </footer>
+</main>
+
+<script src="data/computer-science-2022.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+# 原始抓取/生成输入（136MB，不部署）
+JLU_培养方案_*.json
+download
+
+# 本地资料与生成物
+research/
+out/
+docs/
+.DS_Store

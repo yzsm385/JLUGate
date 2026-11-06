@@ -1,0 +1,54 @@
+name: Deploy GPA site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "gpa/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Stage site
+        run: |
+          set -e
+          rm -rf site
+          mkdir -p site
+          cp gpa/index.html gpa/software.html gpa/plan.html gpa/computer.html site/
+          cp -R gpa/assets site/assets
+          cp -R gpa/data site/data
+          # 不把原始 136MB JSON / research / out 放进 Pages
+          du -sh site
+          find site -type f | wc -l
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

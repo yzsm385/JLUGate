@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>专业培养方案 GPA · 吉林大学</title>
+<meta name="description" content="吉林大学 2026 级主修培养方案逐门勾选 GPA 计算器。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="brand"><span class="logo">JLU</span><span>GPA · 专业目录</span></div>
+    <a class="back-link" href="index.html">← 换专业</a>
+    <h1 id="planTitle">加载中…</h1>
+    <p class="sub" id="planMeta">正在读取培养方案课程目录。</p>
+    <div class="hero-badges">
+      <span id="badgeCollege">—</span>
+      <span id="badgeCredits">—</span>
+      <span>2026 主修目录</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="stats three" aria-label="总览">
+    <div class="stat primary">
+      <div class="label">已勾选学分</div>
+      <div class="value" id="selCredits">0.0</div>
+      <div class="sub" id="selSub">0 门课程</div>
+    </div>
+    <div class="stat">
+      <div class="label">已录 GPA</div>
+      <div class="value small" id="planGpa">—</div>
+      <div class="sub" id="gpaSub">录入绩点后显示</div>
+    </div>
+    <div class="stat">
+      <div class="label">计划学分</div>
+      <div class="value small" id="planCredits">—</div>
+      <div class="sub" id="planCourses">—</div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="plan-tools">
+      <input id="planSearch" type="search" placeholder="搜索课程名 / 代码 / 课组" autocomplete="off">
+      <button class="btn" type="button" id="clearPlan">清空勾选</button>
+    </div>
+    <p class="fine">2026 推免细则尚未发布：这里只列培养方案全部课程，<b>默认不勾选</b>。勾选你实际修读/计入的课程，再录绩点；每门都可取消。勾选与成绩只保存在本机。</p>
+    <div id="planList"></div>
+    <p class="fine" id="planStatus"></p>
+  </section>
+</main>
+
+<script src="assets/plan.js"></script>
+</body>
+</html>

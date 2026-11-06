@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>吉林大学 GPA · 先选学院与专业</title>
+<meta name="description" content="吉林大学 GPA / 推免测算：先选学院，再选专业，进入对应专业的 2026 级培养方案课程目录。">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="hero">
+  <div class="hero-inner">
+    <div class="brand"><span class="logo">JLU</span><span>GPA · 推免测算</span></div>
+    <h1>吉林大学 <em>GPA / 推免测算</em></h1>
+    <p class="sub">先选学院，再选专业，然后进入该专业的课程目录。已收录 <b>48 个学院 / 1030 个 2022–2026 级主修方案</b>；按入学年自动回滚找最接近的旧方案。</p>
+    <div class="hero-badges">
+      <span>4.0 绩点制</span>
+      <span>旧 10 档换算</span>
+      <span>2026 主修目录</span>
+      <span>逐门勾选 / 可改</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="panel picker-panel" aria-label="选择学院与专业">
+    <h2><span class="dot"></span>选择你的学院和专业</h2>
+    <div class="account-row">
+      <label>学号 / 邮箱前缀（可选，自动识别学院）
+        <input id="accountInput" placeholder="如 zhangsw2123 或 21230123" autocomplete="off">
+      </label>
+      <button class="btn" type="button" id="detectBtn">识别学院</button>
+      <button class="btn" type="button" id="manualBtn">手动选</button>
+      <button class="btn" type="button" id="refreshBtn">刷新方案库</button>
+    </div>
+    <div class="account-result" id="accountResult" hidden></div>
+    <div class="picker">
+      <label>学院
+        <select id="collegeSel">
+          <option value="">请选择学院</option>
+        </select>
+      </label>
+      <label>专业
+        <select id="majorSel" disabled>
+          <option value="">先选学院</option>
+        </select>
+      </label>
+      <button class="btn primary" type="button" id="goBtn" disabled>进入计算器</button>
+    </div>
+    <p class="fine" id="pickerHint">学院按教务系统 2026 级主修方案整理；同一学院下可能有多套方案（普通班/试验班/双学位等），按专业名称选择。</p>
+    <div class="plan-preview" id="planPreview" hidden></div>
+  </section>
+
+  <section class="quick-grid" aria-label="已有专门计算器">
+    <a class="quick" href="software.html">
+      <div class="quick-top"><span class="badge">专门版</span><span class="arrow">→</span></div>
+      <h3>软件工程</h3>
+      <p>2022 参考 / 2023-24 / 2025 推算 / 2026 真实目录；含英语 A/B/预备级、日德法俄西分流、逐门勾选、纠正报告。</p>
+    </a>
+    <a class="quick" href="computer.html">
+      <div class="quick-top"><span class="badge">专门版</span><span class="arrow">→</span></div>
+      <h3>计算机科学与技术</h3>
+      <p>2022 推免矩阵 43 门 / 102.5；2025 加国家安全教育 1 学分；2026 可用上方专业列表进入通用目录。</p>
+    </a>
+  </section>
+
+  <section class="panel">
+    <h2><span class="dot"></span>怎么用</h2>
+    <ol class="steps">
+      <li><b>先选学院</b>：48 个学院，按教务系统 2022–2026 级主修方案整理。</li>
+      <li><b>再选专业</b>：同一学院下可能有多套方案，按专业名称选；列表会显示门数和计划学分。</li>
+      <li><b>进入计算器</b>：通用页会列出该方案全部课程，<b>默认不勾选</b>；勾选你实际修读/计入的课程并录入绩点，实时算 GPA。</li>
+      <li><b>软件工程</b>走专门版，已内置 2022–2026 口径和外语分流；<b>计算机</b>专门版保留 2022/2025 矩阵，2026 用通用页。</li>
+    </ol>
+    <p class="fine">2026 推免细则尚未发布；通用页只做课程目录与 GPA 计算，不替你判断“哪些课一定计入”。每门课都可勾选/取消。</p>
+  </section>
+</main>
+
+<script src="data/student-id-prefixes.js"></script>
+<script src="assets/student-id.js"></script>
+<script src="data/plans-index.js"></script>
+<script src="assets/landing.js"></script>
+</body>
+</html>
