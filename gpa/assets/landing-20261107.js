@@ -163,15 +163,43 @@
     if (!s || !sid || !sid.entries) return null;
     var codes = Array.from(new Set(sid.entries.map(function (e) { return String(e.code).toLowerCase(); })))
       .sort(function (a, b) { return b.length - a.length || a.localeCompare(b); });
-    for (var i = 0; i < codes.length; i++) {
-      var code = codes[i];
-      var idx = s.lastIndexOf(code);
-      if (idx < 0) continue;
-      var rest = s.slice(idx + code.length);
-      if (!/^\d{2}/.test(rest)) continue;
+
+    function yearFrom(rest) {
+      if (!/^\d{2}/.test(rest)) return null;
       var yy = Number(rest.slice(0, 2));
-      if (yy < 10 || yy > 40) continue;
-      return { code: code, year: "20" + rest.slice(0, 2), input: s };
+      if (yy < 10 || yy > 40) return null;
+      return "20" + rest.slice(0, 2);
+    }
+
+    // 学号 / 纯数字：学院代码一定在最前面，按最长前缀匹配。
+    // 21230102 = 21（计算机）+ 23（2023 级）+ 01 班 + 02 号，绝不能把后面的 23 当学院。
+    if (/^\d+$/.test(s)) {
+      for (var i = 0; i < codes.length; i++) {
+        var c0 = codes[i];
+        if (s.indexOf(c0) !== 0) continue;
+        var rest0 = s.slice(c0.length);
+        if (rest0.length !== 2 && rest0.length !== 6) continue;
+        var y0 = yearFrom(rest0);
+        if (y0) return { code: c0, year: y0, input: s };
+      }
+      return null;
+    }
+
+    // 邮箱前缀：姓名拼音 + 学院代码 + 入学年份（+班号/序号）。
+    // 代码必须在字母后面（不能藏在年份/班号数字里），且余下只能是 2 位年份或 6 位完整学号后缀。
+    for (var j = 0; j < codes.length; j++) {
+      var code = codes[j];
+      var idx = s.indexOf(code);
+      while (idx >= 0) {
+        var prev = idx > 0 ? s.charAt(idx - 1) : "";
+        var rest = s.slice(idx + code.length);
+        var boundary = !prev || /[a-z]/.test(prev);
+        if (boundary && (rest.length === 2 || rest.length === 6)) {
+          var y = yearFrom(rest);
+          if (y) return { code: code, year: y, input: s };
+        }
+        idx = s.indexOf(code, idx + 1);
+      }
     }
     return null;
   }
