@@ -5,6 +5,7 @@
 """
 import hashlib
 import json
+from datetime import datetime
 import re
 from pathlib import Path
 from glob import glob
@@ -131,7 +132,7 @@ index = {
     "meta": {
         "title": "吉林大学 2022–2026 级主修培养方案索引",
         "source": "教务系统全校方案查询（2022–2026级主修）",
-        "updated": "2026-11-05",
+        "updated": datetime.now().strftime("%Y-%m-%dT%H:%M:%S"),
         "planCount": written,
     },
     "colleges": sorted(colleges.values(), key=lambda x: (x["code"] or "zzz", x["name"])),
