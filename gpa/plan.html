@@ -53,22 +53,24 @@
 
   <div class="ref-warning" role="note">
     <span class="warn-icon">⚠️</span>
-    <div><b>默认已全选（外语、四史除外，单独选择）</b>：下面列出的课程和勾选项来自培养方案与学院公开材料，尚未逐项核对。有些课程实际不算，或不同年级/专业口径不同；请按学院当年细则，把不算的课程取消勾选。<span class="warn-sub">默认全选不代表都计入；以学院推免细则和当年通知为准。</span></div>
+    <div><b>默认按学院推免细则勾选</b>：体育、军事教育（军训/军事理论）、选修/限选等确定不计入的课程已直接隐藏（勾「显示不计入课程」可查看）；新生研讨/导论、同名分流等疑似不计入的课程折叠在每学期底部，确认计入再展开勾选。外语与四史在页首单独选择。<span class="warn-sub">口径来自 2026-11 对各学院推免细则与历年排名公示的调研；以学院当年通知为准。</span></div>
   </div>
   <section class="panel">
     <div class="plan-tools">
       <input id="planSearch" type="search" placeholder="搜索课程名 / 代码 / 课组" autocomplete="off">
       <label class="check"><input id="onlyFirst3" type="checkbox" checked> 只看前三年（大四不计入保研）</label>
+      <label class="check"><input id="showExcluded" type="checkbox"> 显示不计入课程</label>
       <button class="btn" type="button" id="selectRequired">全选必修</button>
       <button class="btn" type="button" id="downloadPlan">下载本专业方案</button>
       <button class="btn" type="button" id="clearPlan">清空勾选</button>
     </div>
-    <p class="fine" id="planFine">推免细则以学院当年通知为准：这里只列培养方案全部课程，<b>默认不勾选</b>。勾选你实际修读/计入的课程，再录绩点；每门都可取消。勾选与成绩只保存在本机。</p>
+    <p class="fine" id="planFine">默认按各学院推免细则勾选；确定不计入的课程已隐藏，疑似按届不同的折叠在学期底部。勾选与成绩只保存在本机。</p>
     <div id="planList"></div>
     <p class="fine" id="planStatus"></p>
   </section>
 </main>
 
-<script src="assets/plan-20261111.js"></script>
+<script src="data/college-rules.js"></script>
+<script src="assets/plan-20261112.js"></script>
 </body>
 </html>

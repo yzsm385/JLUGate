@@ -434,3 +434,37 @@ details.correct[open]>summary::after{transform:rotate(-135deg)}
 .stats.four{grid-template-columns:repeat(4,1fr)}
 @media(max-width:900px){.stats.four{grid-template-columns:1fr 1fr}}
 @media(max-width:640px){.stats.four{grid-template-columns:1fr 1fr}}
+
+/* ===== 学院口径面板 + 推免线（plan.html） ===== */
+.rules-panel{border-color:#c3d9ef;background:linear-gradient(180deg,#f6fbff,#eef6ff)}
+.rules-panel h3{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.rules-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:600;background:#fdefcf;color:#8a5b00;border:1px solid #eac96a}
+.rules-badge.ok{background:#e2f6e9;color:#137a36;border-color:#a9dcc0}
+.rules-lines{width:100%;border-collapse:collapse;margin:8px 0 2px;font-size:12px;background:#fff;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.rules-lines caption{caption-side:top;text-align:left;font-size:11.5px;color:var(--muted);padding:0 0 4px}
+.rules-lines th{background:#f0f7fd;color:var(--ink-2);font-weight:600;padding:6px 8px;text-align:left;font-size:11px;white-space:nowrap}
+.rules-lines td{padding:6px 8px;border-top:1px solid var(--line-2);color:var(--ink);font-variant-numeric:tabular-nums}
+.rules-lines td:first-child{white-space:nowrap}
+.rules-notices{margin-top:8px}
+.rules-notices summary{cursor:pointer;font-size:12px;color:#2b6cb0;font-weight:600}
+.rules-notices ul{margin:6px 0 0;padding-left:18px}
+.rules-notices li{font-size:11.5px;line-height:1.7}
+.rules-notices a{color:#2b6cb0;word-break:break-all}
+
+/* ===== 确定不计入（默认隐藏）与疑似不计入（折叠） ===== */
+body:not(.show-excluded) .plan-row.row-hard{display:none}
+.plan-row.row-hard .plan-name b{color:var(--muted)}
+.plan-row.row-hard.manual .plan-name b{color:var(--ink)}
+.plan-row .ex-reason{display:block;font-style:normal;font-size:10.5px;color:#a2650f;margin-top:1px}
+.plan-row.row-unsure .plan-name b{color:#7a5a1a}
+.plan-row.row-unsure.manual .plan-name b{color:var(--ink)}
+.ex-group{margin-top:10px;border:1px dashed #d9b25f;border-radius:10px;background:#fffdf4;overflow:hidden}
+.ex-group summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:9px 12px;font-size:12.5px;color:#7a5a1a;background:#fff8e2}
+.ex-group summary::-webkit-details-marker{display:none}
+.ex-group summary b{font-size:12.5px}
+.ex-group summary span{font-weight:400;font-size:11.5px;color:#a2813a}
+.ex-group summary::after{content:"▸";margin-left:auto;transition:transform .15s;color:#a2813a}
+.ex-group[open] summary::after{transform:rotate(90deg)}
+.ex-group .ex-hint{margin:0;padding:7px 12px;font-size:11px;color:#977c3e;border-top:1px dashed #e8d49a}
+.ex-group .plan-row{background:#fffdf4}
+.ex-group .plan-row:first-of-type{border-top:1px solid var(--line-2)}
