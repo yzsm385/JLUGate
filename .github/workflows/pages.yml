@@ -1,4 +1,5 @@
 name: Deploy GPA site
+# deploy gpa/ to GitHub Pages
 
 on:
   push:
