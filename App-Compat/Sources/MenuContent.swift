@@ -83,6 +83,20 @@ struct MenuContent: View {
             }
 
             updateBar
+            if !LoginItem.isEnabled {
+                HStack(spacing: 5) {
+                    Image(systemName: "power.circle")
+                        .font(.system(size: 10)).foregroundStyle(.orange)
+                    Text(Copy.t("R16"))
+                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button(Copy.t("R17")) { model.presentSettings() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.blue)
+                }
+            }
             offCampusAssist
             footer
         }
@@ -438,7 +452,7 @@ struct MenuContent: View {
 
     private var footer: some View {
         // 380 宽放不下一行 7 个按钮：改成两行、等宽网格，图标在上文字在下
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
             footerButton(Copy.t("M35"), "stethoscope.circle") { model.show(.developer) }
             footerButton(Copy.t("M32"), "gearshape") { model.presentSettings() }
             footerButton(Copy.t("M33"), "link") { model.show(.sites) }
@@ -456,11 +470,13 @@ struct MenuContent: View {
         return Button(action: action) {
             VStack(spacing: 2) {
                 Image(systemName: symbol).font(.system(size: 13))
-                Text(label).font(.system(size: 8.5))
+                // 固定宽度：第一次弹出来时容器宽度还在估算，maxWidth 会让文字先缩一圈
+                Text(label).font(.system(size: 9))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.55)
+                    .minimumScaleFactor(0.75)
+                    .frame(width: 50)
             }
-            .frame(maxWidth: .infinity)
+            .frame(width: 50)
             .padding(.vertical, 4)
             .contentShape(Rectangle())
         }

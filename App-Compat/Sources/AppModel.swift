@@ -439,6 +439,10 @@ final class AppModel {
         isSafeMode = safeMode
         if safeMode {
             FileLogger.shared.log("安全模式：跳过自动连接与密码恢复")
+        } else {
+            // 每次启动都对一遍登录项：配置里开着就确保系统里真的登记了。
+            // 以前只有点「保存」才会注册，于是"设置里明明是开的、重启就是不启动"。
+            LoginItem.apply(enabled: loaded.launchAtLogin)
         }
         // **不在启动时把保存的密码读进内存。**
         // 之前这里预加载，connect() 看到 password 非空就当成"本次输入"，

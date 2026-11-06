@@ -62,6 +62,13 @@ struct SettingsView: View {
                 Text(Copy.t("R15"))
             }
 
+            if !LoginItem.isEnabled {
+                Section(Copy.t("R18")) {
+                    LoginItemGuide()
+                        .padding(.vertical, 2)
+                }
+            }
+
             Section(Copy.t("S02")) {
                 TextField(Copy.t("S03"), text: $draft.account)
                 SecureField(Copy.t("S04"), text: $draft.password)
@@ -458,5 +465,37 @@ struct SettingsView: View {
             try? await Task.sleep(for: .seconds(2))
             saved = false
         }
+    }
+}
+
+
+/// 开机自启的说明：状态 + 步骤 + 直接跳系统设置
+struct LoginItemGuide: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(LoginItem.statusText)
+                .font(.system(size: 9))
+                .foregroundStyle(LoginItem.isEnabled ? Color.secondary : Color.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(Copy.t("R19"))
+                .font(.system(size: 9))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(Copy.t("R26"))
+                .font(.system(size: 9))
+                .foregroundStyle(.secondary)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            HStack(spacing: 6) {
+                Button(Copy.t("R24")) { LoginItem.openSystemSettings() }
+                    .controlSize(.small)
+                if !LoginItem.isEnabled, AppIdentity.isInstalled {
+                    Button(Copy.t("R25")) { LoginItem.enableNow() }
+                        .controlSize(.small)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
