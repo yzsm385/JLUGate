@@ -86,6 +86,40 @@
     }
     return true;
   }
+
+  /* 只保留“计入推免”的公共英语：大学英语（A/B）Ⅱ–Ⅳ；
+     2026 级起收紧为仅Ⅲ、Ⅳ。预备级、英语Ⅰ、写作/翻译/文学/概况/学术英语等
+     拓展课不在推免口径里，直接不显示，避免把整张课表都铺出来。 */
+  function isCountableForeign(c) {
+    var m = (c.name || "").trim().match(/大学英语([AB])?([ⅠⅡⅢⅣ])/);
+    if (!m) return false;
+    var level = m[2];
+    var year = planYearFromMeta(plan.meta);
+    if (year && year >= 2026) return level === "Ⅲ" || level === "Ⅳ";
+    return level === "Ⅱ" || level === "Ⅲ" || level === "Ⅳ";
+  }
+
+  /* 同一门课在方案里会按 A/B/C/免修级重复成多行；按课程代码合成一行，
+     备注合并，勾选/成绩沿用用户实际选中的那个 key。 */
+  function groupForeignRows(courses) {
+    var map = {};
+    var order = [];
+    courses.forEach(function (c) {
+      var code = c.code || c.key;
+      if (!map[code]) {
+        map[code] = { course: c, notes: [] };
+        order.push(code);
+      }
+      if (c.note && map[code].notes.indexOf(c.note) < 0) map[code].notes.push(c.note);
+      if (state.checked[c.key]) map[code].course = c;
+    });
+    return order.map(function (code) {
+      var g = map[code];
+      var copy = Object.assign({}, g.course);
+      copy.note = g.notes.join(" / ");
+      return copy;
+    });
+  }
   var yearBarBuilt = false;
   function buildYearSwitcher() {
     if (yearBarBuilt) return; // 防重复插入
@@ -457,6 +491,8 @@
     if (englishOnly) {
       foreign = foreign.filter(function (c) { return langOf(c) === "英语"; });
     }
+    // 只显示计入推免的公共英语，并按课程代码把分级重复行合并。
+    foreign = groupForeignRows(foreign.filter(isCountableForeign));
 
     if (foreign.length) {
       var sec = document.createElement("section");
@@ -466,9 +502,12 @@
       sec.appendChild(h);
       var hint = document.createElement("p");
       hint.className = "choice-hint";
+      var levelText = (planYearFromMeta(plan.meta) && planYearFromMeta(plan.meta) >= 2026)
+        ? "Ⅲ、Ⅳ"
+        : "Ⅱ、Ⅲ、Ⅳ";
       hint.textContent = englishOnly
-        ? "本专业按英语培养，只列出英语课程；按实际修读勾选，不再提供语种选择。"
-        : "默认英语；如果你高中学的是其他语种、且本专业允许，可在这里切换。各学院计入的英语级别不同（多数只计 Ⅱ/Ⅲ/Ⅳ 或 Ⅲ/Ⅳ，以本院细则为准）。";
+        ? "本专业按英语培养，只列出计入推免的大学英语 " + levelText + "；预备级、英语Ⅰ和写作/翻译/文学/概况/学术英语等拓展课不计，已隐藏。"
+        : "默认英语；只列出计入推免的大学英语 " + levelText + "，其他语种/拓展课不计。";
       sec.appendChild(hint);
 
       var langs = [];
