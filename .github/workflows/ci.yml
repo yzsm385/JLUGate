@@ -25,7 +25,20 @@ jobs:
         # 断言用的是中文文案；界面文案现在按系统语言切换，CI 里固定简体，保证可重复
         env:
           JLUGATE_LANG: zh-Hans
-        run: swift test
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee /tmp/swift-test.log
+
+      - name: 单元测试失败摘要
+        if: failure()
+        run: |
+          echo "— 失败用例 / 编译错误 —"
+          grep -E "✘|error:|failed after|Test run with" /tmp/swift-test.log | head -60 || true
+          grep -E "✘|error:|failed after|Test run with" /tmp/swift-test.log | head -40 | while IFS= read -r line; do
+            echo "::error title=swift-test::$line"
+          done
+          echo "— 最后 80 行 —"
+          tail -80 /tmp/swift-test.log || true
 
       - name: 离线自测 · Dr.Com（模拟网关）
         run: swift run jlugate-probe --self-test --seconds 6
