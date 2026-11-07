@@ -1846,8 +1846,14 @@ final class AppModel {
     }
 
     private func performPortalPageCapture() async {
+        // 优先用**当前正在用的那块网卡**（有线/无线都可能），其次任何有 IPv4 的可用网卡，
+        // 最后才是无线。
+        // 以前只找无线网卡：有线机器上会落到 en3 这种没有 IPv4 的空口，
+        // 于是「认证网页抓取」永远报 unreachable，把诊断带偏。
         let wifi = interfaces.first {
-            $0.name == activeInterfaceName && $0.isWireless
+            $0.name == activeInterfaceName && $0.ipv4 != nil
+        } ?? interfaces.first {
+            $0.isUsableForAuthentication && $0.ipv4 != nil
         } ?? interfaces.first {
             $0.isWireless && $0.isUp && $0.ipv4 != nil
         } ?? interfaces.first ?? InterfaceSnapshot(
@@ -1995,8 +2001,12 @@ final class AppModel {
             .appendingPathComponent("Logs/JLUGate/crash-stack.log")
         if let data = try? Data(contentsOf: crashLog),
            let content = String(data: data, encoding: .utf8) {
+            // 带上文件时间：这份日志会一直留在本机，别让旧崩溃看起来像刚发生的
+            let stamp = (try? FileManager.default.attributesOfItem(atPath: crashLog.path)[.modificationDate])
+                .flatMap { $0 as? Date }
+                .map { ISO8601DateFormatter().string(from: $0) } ?? "时间未知"
             let tail = content.split(separator: "\n").suffix(40).joined(separator: "\n")
-            text += "\n\n== 崩溃日志（最后 40 行）==\n" + tail
+            text += "\n\n== 崩溃日志（最后 40 行，文件时间 \(stamp)）==\n" + tail
         }
         return text
     }
