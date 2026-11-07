@@ -324,7 +324,12 @@ struct InspectPanel: View {
             } else {
                 i += 1
             }
-            let label = direct.host.split(separator: " ").first.map(String.init) ?? direct.host
+            // host 是「标签 IP」；标签本身可能带空格（“公网（阿里 DNS）”），
+            // 只去掉最后一个 IP，不能只取第一个 token，否则会把右括号截掉。
+            let parts = direct.host.split(separator: " ")
+            let label = parts.count > 1
+                ? parts.dropLast().joined(separator: " ")
+                : direct.host
             rows.append((label, latencyText(direct, via)))
         }
         return rows
@@ -346,10 +351,12 @@ struct InspectPanel: View {
 
     private func latencyRow(_ label: String, _ value: String) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label).font(.system(size: 9)).foregroundStyle(.tertiary)
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
             Spacer(minLength: 8)
             Text(value)
-                .font(.system(size: 9).monospacedDigit())
+                .font(.system(size: 10).monospacedDigit())
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.trailing)
         }
@@ -359,11 +366,14 @@ struct InspectPanel: View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             // 30pt 连「归属运营商 (ASN)」都放不下，标签会一字一行地竖着排；
             // 给到和主面板明细一样的 96pt，长标签允许在栏内折行。
-            Text(label).font(.system(size: 9)).foregroundStyle(.tertiary)
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
                 .frame(width: 96, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
             Text(value).font(.system(size: 10)).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .multilineTextAlignment(.trailing)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
