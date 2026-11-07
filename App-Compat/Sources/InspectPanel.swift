@@ -59,7 +59,6 @@ struct InspectPanel: View {
             module("WebRTC（STUN）", timingKey: "webrtc", value: webRTCValue, hint: webRTCHint)
             module("DNS", timingKey: "dns", value: dnsValue, hint: dnsHint)
             captchaModule
-            latencyModule
 
             // 带宽三档：随体检自动测，不再单独放「测速」按钮。
             VStack(alignment: .leading, spacing: 6) {
@@ -241,6 +240,26 @@ struct InspectPanel: View {
             } else if model.inspectionRunning {
                 Text("检测中…").font(.caption2).foregroundStyle(.secondary)
             }
+            let latency = latencyRows
+            if !latency.isEmpty || model.authLivenessRunning || model.pingRunning {
+                Divider().opacity(0.3)
+                HStack(spacing: 6) {
+                    Text("链路延迟").font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    if model.authLivenessRunning || model.pingRunning {
+                        Text(Copy.t("P05")).font(.system(size: 9)).foregroundStyle(.tertiary)
+                    }
+                    Spacer(minLength: 0)
+                }
+                ForEach(Array(latency.enumerated()), id: \.offset) { _, row in
+                    latencyRow(row.label, row.value)
+                }
+                if let verdict = model.authLiveness?.verdict {
+                    Text(verdict)
+                        .font(.system(size: 9)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
             Text(egressHint)
                 .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -262,40 +281,53 @@ struct InspectPanel: View {
         return parts.joined(separator: "\n")
     }
 
-    /// 网络诊断：认证通道 + Ping 合并成一张延迟卡，只留一段说明；随体检自动测。
-    private var latencyModule: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text(Copy.t("R08")).font(.caption).bold()
-                if model.authLivenessRunning || model.pingRunning {
-                    Text(Copy.t("P05")).font(.system(size: 9)).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-            }
-            if let sample = model.authLiveness {
-                Text(Copy.t("D29")).font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
-                Text(sample.direct.description).font(.caption.monospaced())
-                Text(sample.viaDefault.description).font(.caption.monospaced())
-                Text(sample.verdict).font(.system(size: 9)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if !model.pingResults.isEmpty {
-                Text(Copy.t("D33"))
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 2)
-                ForEach(model.pingResults, id: \.host) { summary in
-                    Text(summary.description).font(.caption.monospaced())
-                }
-            }
-            Text(Copy.t("D30"))
-                .font(.system(size: 9)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+    /// 把直连/默认出口两次 Ping 合成一行，右侧数值，像人机验证那样分列。
+    private var latencyRows: [(label: String, value: String)] {
+        var rows: [(String, String)] = []
+        if let sample = model.authLiveness {
+            rows.append(("认证通道", latencyText(sample.direct, sample.viaDefault)))
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
-                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        let ping = model.pingResults
+        let viaPrefix = Copy.t("B515")
+        var i = 0
+        while i < ping.count {
+            let direct = ping[i]
+            var via: PingSummary?
+            if i + 1 < ping.count, ping[i + 1].host.hasPrefix(viaPrefix) {
+                via = ping[i + 1]
+                i += 2
+            } else {
+                i += 1
+            }
+            let label = direct.host.split(separator: " ").first.map(String.init) ?? direct.host
+            rows.append((label, latencyText(direct, via)))
+        }
+        return rows
+    }
+
+    private func latencyText(_ direct: PingSummary, _ via: PingSummary?) -> String {
+        let d = direct.average.map { String(format: "%.0f ms", $0) } ?? "无回执"
+        var text = "直连 \(d)"
+        if let via {
+            let v = via.average.map { String(format: "%.0f ms", $0) } ?? "无回执"
+            text += " / 默认 \(v)"
+            let loss = max(direct.loss, via.loss)
+            if loss > 0 { text += String(format: " · 丢包 %.0f%%", loss * 100) }
+        } else if direct.loss > 0 {
+            text += String(format: " · 丢包 %.0f%%", direct.loss * 100)
+        }
+        return text
+    }
+
+    private func latencyRow(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(label).font(.system(size: 9)).foregroundStyle(.tertiary)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.system(size: 9).monospacedDigit())
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        }
     }
 
     private func purityLine(_ label: String, _ value: String) -> some View {

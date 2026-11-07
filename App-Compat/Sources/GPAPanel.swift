@@ -43,6 +43,9 @@ struct GPAPanel: View {
         .onAppear { syncMajorSelection() }
         .onChange(of: model.gpaCollege?.code) { _, _ in syncMajorSelection() }
         .onChange(of: model.gpaYear) { _, _ in syncMajorSelection() }
+        .onChange(of: selectedMajor) { _, newValue in
+            if !newValue.isEmpty { model.setGPAMajor(newValue) }
+        }
     }
 
     private var header: some View {
@@ -199,7 +202,10 @@ struct GPAPanel: View {
 
     private func syncMajorSelection() {
         let majors = model.gpaMajors
-        if majors.count == 1 {
+        if let preferred = model.gpaPreferredMajor,
+           majors.contains(where: { $0.name == preferred }) {
+            selectedMajor = preferred
+        } else if majors.count == 1 {
             selectedMajor = majors[0].name
         } else if !majors.contains(where: { $0.name == selectedMajor }) {
             selectedMajor = ""

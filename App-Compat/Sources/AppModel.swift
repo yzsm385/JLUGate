@@ -238,6 +238,23 @@ final class AppModel {
         return GPAProgramDirectory.majors(collegeCode: college.code, year: gpaYear)
     }
 
+    /// 上次在 GPA 面板选过的专业；只有当前学院 + 年级下仍然存在才采用。
+    var gpaPreferredMajor: String? {
+        let saved = config.gpaMajor.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !saved.isEmpty,
+              gpaMajors.contains(where: { $0.name == saved }) else { return nil }
+        return saved
+    }
+
+    /// 记住用户选过的专业，下次打开面板直接预选，不用再选一遍。
+    func setGPAMajor(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, config.gpaMajor != trimmed else { return }
+        config.gpaMajor = trimmed
+        ConfigStore.save(config)
+        FileLogger.shared.log("GPA 专业：记住 \(trimmed)")
+    }
+
     /// 选好专业后直接进入对应年级的计算器（不再经过网页首页选专业）。
     func gpaPlanURL(major: String) -> URL? {
         guard let college = gpaCollege,

@@ -29,7 +29,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.jlugate.app
         PRODUCT_NAME: JLUGate
-        MARKETING_VERSION: "1.4.2"
+        MARKETING_VERSION: "1.4.3"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
