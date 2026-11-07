@@ -654,6 +654,35 @@ struct DrcomEngineTests {
         #expect(types.last == 0x01 || types.last == 0x03, "最后应回到主格式，实际 \(types)")
     }
 
+    @Test("DrcomAuthProvider 把保活 B 自检结论转成遥测（会进 App 日志与诊断）")
+    func providerRelaysKeepAliveBSelfCheck() async throws {
+        let channel = FakeChannel(responder: wellBehavedResponder())
+        let engine = DrcomEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            codec: DrcomCodec(randomness: SeededRandomSource(seed: 7)),
+            channelFactory: RecordingChannelFactory(channel: channel),
+            interfaces: FakeInterfaceProvider.wired,
+            clock: FakeClock(),
+            backoff: Backoff())
+        let provider = DrcomAuthProvider(engine: engine, link: .wired)
+        let notes = Atomic<[String]>([])
+        let collector = Task {
+            for await event in provider.telemetry {
+                if case .note(let message) = event { notes.withLock { $0.append(message) } }
+            }
+        }
+        guard let snapshot = FakeInterfaceProvider.wired.physicalInterfaces().first else {
+            Issue.record("假网卡没有给出来")
+            return
+        }
+        await provider.start(using: snapshot)
+        try await expectEventually("自检结论进遥测", timeout: .seconds(10)) {
+            notes.withLock { $0.contains { $0.contains("保活B 自检") } }
+        }
+        collector.cancel()
+        await provider.stop()
+    }
+
     @Test("保活 B 整场收不到回执也不判掉线（会话由保活 A 决定）")
     func keepAliveBFailureDoesNotDropSession() async throws {
         // 只应 A，40 字节的 B 包一个都不回 —— 真机上就是这个样子。
