@@ -53,8 +53,12 @@
 
   <div class="ref-warning" role="note">
     <span class="warn-icon">⚠️</span>
-    <div><b>默认按学院推免细则勾选</b>：体育、军事教育（军训/军事理论）、选修/限选等确定不计入的课程已直接隐藏（勾「显示不计入课程」可查看）；新生研讨/导论、同名分流等疑似不计入的课程折叠在每学期底部，确认计入再展开勾选。外语与四史在页首单独选择。<span class="warn-sub">口径来自 2026-11 对各学院推免细则与历年排名公示的调研；以学院当年通知为准。</span></div>
+    <div><b>默认按学院推免细则勾选</b>：体育、军事教育（军训/军事理论）、选修/限选等确定不计入的课程已直接隐藏（勾「显示不计入课程」可查看）；新生研讨/导论、同名分流等疑似不计入的课程折叠在每学期底部，确认计入再展开勾选。外语默认英语（专业允许时才可选语种）；四史 2025 级及以前默认《中华人民共和国史》，2026 级起 4 选 1。<span class="warn-sub">口径来自 2026-11 对各学院推免细则与历年排名公示的调研；以学院当年通知为准。</span></div>
   </div>
+
+  <!-- 学院推免口径 / 历年线：从计算器课程列表里移出来，放在警告和搜索框之间的空档 -->
+  <div id="rulesSlot" class="rules-slot"></div>
+
   <section class="panel">
     <div class="plan-tools">
       <input id="planSearch" type="search" placeholder="搜索课程名 / 代码 / 课组" autocomplete="off">
@@ -72,6 +76,6 @@
 
 <script src="data/college-rules.js"></script>
 <script src="data/plans-index.js"></script>
-<script src="assets/plan-20261113.js"></script>
+<script src="assets/plan-20261115.js"></script>
 </body>
 </html>

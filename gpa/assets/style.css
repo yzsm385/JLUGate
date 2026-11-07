@@ -478,3 +478,7 @@ body:not(.show-excluded) .plan-row.row-hard{display:none}
 .ex-group .ex-hint{margin:0;padding:7px 12px;font-size:11px;color:#977c3e;border-top:1px dashed #e8d49a}
 .ex-group .plan-row{background:#fffdf4}
 .ex-group .plan-row:first-of-type{border-top:1px solid var(--line-2)}
+
+/* 学院推免口径 / 历年线：独立在计算器面板外，放在警告与搜索框之间 */
+.rules-slot:empty{display:none}
+.rules-slot .choice-panel{margin:14px 0 0}
