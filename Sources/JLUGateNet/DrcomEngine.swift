@@ -482,6 +482,9 @@ public actor DrcomEngine {
         var bSent = 0
         var bAnswered = 0
         var bLoggedVerdict = false
+        /// 诊断用：第一对 A/C 报文和第一条应答的完整字节，各记一次（真机对照官方抓包要用）
+        var loggedFirstC = false
+        var loggedFirstBReply = false
         /// 方言兜底：主格式（0x05=包类型 01/03）整轮没人应时，自动换一次旧格式（0x05=序号 05/07）。
         /// 只在本会话从头到尾一包都没被应答时触发，所以不影响已经工作正常的网关。
         var bLegacyTypes = false
@@ -572,6 +575,9 @@ public actor DrcomEngine {
                             if !loggedFirstB {
                                 loggedFirstB = true
                                 emit(.log("保活 B 首包（\(datagram.count) 字节）=\(Hex.string(datagram))"))
+                            } else if packetIndex == 1, !loggedFirstC {
+                                loggedFirstC = true
+                                emit(.log("保活 C 首包（\(datagram.count) 字节）=\(Hex.string(datagram))"))
                             }
                             emit(.log(String(format: "保活B 发送 type=0x%02X counter=0x%02X session=0x%04X tail=0x%08X size=%d%@",
                                              Int(type), Int(bCounter), Int(serverSessionID), Int(tail),
@@ -587,6 +593,10 @@ public actor DrcomEngine {
                             switch incoming.frame {
                             case .keepAliveBRequest(let replyType, let replyCounter, let replyTail):
                                 bAnswered += 1
+                                if !loggedFirstBReply {
+                                    loggedFirstBReply = true
+                                    emit(.log("保活B 应答原文（\(incoming.payload.count) 字节）=\(Hex.string(incoming.payload, limit: 40))"))
+                                }
                                 emit(.log(String(format: "保活B 应答 type=0x%02X counter=0x%02X tail=0x%08X size=%d",
                                                  Int(replyType), Int(replyCounter), Int(replyTail),
                                                  incoming.payload.count)))

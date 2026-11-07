@@ -160,6 +160,32 @@ struct KeepAliveGoldenTests {
         #expect(Array([UInt8](try codec.makeKeepAliveB(second))[0x1C..<0x20]) == [192, 0, 2, 10])
     }
 
+    /// 交叉验证：用社区实现 jlu-drcom-ng v2.0.0 的黄金向量
+    /// （`drcom_dart/test/golden/protocol_vectors.json` 的 keepalive2 数组）逐字节对照。
+    /// 它的 reference_packets.json 里 challenge 应答和吉大抓包一致
+    /// （`f000a8ac00004fe416c1…dc02`），所以这是同一套方言。
+    @Test("和 jlu-drcom-ng 的黄金向量逐字节一致（A 包 / C 包 / 计数器回绕）")
+    func matchesCommunityGoldenVectors() throws {
+        let codec = DrcomCodec()
+        // A 包：counter=5，type=1，版本 DC 02，0x08 起的 4 字节是 2F 12 00 00
+        let a = try codec.makeKeepAliveB(KeepAliveBContext(
+            type: 0x01, counter: 0x05, session: 0x02DC, timestamp: 0x0000122F,
+            tail: 0, check: 0))
+        #expect(hexString([UInt8](a)) == "070528000b01dc022f120000" + String(repeating: "00", count: 28))
+
+        // C 包：counter=9，type=3，tail 11223344
+        let c = try codec.makeKeepAliveB(KeepAliveBContext(
+            type: 0x03, counter: 0x09, session: 0x02DC, timestamp: 0x0000122F,
+            tail: 0x44332211, check: 0))
+        #expect(hexString([UInt8](c)) == "070928000b03dc022f1200000000000011223344" + String(repeating: "00", count: 20))
+
+        // 计数器回绕：255 之后是 0，类型仍然是 1
+        let wrapped = try codec.makeKeepAliveB(KeepAliveBContext(
+            type: 0x01, counter: 0x00, session: 0x02DC, timestamp: 0x0000122F,
+            tail: 0, check: 0))
+        #expect(hexString([UInt8](wrapped)) == "070028000b01dc022f120000" + String(repeating: "00", count: 28))
+    }
+
     @Test("文件包的版本域是 0F 27，普通包是 DC 02")
     func keepAliveBFilePacket() throws {
         let codec = DrcomCodec()
