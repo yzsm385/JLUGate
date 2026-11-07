@@ -136,6 +136,7 @@ func printHelp() {
       jlugate-probe --frame <hex文件>                            # 解析一个登录帧（和 --dump-login 对照）
       jlugate-probe --dump-login --account X --password Y       # 离线打印 342 字节登录包
       jlugate-probe --login --account X --password Y [--mac ..] # 真机认证（只能在环境 B 执行）
+      jlugate-probe --keepalive-scan --account X --password Y   # 真机判定网关认哪种保活 B（约 30 秒）
 
     铁律：施工机不做任何真实认证（CHECKLIST §0 / PLAN §14）。
     """)
@@ -928,6 +929,287 @@ func runLogin(_ options: Options) -> Int32 {
     return 0
 }
 
+
+// MARK: - 保活 B 方言扫描（真机）
+
+/// 扫描结果：只在这里汇总，打印在异步任务里做完，避免跨 actor 读写。
+struct KeepAliveScanResult: Sendable {
+    var loginOK = false
+    var note = ""
+    /// 每种格式是否收到过应答
+    var answered: [String: Bool] = [:]
+}
+
+/// 登录一次，然后按几种候选格式各发一包，看网关到底回哪一种。
+///
+/// 为什么需要它：1.4.7 把保活 B 的 `0x05` 从「序号」改成「包类型」（A=01 / C=03），
+/// 依据是官方抓包 + 社区实现；真网关的方言没法离线确认。
+/// 这个命令半分钟就能给出答案，不用等十几分钟看它会不会掉线。
+func runKeepAliveScan(_ options: Options) -> Int32 {
+    guard !options.account.isEmpty, !options.password.isEmpty else {
+        print("需要 --account 与 --password")
+        return 2
+    }
+    guard let server = IPv4Address(options.server) else {
+        print("服务器地址不合法：\(options.server)")
+        return 2
+    }
+    let provider = SystemInterfaceProvider()
+    guard let route = provider.route(to: server) else {
+        print("拿不到 \(server) 的路由：先确认有线已连上、并且已经登录")
+        return 3
+    }
+    if route.isTunnel {
+        print("❌ 出口是 \(route.interface ?? "?")（代理 TUN）：先把 10.0.0.0/8 设成直连")
+        return 3
+    }
+    let interface: InterfaceSnapshot
+    let localIP: IPv4Address
+    if server.description == "127.0.0.1" {
+        // 对模拟网关自测时走 lo0
+        interface = InterfaceSnapshot(name: "lo0", index: 1, ipv4: "127.0.0.1",
+                                      mac: "02:00:00:00:00:01", isWireless: false, isUp: true)
+        localIP = IPv4Address("127.0.0.1")!
+    } else {
+        guard let name = route.interface,
+              let found = provider.physicalInterfaces().first(where: { $0.name == name }),
+              let address = found.ipv4Address else {
+            print("❌ 找不到出口网卡或它没有 IPv4（route 出口 \(route.interface ?? "?")）")
+            return 3
+        }
+        interface = found
+        localIP = address
+    }
+    let mac = options.mac.flatMap(MACAddress.init)
+        ?? interface.macForAuthentication
+        ?? MACAddress("02:00:00:00:00:01")!
+
+    print("网关 \(server):\(options.serverPort)   出口 \(interface.name)（\(localIP)）   MAC \(mac)")
+    print("⚠️ 这会顶掉当前会话；先把 JLU Gate 退出（它占着 \(options.localPort)）\n")
+
+    let semaphore = DispatchSemaphore(value: 0)
+    let box = ScanOutcome()
+    Task.detached {
+        let result = await keepAliveScan(account: options.account, password: options.password,
+                                         hostname: options.hostname, mac: mac,
+                                         interface: interface, localIP: localIP,
+                                         server: server, serverPort: UInt16(options.serverPort),
+                                         localPort: UInt16(options.localPort))
+        printSummary(result)
+        box.set(result.loginOK)
+        semaphore.signal()
+    }
+    _ = semaphore.wait(timeout: .now() + 60)
+    return box.value ? 0 : 1
+}
+
+private func printSummary(_ result: KeepAliveScanResult) {
+    print("")
+    guard result.loginOK else {
+        print("❌ 登录没成功，扫描中止：\(result.note)")
+        return
+    }
+    print("—— 结论 ——")
+    let ac = (result.answered["A(01)"] == true) && (result.answered["C(03)"] == true)
+    let legacy = (result.answered["旧05"] == true) || (result.answered["旧07"] == true)
+    if ac {
+        print("✅ 网关认「0x05 = 包类型」（A=01 / C=03）—— 1.4.7 的方向正确")
+    } else if legacy {
+        print("⚠️ 网关认「0x05 = 序号」（05/07 有应答）—— 1.4.7 需要回退")
+    } else {
+        print("❓ 两种都没应答：保活 B 可能还依赖别的字段，请把上面的表发我")
+    }
+    if result.answered["文件包"] == true { print("   · 文件包（0F 27）有应答") }
+    if result.answered["类型5"] == true { print("   · 类型 5 有应答（可能是 JLU 自己的文件包类型）") }
+    if result.answered["常量2F12"] == true { print("   · 0x08 用 2F 12 也有应答（该字段不校验）") }
+}
+
+/// 跨线程只交换一个 Bool（信号量保证顺序，再加锁稳妥）。
+final class ScanOutcome: @unchecked Sendable {
+    private let lock = NSLock()
+    private var ok = false
+    var value: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return ok
+    }
+    func set(_ newValue: Bool) {
+        lock.lock(); ok = newValue; lock.unlock()
+    }
+}
+
+private func keepAliveScan(account: String, password: String, hostname: String,
+                           mac: MACAddress, interface: InterfaceSnapshot, localIP: IPv4Address,
+                           server: IPv4Address, serverPort: UInt16, localPort: UInt16) async -> KeepAliveScanResult {
+    var result = KeepAliveScanResult()
+    let channel = BSDChannel()
+    do {
+        try await channel.open(localIP: localIP, localPort: localPort,
+                               remote: IPv4Endpoint(host: server, port: serverPort),
+                               interfaceIndex: interface.index)
+    } catch {
+        result.note = "打不开通道（端口 \(localPort) 被占？）：\(error)"
+        return result
+    }
+    defer { Task { await channel.close() } }
+
+    let codec = DrcomCodec()
+    let serial: UInt16 = 0x1D63
+    guard let challenge = try? codec.makeChallenge(serial: serial),
+          (try? await channel.send(challenge)) != nil else {
+        result.note = "challenge 发不出去"
+        return result
+    }
+    var salt: [UInt8] = []
+    var sessionID: UInt16 = 0
+    var clientIP = localIP
+    do {
+        for _ in 0..<3 {
+            let datagram = try await channel.receive(timeout: .seconds(3))
+            if case .challengeReply(let reply) = codec.classify(datagram), reply.serial == serial {
+                salt = reply.salt
+                sessionID = reply.sessionID
+                clientIP = reply.serverReportedClientIP ?? localIP
+                break
+            }
+        }
+    } catch {
+        result.note = "challenge 没有应答"
+        return result
+    }
+    guard !salt.isEmpty else {
+        result.note = "challenge 应答里没有 salt"
+        return result
+    }
+    print(String(format: "challenge OK  salt=%@  session=0x%04X  clientIP=%@",
+                 salt.map { String(format: "%02x", $0) }.joined() as NSString,
+                 Int(sessionID), clientIP.description as NSString))
+
+    let context = LoginContext(account: account, password: password, salt: salt,
+                               clientIP: clientIP, hostname: hostname, mac: mac)
+    guard let login = try? codec.makeLogin(context) else {
+        result.note = "登录包构造失败"
+        return result
+    }
+    do { try await channel.send(login) } catch {
+        result.note = "登录包发不出去"
+        return result
+    }
+    var loggedIn = false
+    do {
+        for _ in 0..<3 {
+            let datagram = try await channel.receive(timeout: .seconds(5))
+            switch codec.classify(datagram) {
+            case .loginSuccess:
+                loggedIn = true
+            case .loginFailure(let reason):
+                result.note = "服务器拒绝：\(reason)"
+                return result
+            default:
+                continue
+            }
+            break
+        }
+    } catch {
+        result.note = "登录没有应答"
+        return result
+    }
+    guard loggedIn else {
+        result.note = "登录没有成功应答"
+        return result
+    }
+    print("login OK\n")
+    print("—— 逐个格式试探（每包等 2 秒）——")
+
+    var tail: UInt32 = 0
+    var counter: UInt8 = 0x05
+
+    func makePacket(_ type: UInt8, tail: UInt32, check: UInt32 = 0, file: Bool = false) -> Data? {
+        let ctx = KeepAliveBContext(type: type, counter: counter, session: sessionID,
+                                    timestamp: UInt32(truncatingIfNeeded: Int(Date().timeIntervalSince1970)),
+                                    tail: tail, check: check, isFilePacket: file)
+        return try? codec.makeKeepAliveB(ctx)
+    }
+
+    func exchange(_ label: String, _ packet: Data,
+                  patch: ((inout [UInt8]) -> Void)? = nil) async -> Bool {
+        var bytes = [UInt8](packet)
+        patch?(&bytes)
+        let head = bytes.prefix(20).map { String(format: "%02x", $0) }.joined(separator: " ")
+        do { try await channel.send(Data(bytes)) } catch {
+            print(String(format: "%-10@ 发送失败", label as NSString))
+            return false
+        }
+        let deadline = ContinuousClock.now + .seconds(2)
+        while ContinuousClock.now < deadline {
+            let remaining = deadline - ContinuousClock.now
+            guard let datagram = try? await channel.receive(timeout: remaining) else { break }
+            let reply = [UInt8](datagram)
+            guard reply.count >= 6, reply[0] == 0x07 else { continue }
+            let replyTail: UInt32 = reply.count >= 0x14
+                ? UInt32(reply[0x10]) | UInt32(reply[0x11]) << 8
+                    | UInt32(reply[0x12]) << 16 | UInt32(reply[0x13]) << 24
+                : 0
+            print(String(format: "%-10@ 发 %@ → 回 %3d 字节  type=%02x/%02x  tail=0x%08X",
+                         label as NSString, head as NSString, reply.count,
+                         Int(reply[0x01]), Int(reply[0x05]), replyTail))
+            tail = replyTail
+            return true
+        }
+        print(String(format: "%-10@ 发 %@ → 超时", label as NSString, head as NSString))
+        return false
+    }
+
+    // 1) 新格式：A(01) → C(03)，跑两轮
+    for _ in 0..<2 {
+        if let a = makePacket(PacketLayout.KeepAliveB.typeA, tail: tail) {
+            let ok = await exchange("A(01)", a)
+            result.answered["A(01)"] = (result.answered["A(01)"] ?? false) || ok
+            counter &+= 1
+        }
+        if let c = makePacket(PacketLayout.KeepAliveB.typeC, tail: tail,
+                              check: UInt32.random(in: 0...UInt32.max)) {
+            let ok = await exchange("C(03)", c)
+            result.answered["C(03)"] = (result.answered["C(03)"] ?? false) || ok
+            counter &+= 1
+        }
+    }
+
+    // 2) 旧格式：0x05 当序号（05 / 07）—— 1.4.2 的做法
+    if let legacy = makePacket(0x05, tail: tail) {
+        result.answered["旧05"] = await exchange("旧05", legacy)
+        counter &+= 1
+    }
+    if let legacy = makePacket(0x07, tail: tail) {
+        result.answered["旧07"] = await exchange("旧07", legacy)
+        counter &+= 1
+    }
+
+    // 3) 类型 5（真机曾用 272 字节回过这种包，怀疑是 JLU 自己的文件包类型）
+    if let file5 = makePacket(0x05, tail: tail) {
+        result.answered["类型5"] = await exchange("类型5", file5)
+        counter &+= 1
+    }
+
+    // 4) 参考实现的文件包：版本域 0F 27
+    if let file = makePacket(PacketLayout.KeepAliveB.typeA, tail: tail, file: true) {
+        result.answered["文件包"] = await exchange("文件包", file)
+        counter &+= 1
+    }
+
+    // 5) 参考实现的常量：0x08=2F 0x09=12（官方抓包这里是时间戳）
+    if let ref = makePacket(PacketLayout.KeepAliveB.typeA, tail: tail) {
+        result.answered["常量2F12"] = await exchange("常量2F12", ref) { bytes in
+            bytes[0x08] = 0x2F
+            bytes[0x09] = 0x12
+            bytes[0x0A] = 0
+            bytes[0x0B] = 0
+        }
+    }
+
+    result.loginOK = true
+    return result
+}
+
 // MARK: - 入口
 
 let options = parseOptions(CommandLine.arguments)
@@ -977,6 +1259,8 @@ case "dump-login":
     runDumpLogin(options)
 case "login":
     exit(runLogin(options))
+case "keepalive-scan":
+    exit(runKeepAliveScan(options))
 default:
     printHelp()
 }
@@ -1010,7 +1294,7 @@ func runFrameDump(_ options: Options) -> Int32 {
         let ip = Array(bytes[0x1E1..<0x1E5])
         print("0x1E1 IP：\(ip.map(String.init).joined(separator: "."))")
     }
-    // 主机名：从 0x270 起按   截断
+    // 主机名：从 0x270 起按 NUL 截断
     if bytes.count > 0x270 {
         var name: [UInt8] = []
         for byte in bytes[0x270...] where byte != 0 { name.append(byte) }

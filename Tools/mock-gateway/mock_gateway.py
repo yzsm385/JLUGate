@@ -218,6 +218,11 @@ class MockGateway:
         if kind == 0xFF:
             return [self.keepalive_a_reply()] if self.state.login_ok else []
         if kind == 0x07:
+            # --strict-types：模拟真网关「只认 0x05 = 01/03」的行为，
+            # 用来验证 jlugate-probe keepalive-scan 的结论判断
+            if self.args.strict_types and len(payload) >= 6 and payload[5] not in (0x01, 0x03):
+                self.log("drop", payload)
+                return []
             return [self.keepalive_b_reply(payload)]
         if kind == 0x06:
             return []  # 账号预检上报：本实现不发，收到也忽略
@@ -286,6 +291,8 @@ def main() -> int:
     parser.add_argument("--port", type=int, default=61441,
                         help="网关自身端口（客户端固定绑 61440，同机测试必须换端口）")
     parser.add_argument("--fixtures", default=DEFAULT_FIXTURES)
+    parser.add_argument("--strict-types", dest="strict_types", action="store_true",
+                        help="只应答保活 B 的 01/03 类型（模拟真网关）")
     parser.add_argument("--duration", type=float, default=30.0)
     parser.add_argument("--loss", type=float, default=0.0)
     parser.add_argument("--dup", action="store_true")
