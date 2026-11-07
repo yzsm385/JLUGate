@@ -403,6 +403,15 @@ public actor AuthCoordinator {
             emit(.note("204 探针被拦截（HTTP \(statusCode)\(location.map { " → \($0)" } ?? "")），走网页认证"))
             return .provider(.jluWiFi, chosen)
         case .unreachable(let reason):
+            // 两个探测都没回执：可能是代理把包截了（全局模式的 TUN / 透明代理），
+            // 也可能真不在校园网。有线 + 手动配置 + 有 IPv4 时先按 Dr.Com 试一次——
+            // 引擎的 socket 是钉在物理口上的，往往还能通；不试的话就是
+            // 「全局代理下断线后怎么都连不回来」。
+            if !chosen.isWireless, chosen.ipv4Address != nil,
+               (interfaces.configMethod(of: chosen.name)?.lowercased() == "manual") {
+                emit(.note("两个探测都没回执（\(reason)）：仍按有线 Dr.Com 试一次"))
+                return .provider(.wired, chosen)
+            }
             throw DrcomError.notCampusNetwork(detail: reason)
         }
     }

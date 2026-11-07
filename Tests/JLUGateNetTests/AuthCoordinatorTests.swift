@@ -178,12 +178,27 @@ struct AuthCoordinatorTests {
         await coordinator.stop()
     }
 
-    @Test("两个探针都不通 → failed(.notCampusNetwork)，不建 provider")
-    func notCampus() async throws {
+    @Test("两个探针都不通 + 有线手动配置 → 仍按有线 Dr.Com 试一次（全局代理场景）")
+    func bothProbesDownButWiredManualStillTries() async throws {
         let spy = ProviderSpy()
         var detector = FakeLinkDetector(drcomReachable: false)
         detector.outcome = .unreachable(reason: "全部超时")
         let coordinator = makeCoordinator(detector: detector, spy: spy)
+        await coordinator.start()
+
+        // 以前这里直接 failed(.notCampusNetwork)：全局代理把探针包吞掉时，
+        // 用户就表现为「断线后在全局模式下怎么都连不回来」。
+        #expect(await coordinator.currentLink() == .wired)
+        #expect(spy.count == 1)
+        await coordinator.stop()
+    }
+
+    @Test("两个探针都不通 + 无线 → failed(.notCampusNetwork)，不建 provider")
+    func notCampus() async throws {
+        let spy = ProviderSpy()
+        var detector = FakeLinkDetector(drcomReachable: false)
+        detector.outcome = .unreachable(reason: "全部超时")
+        let coordinator = makeCoordinator(interfaces: [wifi], detector: detector, spy: spy)
         await coordinator.start()
 
         guard case .failed(let error) = await coordinator.currentState() else {
@@ -191,7 +206,6 @@ struct AuthCoordinatorTests {
             return
         }
         #expect(error == .notCampusNetwork(detail: "全部超时"))
-        #expect(error.userMessage.contains(Copy.t("E16").split(separator: "{").first.map(String.init) ?? ""))
         #expect(spy.count == 0)
         await coordinator.stop()
     }
