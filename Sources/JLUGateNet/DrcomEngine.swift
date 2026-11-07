@@ -485,6 +485,8 @@ public actor DrcomEngine {
         /// 诊断用：第一对 A/C 报文和第一条应答的完整字节，各记一次（真机对照官方抓包要用）
         var loggedFirstC = false
         var loggedFirstBReply = false
+        /// 真网关给的是 600 秒租约：过了 600 秒还没掉，说明保活 B 真的续上了
+        var loggedLeaseRenewed = false
         /// 方言兜底：主格式（0x05=包类型 01/03）整轮没人应时，自动换一次旧格式（0x05=序号 05/07）。
         /// 只在本会话从头到尾一包都没被应答时触发，所以不影响已经工作正常的网关。
         var bLegacyTypes = false
@@ -511,6 +513,14 @@ public actor DrcomEngine {
                     emit(.traffic(secondsOnline: status.secondsOnline, stats: status.stats))
                     emit(.log("保活A 应答 在线=\(status.secondsOnline)s stats=\(status.stats)"))
                     misses = 0
+                    // 600 秒是实测的租约长度（docs/analysis/wired-disconnect.md §2.5）。
+                    // 能过 600 秒还在应答 = 保活 B 的续租真的生效了。
+                    if !loggedLeaseRenewed, let started = sessionStartedAt,
+                       clock.now() - started > .seconds(600) {
+                        loggedLeaseRenewed = true
+                        let age = Int((clock.now() - started).components.seconds)
+                        emit(.log("本会话已在线 \(age)s（超过 600 秒租约）：保活 B 续租生效 ✅"))
+                    }
                 case .b:
                     // 保活 B = 「A 包（类型 1）→ C 包（类型 3）」一问一答，字段语义：
                     //   0x01 计数器  0x05 类型（1=A, 3=C）  0x06–0x07 版本
@@ -660,6 +670,12 @@ public actor DrcomEngine {
                     continue
                 }
                 if misses >= configuration.missTolerance {
+                    // 掉线了：把"是不是租约到期"这条线索写进日志，下次看诊断能直接对上
+                    if !loggedLeaseRenewed, let started = sessionStartedAt {
+                        let age = Int((clock.now() - started).components.seconds)
+                        emit(.log("会话在 \(age)s 左右被网关释放：保活 B 本会话 应答 \(bAnswered)/\(bSent) 包"
+                                  + (bAnswered == 0 ? "（一包都没回，租约没续上）" : "（有回包，检查续租逻辑）")))
+                    }
                     throw DrcomError.gatewayUnreachable(host: configuration.server.description)
                 }
                 // 丢一轮也要等一个间隔再发，不能原地空转（否则会把网关打成风暴）

@@ -683,6 +683,27 @@ struct DrcomEngineTests {
         await provider.stop()
     }
 
+    @Test("在线超过 600 秒（实测租约长度）会打一条「续租生效」标记")
+    func leaseRenewalMarker() async throws {
+        // 假时钟下 1 秒间隔跑满 600 秒很快；能过 600 秒还在应答就说明 B 续租生效
+        let (engine, _, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: wellBehavedResponder())
+        let stream = await engine.events()
+        let logs = Atomic<[String]>([])
+        let collector = Task {
+            for await event in stream {
+                if case .log(let message) = event { logs.withLock { $0.append(message) } }
+            }
+        }
+        await engine.start()
+        try await expectEventually("续租标记", timeout: .seconds(20)) {
+            logs.withLock { $0.contains { $0.contains("保活 B 续租生效") } }
+        }
+        collector.cancel()
+        await engine.stop()
+    }
+
     @Test("保活 B 整场收不到回执也不判掉线（会话由保活 A 决定）")
     func keepAliveBFailureDoesNotDropSession() async throws {
         // 只应 A，40 字节的 B 包一个都不回 —— 真机上就是这个样子。
