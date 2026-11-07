@@ -74,15 +74,17 @@
     }
   }
 
-  /* 2025 招生章程第十二条：
-     - 英语 / 俄语 / 日语 / 朝鲜语专业只录取外语语种为英语的考生；
-     - 化学类、计算机、物联网、网络空间安全、软件工程、数据科学、人工智能、
-       外交学、临床医学、动物医学（徐华清班）因培养方案要求，建议非英语语种慎重报考。
-     这些专业按英语培养，不再给语种选择；其余专业默认英语，需要时可改。 */
+  /* 2025 招生目录（中国教育考试院）里，绝大多数专业的外语语种要求是英语；
+     页面因此默认所有专业只列英语。若后续核实某专业允许日语/俄语等，
+     把匹配规则加进 NON_ENGLISH_ALLOW，才会在页面上出现语种下拉。
+     （2025 招生章程第十二条也明确：英语/俄语/日语/朝鲜语专业只录英语语种。） */
+  var NON_ENGLISH_ALLOW = [];
   function isEnglishOnlyMajor(meta) {
     var m = String((meta && meta.major) || "");
-    if (/^(英语|俄语|日语|朝鲜语)(（|\(|$)/.test(m)) return true;
-    return /(软件工程|计算机科学与技术|物联网工程|网络空间安全|数据科学与大数据技术|人工智能|外交学|临床医学|动物医学（徐华清班）|化学类|应用化学|材料化学|高分子材料与工程|化学工程与工艺|^化学$)/.test(m);
+    for (var i = 0; i < NON_ENGLISH_ALLOW.length; i++) {
+      if (NON_ENGLISH_ALLOW[i].test(m)) return false;
+    }
+    return true;
   }
   var yearBarBuilt = false;
   function buildYearSwitcher() {
@@ -744,7 +746,7 @@
       var historyNote = (yearNum && yearNum < HISTORY_CHOICE_FROM)
         ? "四史默认《中华人民共和国史》"
         : "四史按学院口径选择";
-      fine.textContent = (yText || "当前") + " 级默认按各学院推免细则勾选：体育、军事教育、选修/限选等确定不计入的课程已隐藏（勾「显示不计入课程」可看）；疑似按届不同的课程折叠在每学期底部。外语默认英语（本专业允许时才能改语种）；" + historyNote + "。勾选与成绩只保存在本机。";
+      fine.textContent = (yText || "当前") + " 级默认按各学院推免细则勾选：体育、军事教育、选修/限选等确定不计入的课程已隐藏（勾「显示不计入课程」可看）；疑似按届不同的课程折叠在每学期底部。外语默认英语；" + historyNote + "。勾选与成绩只保存在本机。";
     }
     buildYearSwitcher();
     renderList();
