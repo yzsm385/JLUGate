@@ -67,44 +67,20 @@ final class AppModel {
     func installAvailableUpdate(page: URL?, asset: URL?) {
         guard let asset else {
             if let page { NSWorkspace.shared.open(page) }
-            let message = "这个版本没有可用的安装包，已打开下载页"
-            updateInstallMessage = message
-            updateStatus = .failed(message)
-            FileLogger.shared.log("更新：没有可用的安装包，已打开下载页")
-            return
-        }
-        // 一键更新只能替换 /Applications 里的 App（App 没法替换自己跑在别处的副本）。
-        // 1.4.6 以前这里是静默失败：状态还停在「发现新版本」，用户点半天没反应。
-        // 现在直接把下载页打开，并把原因写到面板/设置/日志三处。
-        guard UpdateInstaller.installedAppURL != nil else {
-            if let page { NSWorkspace.shared.open(page) }
-            let message = Copy.t("N15")
-            updateInstalling = false
-            updateInstallMessage = message
-            updateStatus = .failed(message)
-            FileLogger.shared.log("更新失败：当前 App 不在 /Applications（"
-                                  + Bundle.main.bundleURL.path + "），已打开下载页")
+            updateInstallMessage = "这个版本没有可用的安装包，已打开下载页"
             return
         }
         updateInstalling = true
         updateInstallMessage = "开始下载…"
-        FileLogger.shared.log("更新：开始下载 \(asset.lastPathComponent)")
         UpdateInstaller.install(from: asset) { message in
-            Task { @MainActor in
-                self.updateInstallMessage = message
-                FileLogger.shared.log("更新：\(message)")
-            }
+            Task { @MainActor in self.updateInstallMessage = message }
         } onFailure: { message in
             Task { @MainActor in
                 self.updateInstalling = false
                 self.updateInstallMessage = message
-                // 失败也写进状态：面板那一行才会显示原因（以前只在设置页能看到）
-                self.updateStatus = .failed(message)
-                FileLogger.shared.log("更新失败：\(message)")
             }
         } onReadyToQuit: {
             Task { @MainActor in
-                FileLogger.shared.log("更新：安装包已就绪，退出以便替换")
                 try? await Task.sleep(for: .milliseconds(400))
                 NSApp.terminate(nil)
             }
@@ -124,10 +100,8 @@ final class AppModel {
             let release = await updateChecker.latest(forceRefresh: true)
             guard let release else {
                 updateStatus = .failed("查不到更新（网络或 GitHub 限流），稍后再试")
-                FileLogger.shared.log("更新：查询失败（网络或 GitHub 限流）")
                 return
             }
-            FileLogger.shared.log("更新：远端 \(release.tag)，本机 \(BuildInfo.version)")
             if UpdateVersion.isNewer(release.tag, than: BuildInfo.version) {
                 updateStatus = .available(tag: release.tag, name: release.name,
                                           page: release.pageURL, asset: release.assetURL)
@@ -146,11 +120,8 @@ final class AppModel {
             let release = await updateChecker.latest(forceRefresh: force)
             guard let release else {
                 updateStatus = .failed("查不到更新（网络或 GitHub 限流），稍后再试")
-                FileLogger.shared.log("更新：查询失败（网络或 GitHub 限流）")
                 return
             }
-            FileLogger.shared.log("更新：远端 \(release.tag)，本机 \(BuildInfo.version)"
-                                  + "，资产 \(release.assetURL?.lastPathComponent ?? "无")")
             if UpdateVersion.isNewer(release.tag, than: BuildInfo.version) {
                 updateStatus = .available(tag: release.tag, name: release.name,
                                           page: release.pageURL, asset: release.assetURL)
