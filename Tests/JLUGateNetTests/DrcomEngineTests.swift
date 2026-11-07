@@ -614,6 +614,46 @@ struct DrcomEngineTests {
         #expect(types.contains(0x05) || types.contains(0x07), "换方言后应发 05/07，实际 \(types)")
     }
 
+    @Test("两种方言都没人应时回到主格式，不卡在旧格式")
+    func keepAliveBFallsBackAndReturns() async throws {
+        // 网关完全不回 B：主格式失败 → 试旧格式 → 也不回 → 必须回到主格式
+        let responder: @Sendable (Data) -> [Data] = { datagram in
+            if Self.isLoginFrame(datagram) { return [RecordedGateway.loginSuccess()] }
+            switch datagram.count {
+            case 20: return [RecordedGateway.challengeReply()]
+            case 38: return [RecordedGateway.keepAliveAReply()]
+            default: return []
+            }
+        }
+        let (engine, channel, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: responder)
+        let stream = await engine.events()
+        let logs = Atomic<[String]>([])
+        let collector = Task {
+            for await event in stream {
+                if case .log(let message) = event { logs.withLock { $0.append(message) } }
+            }
+        }
+        await engine.start()
+        try await expectEventually("试过旧格式", timeout: .seconds(15)) {
+            logs.withLock { $0.contains { $0.contains("换旧格式") } }
+        }
+        try await expectEventually("回到主格式", timeout: .seconds(15)) {
+            logs.withLock { $0.contains { $0.contains("回到主格式") } }
+        }
+        // 日志之后还要真的再发一包主格式的 B
+        try await expectEventually("再次发出 01/03", timeout: .seconds(15)) {
+            guard let last = channel.sentFrames.last(where: { $0.count == 40 }) else { return false }
+            return last[0x05] == 0x01 || last[0x05] == 0x03
+        }
+        collector.cancel()
+        await engine.stop()
+
+        let types = channel.sentFrames.filter { $0.count == 40 }.map { $0[0x05] }
+        #expect(types.last == 0x01 || types.last == 0x03, "最后应回到主格式，实际 \(types)")
+    }
+
     @Test("保活 B 整场收不到回执也不判掉线（会话由保活 A 决定）")
     func keepAliveBFailureDoesNotDropSession() async throws {
         // 只应 A，40 字节的 B 包一个都不回 —— 真机上就是这个样子。

@@ -618,6 +618,10 @@ public actor DrcomEngine {
                             emit(.log(bLegacyTypes
                                 ? "保活B 主格式（01/03）整轮无应答 → 换旧格式（0x05=序号 05/07）再试"
                                 : "保活B 旧格式也无应答 → 回到主格式（01/03），停止试探"))
+                        } else if bAnswered == 0, bLegacyTypes {
+                            // 旧格式也没人应：说明换方言没用（或第一轮只是丢包），回到主格式别再乱换
+                            bLegacyTypes = false
+                            emit(.log("保活B 旧格式也无应答 → 回到主格式（01/03），停止试探"))
                         }
                         try? await clock.sleep(for: .seconds(1))
                     }
