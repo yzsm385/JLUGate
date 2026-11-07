@@ -574,6 +574,46 @@ struct DrcomEngineTests {
         await engine2.stop()
     }
 
+    @Test("主格式整轮没人应时自动换旧格式（0x05=序号 05/07）")
+    func keepAliveBFallsBackToLegacyTypes() async throws {
+        // 假设网关其实是旧方言：只认 05/07 这种「序号」，不认 01/03。
+        let responder: @Sendable (Data) -> [Data] = { datagram in
+            if Self.isLoginFrame(datagram) { return [RecordedGateway.loginSuccess()] }
+            switch datagram.count {
+            case 20: return [RecordedGateway.challengeReply()]
+            case 38: return [RecordedGateway.keepAliveAReply()]
+            case 40:
+                let type = datagram[datagram.startIndex + 0x05]
+                guard type == 0x05 || type == 0x07 else { return [] }
+                return [RecordedGateway.keepAliveBReply(to: datagram)]
+            default: return []
+            }
+        }
+        let (engine, channel, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: responder)
+        let stream = await engine.events()
+        let logs = Atomic<[String]>([])
+        let collector = Task {
+            for await event in stream {
+                if case .log(let message) = event { logs.withLock { $0.append(message) } }
+            }
+        }
+        await engine.start()
+        try await expectEventually("换到旧格式", timeout: .seconds(15)) {
+            logs.withLock { $0.contains { $0.contains("换旧格式") } }
+        }
+        try await expectEventually("旧格式被应答", timeout: .seconds(15)) {
+            logs.withLock { $0.contains { $0.contains("保活B 应答") } }
+        }
+        #expect(await engine.currentState() == .online)
+        collector.cancel()
+        await engine.stop()
+
+        let types = channel.sentFrames.filter { $0.count == 40 }.map { $0[0x05] }
+        #expect(types.contains(0x05) || types.contains(0x07), "换方言后应发 05/07，实际 \(types)")
+    }
+
     @Test("保活 B 整场收不到回执也不判掉线（会话由保活 A 决定）")
     func keepAliveBFailureDoesNotDropSession() async throws {
         // 只应 A，40 字节的 B 包一个都不回 —— 真机上就是这个样子。

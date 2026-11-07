@@ -482,6 +482,10 @@ public actor DrcomEngine {
         var bSent = 0
         var bAnswered = 0
         var bLoggedVerdict = false
+        /// 方言兜底：主格式（0x05=包类型 01/03）整轮没人应时，自动换一次旧格式（0x05=序号 05/07）。
+        /// 只在本会话从头到尾一包都没被应答时触发，所以不影响已经工作正常的网关。
+        var bLegacyTypes = false
+        var bProbesLeft = 1
 
         while isCurrent(epoch) && !Task.isCancelled {
             round &+= 1
@@ -545,9 +549,16 @@ public actor DrcomEngine {
                         }
                         for packetIndex in 0..<2 {
                             bCounter &+= 1
-                            let type = packetIndex == 0
-                                ? PacketLayout.KeepAliveB.typeA
-                                : PacketLayout.KeepAliveB.typeC
+                            // 主格式：[0x05] = 包类型（A=01 / C=03）
+                            // 旧格式：[0x05] = 序号（05 / 07）—— 只有主格式整轮没人应时才试
+                            let type: UInt8
+                            if bLegacyTypes {
+                                type = packetIndex == 0 ? 0x05 : 0x07
+                            } else {
+                                type = packetIndex == 0
+                                    ? PacketLayout.KeepAliveB.typeA
+                                    : PacketLayout.KeepAliveB.typeC
+                            }
                             let bContext = KeepAliveBContext(
                                 type: type,
                                 counter: bCounter,
@@ -562,9 +573,9 @@ public actor DrcomEngine {
                                 loggedFirstB = true
                                 emit(.log("保活 B 首包（\(datagram.count) 字节）=\(Hex.string(datagram))"))
                             }
-                            emit(.log(String(format: "保活B 发送 type=0x%02X counter=0x%02X session=0x%04X tail=0x%08X size=%d",
+                            emit(.log(String(format: "保活B 发送 type=0x%02X counter=0x%02X session=0x%04X tail=0x%08X size=%d%@",
                                              Int(type), Int(bCounter), Int(serverSessionID), Int(tail),
-                                             datagram.count)))
+                                             datagram.count, bLegacyTypes ? " [旧格式]" : "")))
                             try await context.channel.send(datagram)
                             bSent += 1
                             let incoming = try await receive(matching: { frame in
@@ -599,6 +610,14 @@ public actor DrcomEngine {
                         }
                         if bTimeouts == 3 {
                             emit(.log("保活B 连续 3 轮无应答：网关可能不认这套格式——诊断里请带上上面 type/counter/tail 那几行"))
+                        }
+                        // 整场一包都没应答 → 换另一种方言试一次（真网关的确切方言无法离线确认）
+                        if bAnswered == 0, bProbesLeft > 0 {
+                            bProbesLeft -= 1
+                            bLegacyTypes.toggle()
+                            emit(.log(bLegacyTypes
+                                ? "保活B 主格式（01/03）整轮无应答 → 换旧格式（0x05=序号 05/07）再试"
+                                : "保活B 旧格式也无应答 → 回到主格式（01/03），停止试探"))
                         }
                         try? await clock.sleep(for: .seconds(1))
                     }
