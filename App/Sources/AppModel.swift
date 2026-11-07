@@ -359,6 +359,8 @@ final class AppModel {
     var isSafeMode = false
     struct Inspection: Equatable {
         var publicIPs: [PublicIPSample] = []
+        var chinaIP: String?
+        var chinaCountry: String?
         var cloudflare: CloudflareTrace?
         var webRTC: WebRTCSample?
         var dns: DNSLeakSample?
@@ -1432,6 +1434,8 @@ final class AppModel {
         Task { @MainActor in
             let service = InspectionService()
             self.inspectionTimings = [:]
+            self.inspection.chinaIP = nil
+            self.inspection.chinaCountry = nil
             // 带宽 / 认证通道 / Ping 都和别的体检一起自动测，不阻塞后面的项目。
             if !self.speedRunning { self.runSpeedAll() }
             self.measureAuthLiveness()
@@ -1441,6 +1445,14 @@ final class AppModel {
             let ips = await service.publicIPs()
             self.inspection.publicIPs = ips
             self.inspectionTimings["ip"] = Self.elapsedMilliseconds(since: started)
+
+            // 规则模式下另测一条"国内域名"的出口，和代理出口分开显示。
+            if let china = await service.chinaEgressIP() {
+                self.inspection.chinaIP = china
+                if let rep = await IPReputationService().lookup(ip: china) {
+                    self.inspection.chinaCountry = rep.country
+                }
+            }
 
             started = ContinuousClock.now
             self.inspection.cloudflare = await service.cloudflareTrace()

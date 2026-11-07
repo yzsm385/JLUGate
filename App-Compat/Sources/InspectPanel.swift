@@ -217,7 +217,8 @@ struct InspectPanel: View {
             }
             if let reputation = model.ipReputation {
                 HStack(spacing: 6) {
-                    if let flag = CountryFlag.emoji(for: reputation.country) { Text(flag) }
+                    // 不再重复国旗：卡头已经有一个代表代理出口的旗；只有国家不同才在
+                    // 下面（国内出口）单独显示旗。
                     Text(reputation.kindTitle).font(.caption)
                     if reputation.proxy == true {
                         Text(Copy.t("P30")).font(.system(size: 9)).foregroundStyle(.orange)
@@ -239,6 +240,23 @@ struct InspectPanel: View {
                 }
             } else if model.inspectionRunning {
                 Text("检测中…").font(.caption2).foregroundStyle(.secondary)
+            }
+            if let china = model.inspection.chinaIP,
+               !model.inspection.publicIPs.contains(where: { $0.ip == china }) {
+                HStack(spacing: 6) {
+                    let different = (model.inspection.chinaCountry ?? "").uppercased()
+                        != (proxyCountry ?? "").uppercased()
+                    if different, let flag = CountryFlag.emoji(for: model.inspection.chinaCountry) {
+                        Text(flag)
+                    }
+                    Text("国内出口 \(china)")
+                        .font(.caption.monospaced())
+                    Spacer(minLength: 0)
+                    if different, let country = model.inspection.chinaCountry {
+                        Text(CountryFlag.label(country))
+                            .font(.system(size: 9)).foregroundStyle(.secondary)
+                    }
+                }
             }
             let latency = latencyRows
             if !latency.isEmpty || model.authLivenessRunning || model.pingRunning {
@@ -268,6 +286,12 @@ struct InspectPanel: View {
         .padding(8)
         .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var proxyCountry: String? {
+        model.geoConsensus?.country
+            ?? model.inspection.cloudflare?.location
+            ?? model.ipReputation?.country
     }
 
     private var egressHint: String {

@@ -28,6 +28,33 @@ public struct InspectionService: Sendable {
         return samples.filter { seen.insert($0.ip).inserted }
     }
 
+    /// 规则模式下，国内域名会走直连；用一个国内 IP 回显服务看"中国出口"。
+    /// 代理/全局模式下它可能只返回代理出口，所以调用方仍要按实际国家判断。
+    public func chinaEgressIP() async -> String? {
+        let urls = [
+            "https://myip.ipip.net",
+            "https://ip.cn/api/index?ip=&type=0",
+            "https://www.taobao.com/help/getip.php",
+        ]
+        for url in urls {
+            let response = await httpText(url, timeout: .seconds(5))
+            guard response.status == 200, let body = response.body else { continue }
+            if let ip = Self.firstIPv4(in: body), IPv4Address(ip) != nil {
+                return ip
+            }
+        }
+        return nil
+    }
+
+    private static func firstIPv4(in text: String) -> String? {
+        guard let regex = try? NSRegularExpression(
+            pattern: #"\b(?:\d{1,3}\.){3}\d{1,3}\b"#) else { return nil }
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        guard let match = regex.firstMatch(in: text, range: range),
+              let swiftRange = Range(match.range, in: text) else { return nil }
+        return String(text[swiftRange])
+    }
+
     public func cloudflareTrace() async -> CloudflareTrace? {
         let response = await httpText("https://www.cloudflare.com/cdn-cgi/trace")
         guard response.status == 200, let body = response.body else { return nil }
