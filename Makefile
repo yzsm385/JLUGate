@@ -25,7 +25,9 @@ build:
 # 打包 universal CLI（CHECKLIST §10.3）
 release-probe:
 	$(SANDBOX_ENV) swift build -c release --arch arm64 --arch x86_64 $(SWIFT_FLAGS)
-	lipo -info .build/apple/Products/Release/jlugate-probe
+	@probe=$$(find .build -path '*/Products/Release/jlugate-probe' -type f | head -1); \
+	  echo "产物：$$probe"; lipo -info "$$probe"; \
+	  cp "$$probe" dist/jlugate-probe && echo "已复制到 dist/jlugate-probe（拷到有线那台 Mac 即可用）"
 
 # 离线核对 342 字节登录包
 dump-login:
