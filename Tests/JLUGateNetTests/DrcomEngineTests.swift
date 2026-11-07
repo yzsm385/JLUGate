@@ -704,6 +704,53 @@ struct DrcomEngineTests {
         await engine.stop()
     }
 
+    @Test("272 字节文件包确认插在 A/C 应答前面时，不算应答、也不吃掉真应答")
+    func strayFileReplyDoesNotStealAcknowledgment() async throws {
+        // 第一包 A 的应答前面先塞一个 272 字节的文件包确认
+        let injected = Atomic(false)
+        let responder: @Sendable (Data) -> [Data] = { datagram in
+            if Self.isLoginFrame(datagram) { return [RecordedGateway.loginSuccess()] }
+            switch datagram.count {
+            case 20: return [RecordedGateway.challengeReply()]
+            case 38: return [RecordedGateway.keepAliveAReply()]
+            case 40:
+                let version = Array(datagram[0x06..<0x08])
+                if version == [0x0F, 0x27] { return [] }   // 文件包：这次故意不回
+                var blob = [UInt8](datagram)
+                blob[2] = 0x10
+                blob[3] = 0x01
+                blob.append(contentsOf: [UInt8](repeating: 0, count: 272 - 40))
+                let reply = RecordedGateway.keepAliveBReply(to: datagram)
+                let firstTime = injected.withLock { value -> Bool in
+                    if value { return false }
+                    value = true
+                    return true
+                }
+                // 只有第一次插 272，避免把每一轮都搞乱
+                return firstTime ? [Data(blob), reply] : [reply]
+            default: return []
+            }
+        }
+        let (engine, channel, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: responder)
+        let stream = await engine.events()
+        let logs = Atomic<[String]>([])
+        let collector = Task {
+            for await event in stream {
+                if case .log(let message) = event { logs.withLock { $0.append(message) } }
+            }
+        }
+        await engine.start()
+        try await expectEventually("自检结论", timeout: .seconds(10)) {
+            logs.withLock { $0.contains { $0.contains("保活B 自检：全部应答") } }
+        }
+        collector.cancel()
+        await engine.stop()
+        #expect(channel.sentFrames.filter { $0.count == 40 }.count >= 3)
+        #expect(logs.withLock { $0 }.contains { $0.contains("文件包应答 272 字节") })
+    }
+
     @Test("保活 B 整场收不到回执也不判掉线（会话由保活 A 决定）")
     func keepAliveBFailureDoesNotDropSession() async throws {
         // 只应 A，40 字节的 B 包一个都不回 —— 真机上就是这个样子。

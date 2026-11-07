@@ -594,14 +594,29 @@ public actor DrcomEngine {
                                              datagram.count, bLegacyTypes ? " [旧格式]" : "")))
                             try await context.channel.send(datagram)
                             bSent += 1
-                            let incoming = try await receive(matching: { frame in
-                                switch frame {
-                                case .keepAliveBRequest, .keepAliveBReply: true
-                                default: false
+                            // 等的是 40 字节的 A/C 应答。272 字节的文件包确认随时可能插进来，
+                            // 它**不是**保活应答：记一行、继续等真正的那一包，别把 tail/应答计数搞乱。
+                            let deadline = clock.now() + configuration.keepAliveInterval
+                            var answer: IncomingFrame?
+                            while clock.now() < deadline {
+                                let remaining = deadline - clock.now()
+                                let incoming = try await receive(matching: { frame in
+                                    switch frame {
+                                    case .keepAliveBRequest, .keepAliveBReply: true
+                                    default: false
+                                    }
+                                }, timeout: remaining)
+                                if case .keepAliveBReply(let long) = incoming.frame {
+                                    emit(.log("保活B 文件包应答 \(long.raw.count) 字节（不参与 tail）"))
+                                    continue
                                 }
-                            }, timeout: configuration.keepAliveInterval)
-                            switch incoming.frame {
-                            case .keepAliveBRequest(let replyType, let replyCounter, let replyTail):
+                                answer = incoming
+                                break
+                            }
+                            guard let incoming = answer else {
+                                throw DrcomError.timeout(stage: "keepAliveB")
+                            }
+                            if case .keepAliveBRequest(let replyType, let replyCounter, let replyTail) = incoming.frame {
                                 bAnswered += 1
                                 if !loggedFirstBReply {
                                     loggedFirstBReply = true
@@ -611,11 +626,6 @@ public actor DrcomEngine {
                                                  Int(replyType), Int(replyCounter), Int(replyTail),
                                                  incoming.payload.count)))
                                 tail = replyTail
-                            case .keepAliveBReply(let reply):
-                                // 272 字节：网关对文件包的确认，**不是** A/C 应答，tail 不取。
-                                emit(.log("保活B 文件包应答 \(reply.raw.count) 字节（不参与 tail）"))
-                            default:
-                                break
                             }
                         }
                         bTimeouts = 0
