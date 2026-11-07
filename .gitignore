@@ -16,6 +16,15 @@ docs/captures/*
 dist/
 *.app
 
+# 本地临时目录（截图、编译探针、下载的研究资料）：不进仓库，也不参与隐私扫描
+.tmp-shots/
+.tmp-swift/
+.tmp-research/
+dl_lines.sh
+
 # ⛔ 本地私密档案：真实凭据、原始抓包、未脱敏样本
 local/
 **/PRIVATE.md
+
+# 真机诊断（含真实 MAC / 校园 IP）：只在本机排障用，不入库
+docs/debug_proof/

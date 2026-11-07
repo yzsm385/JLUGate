@@ -1211,15 +1211,21 @@ final class AppModel {
                     FileLogger.shared.log("在线巡检：探针不通（第 \(silent) 次）")
                     // 有些网关掉线时不再重定向到门户，只是静默丢包：探针一直"说不准"。
                     // 连续 4 次（约 100 秒）外网探不到、而校内还通，就按会话失效处理。
-                    // 5 分钟冷却，避免探测目标本身被拦时反复重登。
+                    // 但**保活 A 还在回**说明服务端会话活着（它带服务端统计），这时重登
+                    // 只会白白把连接打断一次——诊断里「每 12 分钟重登一遍」就是这么来的。
+                    // 保活真停了由上面的 120s 检查负责重连，这里不抢。
                     if silent >= 4 {
+                        let keepAliveAlive = self.lastTrafficAt
+                            .map { Date().timeIntervalSince($0) <= 60 } ?? false
                         let campus = await CampusLiveness().probe(
                             interface: interface,
                             server: IPv4Address(self.config.server) ?? IPv4Address("10.100.61.3")!,
                             dns: self.config.currentProfile?.dns.compactMap(IPv4Address.init).first)
                         let cooledDown = self.lastForcedReauthAt
                             .map { Date().timeIntervalSince($0) > 300 } ?? true
-                        if campus, cooledDown {
+                        if keepAliveAlive {
+                            FileLogger.shared.log("在线巡检：探针不通但保活 A 仍在应答，会话还活着，不重登")
+                        } else if campus, cooledDown {
                             self.lastForcedReauthAt = Date()
                             self.recentLog.insert("外网探不到、校内可达：按会话失效自动重连", at: 0)
                             FileLogger.shared.log("在线巡检：连续 \(silent) 次探不到外网、校内可达 → 重新认证")
