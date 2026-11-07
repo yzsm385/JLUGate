@@ -945,9 +945,51 @@ struct KeepAliveScanResult: Sendable {
 /// 为什么需要它：1.4.7 把保活 B 的 `0x05` 从「序号」改成「包类型」（A=01 / C=03），
 /// 依据是官方抓包 + 社区实现；真网关的方言没法离线确认。
 /// 这个命令半分钟就能给出答案，不用等十几分钟看它会不会掉线。
+/// 从 App 落盘的配置里取账号/密码/服务器：让扫描工具可以一条命令跑完，
+/// 不用把密码打进 shell 历史。读不到就返回 nil（再退回命令行参数）。
+func savedLoginDefaults() -> (account: String, password: String, server: String,
+                              serverPort: Int, localPort: Int)? {
+    let support = FileManager.default.urls(for: .applicationSupportDirectory,
+                                           in: .userDomainMask)[0]
+        .appendingPathComponent("JLUGate")
+    guard let configData = try? Data(contentsOf: support.appendingPathComponent("config.json")),
+          let config = try? JSONSerialization.jsonObject(with: configData) as? [String: Any],
+          let account = config["account"] as? String, !account.isEmpty else { return nil }
+    var password = ""
+    var resolvedAccount = account
+    if let credData = try? Data(contentsOf: support.appendingPathComponent("credentials.json")),
+       let creds = try? JSONSerialization.jsonObject(with: credData) as? [String: String] {
+        if let saved = creds[account] {
+            password = saved
+        } else if creds.count == 1, let only = creds.first {
+            // 账号在配置里被改过、但只存过一个密码：就用它（登录不上时服务器会明说）
+            resolvedAccount = only.key
+            password = only.value
+        }
+    }
+    return (resolvedAccount,
+            password,
+            config["server"] as? String ?? PacketLayout.defaultServer.description,
+            config["serverPort"] as? Int ?? Int(PacketLayout.serverPort),
+            config["localPort"] as? Int ?? Int(PacketLayout.localPort))
+}
+
 func runKeepAliveScan(_ options: Options) -> Int32 {
+    var options = options
+    if options.account.isEmpty || options.password.isEmpty,
+       let saved = savedLoginDefaults() {
+        if options.account.isEmpty { options.account = saved.account }
+        if options.password.isEmpty { options.password = saved.password }
+        if options.server == PacketLayout.defaultServer.description { options.server = saved.server }
+        if options.serverPort == Int(PacketLayout.serverPort) { options.serverPort = saved.serverPort }
+        if options.localPort == Int(PacketLayout.localPort) { options.localPort = saved.localPort }
+        if !saved.password.isEmpty {
+            let redacted = String(saved.account.prefix(3)) + "***"
+            print("已读取本机配置：账号 \(redacted)（密码来自 credentials.json）")
+        }
+    }
     guard !options.account.isEmpty, !options.password.isEmpty else {
-        print("需要 --account 与 --password")
+        print("需要 --account 与 --password（或先在 App 里登录过一次）")
         return 2
     }
     guard let server = IPv4Address(options.server) else {

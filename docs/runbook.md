@@ -417,8 +417,12 @@ pmset sleepnow      # 或直接合盖
 
 ```bash
 # 先退出 JLU Gate（它占着 UDP 61440）
-./jlugate-probe keepalive-scan --account <学号> --password <密码> [--mac <登记MAC>]
+./jlugate-probe keepalive-scan
 ```
+
+账号/密码/服务器会自动从 App 落盘的
+`~/Library/Application Support/JLUGate/{config,credentials}.json` 读取，
+所以不用把密码打进 shell 历史。读不到时再显式给 `--account/--password`。
 
 输出里每种候选格式一行，**有应答**才会打印 `→ 回 N 字节 type=.. counter=.. tail=..`：
 
