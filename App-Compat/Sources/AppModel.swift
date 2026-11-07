@@ -2009,7 +2009,11 @@ final class AppModel {
         text += "\n\n== 在线巡检 ==\n"
         text += "当前链路：\(link?.displayName ?? "-")  Dr.Com 保活=\(link?.usesDrcomUDP == true)\n"
         text += "最后一次保活遥测：\(lastTrafficAt.map { ISO8601DateFormatter().string(from: $0) } ?? "-")\n"
-        text += "上次强制重登：\(lastForcedReauthAt.map { ISO8601DateFormatter().string(from: $0) } ?? "-")"
+        text += "上次强制重登：\(lastForcedReauthAt.map { ISO8601DateFormatter().string(from: $0) } ?? "-")\n"
+        // 实测网关给的是 600 秒租约（docs/analysis/wired-disconnect.md §2.5）：
+        // 在线时长能过 600 秒 = 保活 B 的续租生效了，是判读断联有没有修好的第一指标。
+        let online = Int(secondsOnline)
+        text += "本次会话已在线：\(online)s（租约 600s：\(online > 600 ? "已超过，续租生效 ✅" : "还没到")）"
         // 闪退时用户往往只发诊断文件：把崩溃栈尾部一起带上
         let crashLog = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs/JLUGate/crash-stack.log")
