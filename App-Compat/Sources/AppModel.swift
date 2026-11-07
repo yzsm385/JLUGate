@@ -1157,6 +1157,8 @@ final class AppModel {
         onlineWatchTask = Task { @MainActor [weak self] in
             var intercepted = 0
             var silent = 0
+            /// 探针从什么时候开始一直不通（成功一次就清空）：保活 A 还活着也不能无限等下去
+            var silentSince: Date?
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(25))
                 guard let self, !Task.isCancelled else { return }
@@ -1195,6 +1197,7 @@ final class AppModel {
                 case .online:
                     intercepted = 0
                     silent = 0
+                    silentSince = nil
                 case .offline:
                     intercepted += 1
                     silent = 0
@@ -1207,6 +1210,7 @@ final class AppModel {
                     }
                 case .inconclusive:
                     intercepted = 0
+                    if silent == 0 { silentSince = Date() }
                     silent += 1
                     FileLogger.shared.log("在线巡检：探针不通（第 \(silent) 次）")
                     // 有些网关掉线时不再重定向到门户，只是静默丢包：探针一直"说不准"。
@@ -1225,6 +1229,16 @@ final class AppModel {
                             .map { Date().timeIntervalSince($0) > 300 } ?? true
                         if keepAliveAlive {
                             FileLogger.shared.log("在线巡检：探针不通但保活 A 仍在应答，会话还活着，不重登")
+                            // 安全网：一直不通超过 10 分钟，说明「保活还在、流量就是不通」，
+                            // 再等也没用，按会话失效重连一次（有 5 分钟冷却兜底）。
+                            let stuck = silentSince.map { Date().timeIntervalSince($0) } ?? 0
+                            if stuck > 600, cooledDown {
+                                self.lastForcedReauthAt = Date()
+                                self.recentLog.insert("外网已 \(Int(stuck / 60)) 分钟不通，强制重连一次", at: 0)
+                                FileLogger.shared.log("在线巡检：探针已 \(Int(stuck / 60)) 分钟不通（保活仍在应答），强制重连")
+                                self.retry()
+                                return
+                            }
                         } else if campus, cooledDown {
                             self.lastForcedReauthAt = Date()
                             self.recentLog.insert("外网探不到、校内可达：按会话失效自动重连", at: 0)
