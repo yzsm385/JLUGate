@@ -492,7 +492,10 @@
       foreign = foreign.filter(function (c) { return langOf(c) === "英语"; });
     }
     // 只显示计入推免的公共英语，并按课程代码把分级重复行合并。
-    foreign = groupForeignRows(foreign.filter(isCountableForeign));
+    // 白名单专业（允许非英语）不套用“只留大学英语”的过滤，否则日语/俄语会被误删。
+    foreign = englishOnly
+      ? groupForeignRows(foreign.filter(isCountableForeign))
+      : groupForeignRows(foreign);
 
     if (foreign.length) {
       var sec = document.createElement("section");
@@ -507,7 +510,7 @@
         : "Ⅱ、Ⅲ、Ⅳ";
       hint.textContent = englishOnly
         ? "本专业按英语培养，只列出计入推免的大学英语 " + levelText + "；预备级、英语Ⅰ和写作/翻译/文学/概况/学术英语等拓展课不计，已隐藏。"
-        : "默认英语；只列出计入推免的大学英语 " + levelText + "，其他语种/拓展课不计。";
+        : "默认英语；该专业允许其他语种时可在下方切换。各语种只按本专业实际修读勾选。";
       sec.appendChild(hint);
 
       var langs = [];
