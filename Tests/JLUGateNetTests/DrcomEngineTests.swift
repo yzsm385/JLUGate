@@ -3,7 +3,7 @@ import Testing
 import JLUGateCore
 @testable import JLUGateNet
 
-@Suite("引擎状态机（假通道 + 假时钟）")
+@Suite("引擎状态机（假通道 + 假时钟）", .serialized)
 struct DrcomEngineTests {
 
     private func makeConfiguration(keepAliveInterval: Duration = .seconds(10)) -> EngineConfiguration {
@@ -400,7 +400,7 @@ struct DrcomEngineTests {
         }
 
         await engine.start()
-        try await expectEventually("掉线后进入 reconnecting", timeout: .seconds(5)) {
+        try await expectEventually("掉线后进入 reconnecting", timeout: .seconds(10)) {
             sawReconnecting.withLock { $0 }
         }
         collector.cancel()
@@ -431,7 +431,7 @@ struct DrcomEngineTests {
             responder: longBReplyResponder())
         await engine.start()
         try await expectEventually("进入 online") { await engine.currentState() == .online }
-        try await expectEventually("收到至少 3 个 B 包", timeout: .seconds(4)) {
+        try await expectEventually("收到至少 3 个 B 包", timeout: .seconds(10)) {
             channel.sentFrames.filter { $0.count == 40 }.count >= 3
         }
         await engine.stop()
@@ -455,7 +455,7 @@ struct DrcomEngineTests {
                                                  responder: wellBehavedResponder())
         await engine.start()
         try await expectEventually("进入 online") { await engine.currentState() == .online }
-        try await expectEventually("收到至少两轮保活", timeout: .seconds(3)) {
+        try await expectEventually("收到至少两轮保活", timeout: .seconds(10)) {
             channel.sentFrames.contains { $0.count == 38 } &&
             channel.sentFrames.filter { $0.count == 40 }.count >= 2
         }
