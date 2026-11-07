@@ -455,9 +455,11 @@ struct DrcomEngineTests {
                                                  responder: wellBehavedResponder())
         await engine.start()
         try await expectEventually("进入 online") { await engine.currentState() == .online }
-        try await expectEventually("收到至少两轮保活", timeout: .seconds(10)) {
+        // 要断言前两对 B 的 round（05/06/07/08），必须至少等到 4 个 B 包；
+        // 以前只等 2 个，CI 慢机上 prefix(4) 不足 4 个就断言，必然假失败。
+        try await expectEventually("收到至少两对 B", timeout: .seconds(10)) {
             channel.sentFrames.contains { $0.count == 38 } &&
-            channel.sentFrames.filter { $0.count == 40 }.count >= 2
+            channel.sentFrames.filter { $0.count == 40 }.count >= 4
         }
         await engine.stop()
 
