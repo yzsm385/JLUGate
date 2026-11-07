@@ -485,6 +485,48 @@ struct DrcomEngineTests {
         }
     }
 
+    @Test("真网关只回类型 01/03 的 B 包：连续多轮都必须有应答（回归“每 12 分钟断一次”）")
+    func keepAliveBTypeStrictGateway() async throws {
+        // 模拟 2026-11 真网关的行为：只认类型 01(A)/03(C)，其它类型静默丢弃。
+        // 1.4.1 把 0x05 当序号发 01/03/05/07…，从第三包起全被丢 → 会话 ~10 分钟被释放。
+        let responder: @Sendable (Data) -> [Data] = { datagram in
+            if Self.isLoginFrame(datagram) { return [RecordedGateway.loginSuccess()] }
+            switch datagram.count {
+            case 20: return [RecordedGateway.challengeReply()]
+            case 38: return [RecordedGateway.keepAliveAReply()]
+            case 40:
+                let type = datagram[datagram.startIndex + 0x05]
+                let version = Array(datagram[0x06..<0x08])
+                if version == [0x0F, 0x27] {                  // 文件包 → 272 字节确认
+                    var reply = [UInt8](datagram)
+                    reply[2] = 0x10
+                    reply[3] = 0x01
+                    reply.append(contentsOf: [UInt8](repeating: 0, count: 272 - 40))
+                    return [Data(reply)]
+                }
+                guard type == 0x01 || type == 0x03 else { return [] }
+                return [RecordedGateway.keepAliveBReply(to: datagram)]
+            default: return []
+            }
+        }
+        let (engine, channel, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: responder)
+        await engine.start()
+        try await expectEventually("进入 online") { await engine.currentState() == .online }
+        // 至少跑 4 轮 B（每轮 A+C），全部都应该被应答
+        try await expectEventually("跑满 4 轮 B", timeout: .seconds(15)) {
+            channel.sentFrames.filter { $0.count == 40 }.count >= 1 + 8
+        }
+        #expect(await engine.currentState() == .online)
+
+        let bFrames = channel.sentFrames.filter { $0.count == 40 }
+        let types = bFrames.dropFirst().map { $0[0x05] }
+        #expect(!types.contains(0x05), "绝不能再出现类型 05（真网关会直接丢弃）")
+        #expect(types.allSatisfy { $0 == 0x01 || $0 == 0x03 }, "类型只能是 01/03，实际 \(types)")
+        await engine.stop()
+    }
+
     @Test("保活 B 整场收不到回执也不判掉线（会话由保活 A 决定）")
     func keepAliveBFailureDoesNotDropSession() async throws {
         // 只应 A，40 字节的 B 包一个都不回 —— 真机上就是这个样子。
