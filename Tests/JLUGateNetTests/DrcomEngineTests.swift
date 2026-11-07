@@ -751,6 +751,89 @@ struct DrcomEngineTests {
         #expect(logs.withLock { $0 }.contains { $0.contains("文件包应答 272 字节") })
     }
 
+    /// 模拟真网关的 600 秒租约：A 保活只查流量，**只有合法的保活 B 能续租**。
+    /// 这里用「连续 30 次 A 都没被 B 续上」近似 600 秒（引擎每 20 秒发一次 A）。
+    final class LeaseGateway: @unchecked Sendable {
+        private let lock = NSLock()
+        private var sinceRenewal = 0
+        private var expiredCount = 0
+        let renewsOnB: Bool
+        let leaseRounds = 30
+
+        init(renewsOnB: Bool) { self.renewsOnB = renewsOnB }
+        var expirations: Int { lock.lock(); defer { lock.unlock() }; return expiredCount }
+
+        func respond(_ datagram: Data) -> [Data] {
+            if DrcomEngineTests.isLoginFrame(datagram) { return [RecordedGateway.loginSuccess()] }
+            switch datagram.count {
+            case 20: return [RecordedGateway.challengeReply()]
+            case 38:
+                lock.lock()
+                sinceRenewal += 1
+                let expired = sinceRenewal > leaseRounds
+                if expired { expiredCount += 1 }
+                lock.unlock()
+                return expired ? [] : [RecordedGateway.keepAliveAReply()]
+            case 40:
+                let type = datagram[datagram.startIndex + 0x05]
+                let version = Array(datagram[0x06..<0x08])
+                if renewsOnB, version != [0x0F, 0x27], type == 0x01 || type == 0x03 {
+                    lock.lock(); sinceRenewal = 0; lock.unlock()
+                }
+                return [RecordedGateway.keepAliveBReply(to: datagram)]
+            default: return []
+            }
+        }
+    }
+
+    @Test("600 秒租约：保活 B 有效时能一直续租，会话远超租约仍在线")
+    func leaseRenewedByKeepAliveB() async throws {
+        let gateway = LeaseGateway(renewsOnB: true)
+        let (engine, channel, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: { gateway.respond($0) })
+        let stream = await engine.events()
+        let sawReconnecting = Atomic(false)
+        let collector = Task {
+            for await event in stream {
+                if case .state(.reconnecting) = event { sawReconnecting.withLock { $0 = true } }
+            }
+        }
+        await engine.start()
+        try await expectEventually("进入 online") { await engine.currentState() == .online }
+        // 跑过 2 个租约长度（60 次 A 保活）
+        try await expectEventually("跑过两个租约", timeout: .seconds(20)) {
+            channel.sentFrames.filter { $0.count == 38 }.count >= 65
+        }
+        #expect(gateway.expirations == 0, "B 每次都在续租，网关不该判过期")
+        #expect(await engine.currentState() == .online)
+        #expect(sawReconnecting.withLock { $0 } == false)
+        collector.cancel()
+        await engine.stop()
+    }
+
+    @Test("600 秒租约：B 续不上时网关会释放会话，引擎要能发现并重连")
+    func leaseExpiresWithoutKeepAliveB() async throws {
+        let gateway = LeaseGateway(renewsOnB: false)
+        let (engine, _, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: { gateway.respond($0) })
+        let stream = await engine.events()
+        let sawReconnecting = Atomic(false)
+        let collector = Task {
+            for await event in stream {
+                if case .state(.reconnecting) = event { sawReconnecting.withLock { $0 = true } }
+            }
+        }
+        await engine.start()
+        try await expectEventually("租约到期后进入 reconnecting", timeout: .seconds(25)) {
+            sawReconnecting.withLock { $0 }
+        }
+        #expect(gateway.expirations > 0, "网关按 600 秒租约释放了会话")
+        collector.cancel()
+        await engine.stop()
+    }
+
     @Test("保活 B 整场收不到回执也不判掉线（会话由保活 A 决定）")
     func keepAliveBFailureDoesNotDropSession() async throws {
         // 只应 A，40 字节的 B 包一个都不回 —— 真机上就是这个样子。
