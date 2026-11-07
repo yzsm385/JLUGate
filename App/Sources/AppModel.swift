@@ -1152,6 +1152,18 @@ final class AppModel {
     /// - 204：正常；
     /// - 被门户拦下（302/200 门户页）：会话没了 → 连续两次就重新认证；
     /// - 完全探不到：只记日志（可能只是探测目标被拦，不轻易判死刑）。
+    /// 探针结论 → 一句能写进日志/诊断的原因（DNS 不通？连不上？被门户拦？）
+    private func probeReason(_ outcome: ProbeOutcome) -> String {
+        switch outcome {
+        case .healthy:
+            return "204 正常"
+        case .captivePortal(let code, let location):
+            return "被门户拦下 HTTP \(code)\(location.map { " → \($0)" } ?? "")"
+        case .unreachable(let reason):
+            return String(reason.prefix(300))
+        }
+    }
+
     private func startOnlineWatch() {
         onlineWatchTask?.cancel()
         onlineWatchTask = Task { @MainActor [weak self] in
@@ -1195,13 +1207,17 @@ final class AppModel {
 
                 switch SessionLiveness.verdict(outcome) {
                 case .online:
+                    if silent > 0 || intercepted > 0 {
+                        let stuck = silentSince.map { Int(Date().timeIntervalSince($0)) } ?? 0
+                        FileLogger.shared.log("在线巡检：外网恢复（之前探针不通 \(silent) 次、被拦 \(intercepted) 次，约 \(stuck)s）")
+                    }
                     intercepted = 0
                     silent = 0
                     silentSince = nil
                 case .offline:
                     intercepted += 1
                     silent = 0
-                    FileLogger.shared.log("在线巡检：外网被门户拦下（第 \(intercepted) 次）")
+                    FileLogger.shared.log("在线巡检：外网被门户拦下（第 \(intercepted) 次）—— \(probeReason(outcome))")
                     if intercepted >= 2 {
                         self.recentLog.insert("外网断了（会话已失效），正在自动重连", at: 0)
                         FileLogger.shared.log("在线巡检：连续 \(intercepted) 次被拦，重新认证")
@@ -1212,7 +1228,11 @@ final class AppModel {
                     intercepted = 0
                     if silent == 0 { silentSince = Date() }
                     silent += 1
-                    FileLogger.shared.log("在线巡检：探针不通（第 \(silent) 次）")
+                    if silent == 1 {
+                        FileLogger.shared.log("在线巡检：探针开始不通 —— \(probeReason(outcome))")
+                    } else if silent % 4 == 0 {
+                        FileLogger.shared.log("在线巡检：探针仍不通（第 \(silent) 次）—— \(probeReason(outcome))")
+                    }
                     // 有些网关掉线时不再重定向到门户，只是静默丢包：探针一直"说不准"。
                     // 连续 4 次（约 100 秒）外网探不到、而校内还通，就按会话失效处理。
                     // 但**保活 A 还在回**说明服务端会话活着（它带服务端统计），这时重登
@@ -2014,6 +2034,30 @@ final class AppModel {
         // 在线时长能过 600 秒 = 保活 B 的续租生效了，是判读断联有没有修好的第一指标。
         let online = Int(secondsOnline)
         text += "本次会话已在线：\(online)s（租约 600s：\(online > 600 ? "已超过，续租生效 ✅" : "还没到")）"
+        // 出问题时最需要的两件事：外网到底通不通、体检看到的出口是谁。
+        // 以前这些只在界面上，导出的诊断里没有，只能靠用户口述。
+        text += "\n\n== 最近一次体检 / 排查 ==\n"
+        if let diagnosis = reachabilityDiagnosis {
+            text += "排查结论：\(diagnosis.summary)\n"
+            if !diagnosis.action.isEmpty { text += "建议：\(diagnosis.action)\n" }
+        } else {
+            text += "排查结论：-（这次运行还没跑过「排查」）\n"
+        }
+        if !reachability.isEmpty {
+            let failed = reachability.filter { $0.stage != .ok }
+            text += "站点：共 \(reachability.count) 个，失败 \(failed.count) 个"
+            if !failed.isEmpty {
+                text += "（\(failed.prefix(6).map { $0.host }.joined(separator: "、"))）"
+            }
+            text += "\n"
+        }
+        if let ip = inspection.publicIPs.first?.ip {
+            text += "体检出口 IP：\(ip)"
+            if let china = inspection.chinaIP { text += "（国内出口 \(china)）" }
+            text += "\n"
+        } else {
+            text += "体检出口 IP：-（这次运行还没跑过「体检」）\n"
+        }
         // 闪退时用户往往只发诊断文件：把崩溃栈尾部一起带上
         let crashLog = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs/JLUGate/crash-stack.log")
