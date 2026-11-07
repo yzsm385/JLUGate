@@ -253,7 +253,8 @@ struct InspectPanel: View {
                         .font(.caption.monospaced())
                     Spacer(minLength: 0)
                     if different, let country = model.inspection.chinaCountry {
-                        Text(CountryFlag.label(country))
+                        // 左边已经有一个旗了；这里只补国家代码，避免同一行两个 🇨🇳。
+                        Text(country.uppercased())
                             .font(.system(size: 9)).foregroundStyle(.secondary)
                     }
                 }
