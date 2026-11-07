@@ -506,9 +506,37 @@ struct LoopbackProvider: InterfaceProvider {
 }
 
 final class ResultBox: @unchecked Sendable {
-    var sawOnline = false
-    var keepAliveReplies = 0
-    var states: [String] = []
+    private let lock = NSLock()
+    private var online = false
+    private var replies = 0
+    private var phases: [String] = []
+
+    var sawOnline: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return online
+    }
+
+    var keepAliveReplies: Int {
+        lock.lock(); defer { lock.unlock() }
+        return replies
+    }
+
+    var states: [String] {
+        lock.lock(); defer { lock.unlock() }
+        return phases
+    }
+
+    func append(_ phase: String) {
+        lock.lock(); phases.append(phase); lock.unlock()
+    }
+
+    func bumpReply() {
+        lock.lock(); replies += 1; lock.unlock()
+    }
+
+    func markOnline() {
+        lock.lock(); online = true; lock.unlock()
+    }
 }
 
 func runSelfTest(_ options: Options) -> Int32 {
@@ -579,10 +607,10 @@ func runSelfTest(_ options: Options) -> Int32 {
             for await event in stream {
                 switch event {
                 case .state(let state):
-                    result.states.append(state.phase)
+                    result.append(state.phase)
                     print("状态 → \(state.phase)")
                 case .traffic(let seconds, let stats):
-                    result.keepAliveReplies += 1
+                    result.bumpReply()
                     print("保活应答：在线 \(seconds)s 统计 \(stats)")
                 case .session(let account, let clientIP, let session):
                     print("会话建立：\(account) @ \(clientIP ?? "-") session=\(String(format: "0x%04x", session))")
@@ -592,10 +620,18 @@ func runSelfTest(_ options: Options) -> Int32 {
             }
         }
         await engine.start()
-        try? await Task.sleep(for: .seconds(options.seconds))
+        // CI 机器慢时，6 秒窗口里第一轮保活可能还没回来：至少等到第一轮，
+        // 但最多多等 5 秒，避免偶发失败。
+        let start = Date()
+        while Date().timeIntervalSince(start) < options.seconds || result.keepAliveReplies == 0 {
+            try? await Task.sleep(for: .milliseconds(100))
+            if Date().timeIntervalSince(start) > options.seconds + 5 { break }
+        }
         await engine.stop()
+        // 给事件流一点时间把最后一轮 traffic 交给 collector，再读结果。
+        try? await Task.sleep(for: .milliseconds(200))
         collector.cancel()
-        result.sawOnline = result.states.contains("online")
+        if result.states.contains("online") { result.markOnline() }
         semaphore.signal()
     }
     _ = semaphore.wait(timeout: .now() + options.seconds + 15)
