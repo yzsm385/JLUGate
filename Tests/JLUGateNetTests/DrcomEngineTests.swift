@@ -336,7 +336,7 @@ struct DrcomEngineTests {
         await engine.stop()
     }
 
-    @Test("被代理 TUN 接管：报 capturedByTunnel，不发包")
+    @Test("被代理 TUN 接管且发不出去：报 capturedByTunnel（但会先真发一个 challenge）")
     func capturedByTunnel() async throws {
         var provider = FakeInterfaceProvider.wired
         provider.route = RouteInfo(destination: "10.100.61.3", gateway: "198.18.0.1", interface: "utun4")
@@ -349,7 +349,10 @@ struct DrcomEngineTests {
         }
         guard case .failed(let error) = await engine.currentState() else { return }
         #expect(error == .capturedByTunnel(interface: "utun4"))
-        #expect(channel.sentFrames.isEmpty)
+        // 现在会先发一个 challenge（socket 钉在物理口）：收到回执就继续登录，
+        // 收不到才判定「真的被代理吞了」——全局代理模式下也能连上，靠的就是这一点。
+        #expect(channel.sentFrames.count == 1)
+        #expect(channel.sentFrames.first?.count == 20)
         await engine.stop()
     }
 
@@ -831,6 +834,53 @@ struct DrcomEngineTests {
         }
         #expect(gateway.expirations > 0, "网关按 600 秒租约释放了会话")
         collector.cancel()
+        await engine.stop()
+    }
+
+    /// 全局代理把 10/8 也塞进 TUN 的情况：route get 返回 utun，但 socket 用 IP_BOUND_IF
+    /// 钉在 en7 上，报文其实能出去。以前这里直接报 capturedByTunnel，用户表现为
+    /// 「全局模式下怎么都连不上，切成规则模式才行」。
+    private func tunnelRouteProvider() -> FakeInterfaceProvider {
+        FakeInterfaceProvider(
+            interfaces: FakeInterfaceProvider.wired.interfaces,
+            route: RouteInfo(destination: "10.100.61.3", gateway: nil, interface: "utun4"),
+            configMethod: "Manual",
+            gateway: "192.0.2.1")
+    }
+
+    @Test("路由出口是 utun（全局代理）时照样尝试认证：收到回执就正常上线")
+    func tunnelRouteStillAuthenticates() async throws {
+        let (engine, _, _, _) = makeEngine(configuration: makeConfiguration(),
+                                           provider: tunnelRouteProvider(),
+                                           responder: wellBehavedResponder())
+        await engine.start()
+        try await expectEventually("照样能上线", timeout: .seconds(5)) {
+            await engine.currentState() == .online
+        }
+        await engine.stop()
+    }
+
+    @Test("路由出口是 utun 且 challenge 没回执：才报「被代理接管」")
+    func tunnelRouteWithoutReplyReportsCaptured() async throws {
+        // 只回 challenge，不回登录 → 走不到 online；这里直接让 challenge 也没有回执
+        let responder: @Sendable (Data) -> [Data] = { _ in [] }
+        let (engine, _, _, _) = makeEngine(configuration: makeConfiguration(),
+                                           provider: tunnelRouteProvider(),
+                                           responder: responder)
+        await engine.start()
+        try await expectEventually("进入 failed", timeout: .seconds(8)) {
+            if case .failed = await engine.currentState() { return true }
+            return false
+        }
+        let state = await engine.currentState()
+        if case .failed(let error) = state {
+            switch error {
+            case .capturedByTunnel: break
+            default: Issue.record("失败原因应为 capturedByTunnel，实际 \(error)")
+            }
+        } else {
+            Issue.record("应进入 failed，实际 \(state)")
+        }
         await engine.stop()
     }
 

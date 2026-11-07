@@ -131,6 +131,8 @@ public actor DrcomEngine {
     private var continuations: [UUID: AsyncStream<Event>.Continuation] = [:]
     private var lastError: DrcomError?
     private var sessionStartedAt: ContinuousClock.Instant?
+    /// 这次连接时 `route get 10.100.61.3` 的出口是不是代理 TUN（是的话认证失败要报"被代理接管"）
+    private var routeViaTunnel: String?
 
     public init(configuration: EngineConfiguration,
                 codec: DrcomCodec = DrcomCodec(),
@@ -307,8 +309,14 @@ public actor DrcomEngine {
                                                   actual: actualMask)
         }
 
+        // 全局代理（小火箭/Clash 的「全局」模式）会把 10/8 也塞进 TUN，路由表里
+        // `route get 10.100.61.3` 就成了 utun。但我们这条通道是 **IP_BOUND_IF 钉在物理口** 上的，
+        // 报文照样从 en7 出去——以前在这里直接放弃，用户就表现为「全局模式下怎么都连不上，
+        // 切成规则模式才行」。现在改成：先真发一个 challenge 试，收不到回执再报 capturedByTunnel。
+        routeViaTunnel = nil
         if let route = interfaces.route(to: configuration.server), route.isTunnel {
-            throw DrcomError.capturedByTunnel(interface: route.interface ?? "tunnel")
+            routeViaTunnel = route.interface ?? "tunnel"
+            emit(.log("路由出口是 \(routeViaTunnel ?? "tunnel")（代理 TUN）：认证包已钉在 \(chosen.name)，先试一次"))
         }
 
         serialCounter = nextSerial()
@@ -393,6 +401,10 @@ public actor DrcomEngine {
         } catch let error as DrcomError where error == .cancelled {
             throw error
         } catch {
+            // 路由本来是隧道、challenge 又收不到：这才真的是被代理吞了
+            if let tunnel = routeViaTunnel {
+                throw DrcomError.capturedByTunnel(interface: tunnel)
+            }
             throw DrcomError.gatewayUnreachable(host: configuration.server.description)
         }
         guard isCurrent(epoch) else { throw DrcomError.cancelled }

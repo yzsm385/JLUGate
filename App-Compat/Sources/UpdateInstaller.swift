@@ -48,12 +48,8 @@ enum UpdateInstaller {
         Task.detached(priority: .userInitiated) {
             progress(Copy.t("N18"))
             do {
-                let (tmp, response) = try await URLSession.shared.download(from: url)
-                guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-                    throw Failure.downloadFailed("HTTP \((response as? HTTPURLResponse)?.statusCode ?? -1)")
-                }
                 let zip = work.appendingPathComponent("update.zip")
-                try FileManager.default.moveItem(at: tmp, to: zip)
+                try await download(url: url, to: zip, progress: progress)
 
                 progress(Copy.t("N19"))
                 let extracted = work.appendingPathComponent("extracted", isDirectory: true)
@@ -93,6 +89,58 @@ enum UpdateInstaller {
                 onFailure(error.localizedDescription)
             }
         }
+    }
+
+    /// 带进度的下载：面板上能看见百分比，卡住 20 秒就明确报错（而不是一直转圈）。
+    private static func download(url: URL,
+                                 to destination: URL,
+                                 progress: @escaping @Sendable (String) -> Void) async throws {
+        final class Box: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value: Result<(URL, Int), Error>?
+            func set(_ result: Result<(URL, Int), Error>) { lock.lock(); value = result; lock.unlock() }
+            var result: Result<(URL, Int), Error>? { lock.lock(); defer { lock.unlock() }; return value }
+        }
+        let box = Box()
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 60
+        let task = URLSession.shared.downloadTask(with: request) { temporary, response, error in
+            if let error { box.set(.failure(error)); return }
+            guard let temporary, let http = response as? HTTPURLResponse else {
+                box.set(.failure(Failure.downloadFailed("没有收到文件")))
+                return
+            }
+            box.set(.success((temporary, http.statusCode)))
+        }
+        task.resume()
+
+        var lastPercent = -1
+        var lastBytes: Int64 = -1
+        var lastChange = ContinuousClock.now
+        while box.result == nil {
+            try await Task.sleep(for: .milliseconds(300))
+            // 只要字节数在涨就算有进展（不能只看 5% 的台阶：慢速链路上一个台阶可能要很久）
+            let written = task.progress.completedUnitCount
+            if written > lastBytes {
+                lastBytes = written
+                lastChange = ContinuousClock.now
+            }
+            let percent = Int(task.progress.fractionCompleted * 100)
+            if percent >= 0, percent != lastPercent, percent % 5 == 0 {
+                lastPercent = percent
+                progress("\(Copy.t("N18")) \(percent)%")
+            }
+            // 20 秒一个字节都没多就认输，别让人对着"正在下载"干等
+            if ContinuousClock.now - lastChange > .seconds(20) {
+                task.cancel()
+                throw Failure.downloadFailed("下载卡住了（20 秒没有任何数据），检查代理/网络后重试")
+            }
+        }
+        guard let result = box.result else { throw Failure.downloadFailed("下载失败") }
+        let (temporary, status) = try result.get()
+        guard status == 200 else { throw Failure.downloadFailed("HTTP \(status)") }
+        try? FileManager.default.removeItem(at: destination)
+        try FileManager.default.moveItem(at: temporary, to: destination)
     }
 
     private static func findApp(in directory: URL) -> URL? {

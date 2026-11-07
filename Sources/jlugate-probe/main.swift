@@ -879,8 +879,9 @@ func runLogin(_ options: Options) -> Int32 {
 
     let provider = SystemInterfaceProvider()
     if let route = provider.route(to: server), route.isTunnel {
-        print("❌ 出口是 \(route.interface ?? "?")（代理 TUN）。先放行 10.0.0.0/8 再试。")
-        return 3
+        // 认证通道的 socket 用 IP_BOUND_IF 钉在物理口上，全局代理模式下通常仍然能通，
+        // 所以这里只提示、不拦（以前直接退出，会误判成"全局模式不能用"）。
+        print("⚠️ 路由出口是 \(route.interface ?? "?")（代理 TUN）：认证包仍钉在物理口上，先试一次。")
     }
 
     let configuration = EngineConfiguration(
