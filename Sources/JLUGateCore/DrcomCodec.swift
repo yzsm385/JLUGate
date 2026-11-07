@@ -367,13 +367,15 @@ public struct DrcomCodec: DrcomCodecProtocol, Sendable {
         var writer = ByteWriter(count: PacketLayout.Length.keepAliveB)
         let B = PacketLayout.KeepAliveB.self
         try writer.put(B.kind, at: 0x00)
-        try writer.put(context.round, at: B.roundOffset)
+        try writer.put(context.counter, at: B.counterOffset)
         try writer.put(B.lengthFieldValue, at: B.lengthFieldOffset, endian: .little)
         try writer.put(B.flagValue, at: B.flagOffset)
-        try writer.put(context.seq, at: B.seqOffset)
-        try writer.put(context.session, at: B.sessionOffset, endian: .little)
+        try writer.put(context.type, at: B.typeOffset)
+        // 普通包：0x06–0x07 = 会话别名（`dc 02`）；文件包：`0f 27`
+        try writer.put(context.isFilePacket ? B.versionFile : context.session,
+                       at: B.versionOffset, endian: .little)
         try writer.put(context.timestamp, at: B.timestampOffset, endian: .little)
-        try writer.put(context.mirror, at: B.mirrorOffset, endian: .little)
+        try writer.put(context.tail, at: B.tailOffset, endian: .little)
         try writer.put(context.check, at: B.checkOffset, endian: .little)
         if let ip = context.clientIP {
             try writer.put(ip.bytes, at: B.clientIPOffset)
@@ -391,10 +393,10 @@ public struct DrcomCodec: DrcomCodecProtocol, Sendable {
         let reader = ByteReader(data)
         let B = PacketLayout.KeepAliveB.self
         return KeepAliveBReply(
-            round: try reader.u8(at: B.roundOffset),
-            seq: try reader.u8(at: B.seqOffset),
-            session: try reader.u16(at: B.sessionOffset, endian: .little),
-            mirror: try reader.u32(at: B.mirrorOffset, endian: .little),
+            round: try reader.u8(at: B.counterOffset),
+            seq: try reader.u8(at: B.typeOffset),
+            session: try reader.u16(at: B.versionOffset, endian: .little),
+            mirror: try reader.u32(at: B.tailOffset, endian: .little),
             raw: Array(data))
     }
 
@@ -430,22 +432,22 @@ public struct DrcomCodec: DrcomCodecProtocol, Sendable {
         case (PacketLayout.KeepAliveA.replyKind, PacketLayout.Length.keepAliveAReply):
             if let status = try? parseKeepAliveAReply(data) { return .keepAliveAReply(status) }
         case (PacketLayout.KeepAliveB.kind, let length) where length > PacketLayout.Length.keepAliveB:
-            // 实测吉林大学网关回的保活应答是 272 字节（不是抓包里的 40 字节）：
-            // 类型 7、子类型 6，前面 40 字节的结构和请求一样。以前当"未知报文"丢掉，
-            // 引擎就一直以为保活 B 没人应答。
-            let seq = (try? reader.u8(at: PacketLayout.KeepAliveB.seqOffset)) ?? 0
-            let round = (try? reader.u8(at: PacketLayout.KeepAliveB.roundOffset)) ?? 0
-            let session = (try? reader.u16(at: PacketLayout.KeepAliveB.sessionOffset, endian: .little)) ?? 0
-            let mirror = (try? reader.u32(at: PacketLayout.KeepAliveB.mirrorOffset, endian: .little)) ?? 0
+            // 272 字节的类型 7：网关对「文件包」的确认（长度域小端 272，0x02 = 0x10）。
+            // 它**不是** A/C 保活应答：以前把它当成 B 应答并抄它的 0x10 当 mirror，
+            // 结果后续 B 包全被网关丢掉。这里只做识别与记录，tail 一律不取。
+            let seq = (try? reader.u8(at: PacketLayout.KeepAliveB.typeOffset)) ?? 0
+            let round = (try? reader.u8(at: PacketLayout.KeepAliveB.counterOffset)) ?? 0
+            let session = (try? reader.u16(at: PacketLayout.KeepAliveB.versionOffset, endian: .little)) ?? 0
             return .keepAliveBReply(KeepAliveBReply(round: round, seq: seq,
-                                                    session: session, mirror: mirror,
+                                                    session: session, mirror: 0,
                                                     raw: Array(data)))
         case (PacketLayout.KeepAliveB.kind, PacketLayout.Length.keepAliveB):
-            let seq = (try? reader.u8(at: PacketLayout.KeepAliveB.seqOffset)) ?? 0
-            let round = (try? reader.u8(at: PacketLayout.KeepAliveB.roundOffset)) ?? 0
-            // 请求与应答同为 40 字节，只能靠"是否是本端刚发出的序号"区分，
-            // 因此这里保守地统一按 B 型报文返回，由引擎按上下文判断。
-            return .keepAliveBRequest(seq: seq, round: round)
+            let type = (try? reader.u8(at: PacketLayout.KeepAliveB.typeOffset)) ?? 0
+            let counter = (try? reader.u8(at: PacketLayout.KeepAliveB.counterOffset)) ?? 0
+            let tail = (try? reader.u32(at: PacketLayout.KeepAliveB.tailOffset, endian: .little)) ?? 0
+            // 请求与应答同为 40 字节（应答类型 = 请求 +1），靠上下文区分；
+            // 这里统一按 B 型报文返回，由引擎决定是否把 tail 带回下一包。
+            return .keepAliveBRequest(type: type, counter: counter, tail: tail)
         default:
             break
         }

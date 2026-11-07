@@ -50,9 +50,9 @@ struct DrcomEngineTests {
         }
     }
 
-    /// 吉林大学真网关的 B 应答是 272 字节（前 40 字节同请求，mirror 在 0x10）。
-    /// 用这个模拟，专门守住「272 字节应答也必须更新 mirror」。
-    private func longBReplyResponder() -> @Sendable (Data) -> [Data] {
+    /// 首轮「文件包」会收到 272 字节确认（0x02 = 0x10），里面也带一段 0x10 起的数据。
+    /// 用这个模拟，守住「272 字节确认的 0x10 不许当 tail 抄回去」。
+    private func filePacket272Responder() -> @Sendable (Data) -> [Data] {
         let success = RecordedGateway.loginSuccess()
         return { datagram in
             if Self.isLoginFrame(datagram) { return [success] }
@@ -60,10 +60,15 @@ struct DrcomEngineTests {
             case 20: return [RecordedGateway.challengeReply()]
             case 38: return [RecordedGateway.keepAliveAReply()]
             case 40:
-                var reply = [UInt8](datagram)
-                reply.append(contentsOf: [UInt8](repeating: 0, count: 272 - 40))
-                reply.replaceSubrange(0x10..<0x14, with: [0x11, 0x22, 0x33, 0x44])
-                return [Data(reply)]
+                if datagram[datagram.startIndex + 0x06] == 0x0F {   // 文件包（版本域 0F 27）
+                    var reply = [UInt8](datagram)
+                    reply[0x02] = 0x10
+                    reply[0x03] = 0x01
+                    reply.append(contentsOf: [UInt8](repeating: 0, count: 272 - 40))
+                    reply.replaceSubrange(0x10..<0x14, with: [0x11, 0x22, 0x33, 0x44])
+                    return [Data(reply)]
+                }
+                return [RecordedGateway.keepAliveBReply(to: datagram)]
             default: return []
             }
         }
@@ -424,42 +429,34 @@ struct DrcomEngineTests {
         #expect(channel.isClosed)
     }
 
-    @Test("272 字节 B 应答也要更新 mirror（否则后续保活 B 网关不认）")
-    func keepAliveBMirrorFromLongReply() async throws {
+    @Test("272 字节文件包确认里的 0x10 不许当 tail 抄进保活 B")
+    func keepAliveBFileReplyDoesNotPoisonTail() async throws {
         let (engine, channel, _, _) = makeEngine(
             configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
-            responder: longBReplyResponder())
+            responder: filePacket272Responder())
         await engine.start()
         try await expectEventually("进入 online") { await engine.currentState() == .online }
-        try await expectEventually("收到至少 3 个 B 包", timeout: .seconds(10)) {
-            channel.sentFrames.filter { $0.count == 40 }.count >= 3
+        try await expectEventually("收到至少两对 B", timeout: .seconds(10)) {
+            channel.sentFrames.filter { $0.count == 40 }.count >= 6
         }
         await engine.stop()
 
         let bFrames = channel.sentFrames.filter { $0.count == 40 }
-        let mirrors = bFrames.prefix(3).map { Array($0[0x10...0x13]) }
-        #expect(mirrors[0] == [0x00, 0x00, 0x00, 0x00])
-        #expect(mirrors[2] == [0x11, 0x22, 0x33, 0x44],
-                "收到 272 字节应答后，第二对 B 的 mirror 应为服务器镜像，实际 \(mirrors)")
-
-        // 272 字节应答同样占用序号：请求 01 → 应答 02 → 请求 03 → 应答 04。
-        // 之前只对 40 字节应答加序号，真网关这条路径下第二个请求还是 02，会被丢。
-        let sequences = bFrames.prefix(3).map { $0[0x05] }
-        #expect(sequences == [0x01, 0x03, 0x05],
-                "272 字节应答也要占用序号，实际 \(sequences)")
+        let tails = bFrames.prefix(6).map { Array($0[0x10...0x13]) }
+        #expect(!tails.contains([0x11, 0x22, 0x33, 0x44]),
+                "272 字节确认不是 A/C 应答，它的 0x10 不能进请求，实际 \(tails)")
     }
 
-    @Test("保活按 A/B 交替，B 型两包共用自增序号（请求 1 → 应答 2 → 请求 3 …）")
+    @Test("保活 B：首轮发文件包，之后每轮 A(01)/C(03) 交替，计数器递增")
     func keepAliveSequencing() async throws {
         let (engine, channel, _, _) = makeEngine(configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
-                                                 responder: wellBehavedResponder())
+                                                 responder: filePacket272Responder())
         await engine.start()
         try await expectEventually("进入 online") { await engine.currentState() == .online }
-        // 要断言前两对 B 的 round（05/06/07/08），必须至少等到 4 个 B 包；
-        // 以前只等 2 个，CI 慢机上 prefix(4) 不足 4 个就断言，必然假失败。
-        try await expectEventually("收到至少两对 B", timeout: .seconds(10)) {
+        // 文件包 + 两轮 A/C 至少 5 个 B 包
+        try await expectEventually("收到至少 5 个 B 包", timeout: .seconds(10)) {
             channel.sentFrames.contains { $0.count == 38 } &&
-            channel.sentFrames.filter { $0.count == 40 }.count >= 4
+            channel.sentFrames.filter { $0.count == 40 }.count >= 5
         }
         await engine.stop()
 
@@ -467,18 +464,59 @@ struct DrcomEngineTests {
         #expect(frameTypes.first == 20)
         #expect(frameTypes.contains { $0 > 300 })
         #expect(frameTypes.contains(38), "必须有 A 型（38 字节）")
-        #expect(frameTypes.filter { $0 == 40 }.count >= 2, "必须有 B 型（40 字节）")
 
         let bFrames = channel.sentFrames.filter { $0.count == 40 }
-        let sequences = bFrames.map { $0[0x05] }
-        #expect(sequences.prefix(2).elementsEqual([0x01, 0x03]),
-                "第一对 B 的序号应为 01、03（02/04 被应答占用），实际 \(sequences.prefix(4))")
+        // 首包是文件包：版本域 0F 27
+        #expect(Array(bFrames[0][0x06..<0x08]) == [0x0F, 0x27], "首轮必须发文件包")
+        // 之后 [0x05] 是包类型：01=A、03=C —— 这一列以前是 01/03/05/07 的「序号」，
+        // 从 05 起网关直接丢包，保活 B 整场超时、十几分钟后掉线。
+        let afterFile = bFrames.dropFirst()
+        let types = afterFile.prefix(4).map { $0[0x05] }
+        #expect(types.elementsEqual([0x01, 0x03, 0x01, 0x03]),
+                "包类型必须 01/03 交替，实际 \(types)")
+        // 计数器 [0x01] 每包 +1
+        let counters = bFrames.prefix(5).map { $0[0x01] }
+        #expect(counters.elementsEqual([0x05, 0x06, 0x07, 0x08, 0x09]),
+                "计数器应每包 +1，实际 \(counters)")
+        // C 包必须带上一包应答里的 tail
+        let cPackets = bFrames.dropFirst().filter { $0[0x05] == 0x03 }
+        if let c = cPackets.first {
+            #expect(Array(c[0x10...0x13]) != [0, 0, 0, 0], "C 包必须带回 tail")
+        }
+    }
 
-        // 抓包：第一对 B 的子类型是 05/06（不是 06/07）。子类型错位时网关不应答，
-        // 会话会在十几分钟后被门户拦下——这是"老是断连"的直接原因之一。
-        let rounds = bFrames.map { $0[0x01] }
-        #expect(rounds.prefix(4).elementsEqual([0x05, 0x06, 0x07, 0x08]),
-                "B 子类型应从 05/06 起，实际 \(rounds.prefix(6))")
+    @Test("保活 B 整场收不到回执也不判掉线（会话由保活 A 决定）")
+    func keepAliveBFailureDoesNotDropSession() async throws {
+        // 只应 A，40 字节的 B 包一个都不回 —— 真机上就是这个样子。
+        let responder: @Sendable (Data) -> [Data] = { datagram in
+            if Self.isLoginFrame(datagram) { return [RecordedGateway.loginSuccess()] }
+            switch datagram.count {
+            case 20: return [RecordedGateway.challengeReply()]
+            case 38: return [RecordedGateway.keepAliveAReply()]
+            default: return []
+            }
+        }
+        let (engine, channel, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: responder)
+        let stream = await engine.events()
+        let sawReconnecting = Atomic(false)
+        let collector = Task {
+            for await event in stream {
+                if case .state(.reconnecting) = event { sawReconnecting.withLock { $0 = true } }
+            }
+        }
+        await engine.start()
+        try await expectEventually("进入 online") { await engine.currentState() == .online }
+        try await expectEventually("已经发过 B 包", timeout: .seconds(10)) {
+            channel.sentFrames.contains { $0.count == 40 }
+        }
+        // 再给几轮时间：B 一直超时，但 A 正常，状态必须还是 online
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(await engine.currentState() == .online)
+        #expect(sawReconnecting.withLock { $0 } == false, "B 无应答不该把会话判掉线")
+        collector.cancel()
+        await engine.stop()
     }
 }
 

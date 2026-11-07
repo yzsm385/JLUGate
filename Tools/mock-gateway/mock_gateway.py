@@ -59,6 +59,7 @@ class GatewayState:
     login_ok: bool = False
     seconds_online: int = 0
     packets: int = 0
+    saw_file_packet: bool = False
     assertions: list[str] = field(default_factory=list)
 
     def fail(self, message: str) -> None:
@@ -142,8 +143,14 @@ class MockGateway:
                 self.state.fail(f"保活 B 长度域应为 2800，实际 {payload[2:4].hex()}")
             if payload[4] != 0x0B:
                 self.state.fail(f"保活 B 0x04 应为 0x0b，实际 {payload[4]:#x}")
-            if struct.unpack_from("<H", payload, 6)[0] != self.state.session_id:
-                self.state.fail("保活 B 的会话号与 challenge 应答不一致")
+            if payload[5] not in (0x01, 0x03):
+                # 0x05 是包类型：01=A 包、03=C 包。以前这里发 01/03/05/07…，
+                # 真网关从 05 起直接丢包（保活 B 整场超时）。
+                self.state.fail(f"保活 B 类型应为 01/03，实际 {payload[5]:#x}")
+            if payload[6:8] == b"\x0f\x27":
+                self.state.saw_file_packet = True     # 首轮文件包：版本域 0F 27
+            elif struct.unpack_from("<H", payload, 6)[0] != self.state.session_id:
+                self.state.fail("保活 B 的版本/会话域与 challenge 应答不一致")
 
     # ---------- 应答构造 ----------
 
@@ -186,8 +193,15 @@ class MockGateway:
         return bytes(reply)
 
     def keepalive_b_reply(self, payload: bytes) -> bytes:
+        if payload[6:8] == b"\x0f\x27":
+            # 文件包确认：真网关回 272 字节，长度域 10 01（小端），0x02 = 0x10
+            reply = bytearray(payload)
+            reply[2:4] = b"\x10\x01"
+            reply.extend(b"\x00" * (272 - len(reply)))
+            return bytes(reply)
         reply = bytearray(payload)
-        reply[0x05] = (payload[0x05] + 1) & 0xFF
+        reply[0x05] = (payload[0x05] + 1) & 0xFF      # 应答类型 = 请求类型 + 1
+        reply[0x10:0x14] = bytes([0xAA, payload[1], 0, 0])   # tail：下一包要带回
         reply[0x18:0x1C] = b"\x72\x46\xf8\x4c"
         return bytes(reply)
 

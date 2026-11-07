@@ -467,19 +467,17 @@ public actor DrcomEngine {
     private func stayOnline(context: SessionContext, ticket initialTicket: SessionTicket,
                             epoch: UInt64) async throws {
         var ticket = initialTicket
-        // 抓包里保活 B 的轮次从 0x05 起（A 型用 0x04 之前的号）。
-        // round 在循环里先 +1，所以这里放 0x04，第一轮 B 就是 05/06。
+        // A/B 交替：奇数轮发 A（0xFF），偶数轮发 B（A/C 两个包）。
         var round: UInt8 = 0x04
-        // B 型的子类型单独计数：抓包里第一对是 05/06，下一对 07/08。
-        // 之前用 A/B 交替的 round 直接当 B 子类型，第一对变成 06/07，网关不应答，
-        // 表现为"保活 B 无应答"越积越多、十几分钟后被门户拦下重新登录。
-        var bRound: UInt8 = 0x04
+        // B 包的计数器（0x01）：每发一个 B 包 +1。抓包里第一对是 05/06，这里同样从 0x04 起。
+        var bCounter: UInt8 = 0x04
         var misses = 0
-        var bMisses = 0
+        var bTimeouts = 0
         var loggedFirstB = false
-        var loggedBReply = false
-        var packetSeq: UInt8 = 1
-        var mirror: UInt32 = 0
+        /// 上一包应答里的 tail（0x10–0x13）：C 包要原样带回。
+        var tail: UInt32 = 0
+        /// 每个会话只在第一轮 B 发一次「文件包」（版本域 `0F 27`），网关回 272 字节确认。
+        var sentFilePacket = false
 
         while isCurrent(epoch) && !Task.isCancelled {
             round &+= 1
@@ -503,73 +501,105 @@ public actor DrcomEngine {
                     emit(.log("保活A 应答 在线=\(status.secondsOnline)s stats=\(status.stats)"))
                     misses = 0
                 case .b:
-                    // 实测：一轮里发两包，`round` 每包 +1，`seq` 与应答共用一个自增计数
-                    // （请求 01 → 应答 02 → 请求 03 → 应答 04）。
-                    for packetIndex in 0..<2 {
-                        bRound &+= 1
-                        let bContext = KeepAliveBContext(
-                            round: bRound, seq: packetSeq,
-                            session: serverSessionID,
-                            timestamp: currentTimestamp(), mirror: mirror,
-                            check: UInt32.random(in: 0...UInt32.max),
-                            clientIP: packetIndex == 1 ? ticket.clientIP : nil)
-                        let datagram = try codec.makeKeepAliveB(bContext)
-                        if !loggedFirstB {
-                            loggedFirstB = true
-                            // 真机上这份报文网关一直不回；记下我们自己发的是什么，
-                            // 下次诊断就能和网关的未知报文对照
-                            emit(.log("保活 B 首包（\(datagram.count) 字节）=\(Hex.string(datagram))"))
-                        }
-                        emit(.log(String(format: "保活B 发送 round=0x%02X seq=0x%02X session=0x%04X mirror=0x%08X size=%d",
-                                         Int(bRound), Int(packetSeq), Int(serverSessionID), Int(mirror),
-                                         datagram.count)))
-                        try await context.channel.send(datagram)
-                        packetSeq &+= 1
-                        let incoming = try await receive(matching: { frame in
-                            switch frame {
-                            case .keepAliveBRequest, .keepAliveBReply: true
-                            default: false
+                    // 保活 B = 「A 包（类型 1）→ C 包（类型 3）」一问一答，字段语义：
+                    //   0x01 计数器  0x05 类型（1=A, 3=C）  0x06–0x07 版本
+                    //   0x10–0x13 tail（上一包应答带回）  0x18 校验  0x1C 客户端 IP
+                    // 以前把 0x05 当成「请求/应答共用的自增序号」发 01/03/05/07…：
+                    // 第一对刚好等于合法类型，网关应了；之后类型变成 05，网关直接丢包，
+                    // 于是「保活 B 只回前两包、整场超时」，会话十几分钟后被服务端释放。
+                    do {
+                        if !sentFilePacket {
+                            sentFilePacket = true
+                            bCounter &+= 1
+                            let file = KeepAliveBContext(
+                                type: PacketLayout.KeepAliveB.typeA,
+                                counter: bCounter,
+                                session: serverSessionID,
+                                timestamp: currentTimestamp(),
+                                tail: 0, check: 0,
+                                isFilePacket: true)
+                            let datagram = try codec.makeKeepAliveB(file)
+                            try await context.channel.send(datagram)
+                            emit(.log(String(format: "保活B 文件包 发送 counter=0x%02X size=%d",
+                                             Int(bCounter), datagram.count)))
+                            do {
+                                let ack = try await receive(matching: { frame in
+                                    switch frame {
+                                    case .keepAliveBRequest, .keepAliveBReply: true
+                                    default: false
+                                    }
+                                }, timeout: .seconds(2))
+                                let marker = ack.payload.count > 2
+                                    ? ack.payload[ack.payload.startIndex + 2] : 0
+                                emit(.log(String(format: "保活B 文件包 应答：%d 字节 0x02=0x%02X",
+                                                 ack.payload.count, Int(marker))))
+                            } catch let error as DrcomError where error == .cancelled {
+                                throw error
+                            } catch {
+                                emit(.log("保活B 文件包 无应答（不判定掉线，继续 A/C）"))
                             }
-                        }, timeout: configuration.keepAliveInterval)
-                        // 抓包：请求/应答共用同一个自增序号（请求 01 → 应答 02 → 请求 03 …）。
-                        // 真网关的应答是 272 字节，会被归成 .keepAliveBReply；以前只对
-                        // 40 字节的 .keepAliveBRequest 加序号，272 字节应答后下一个请求
-                        // 又用了应答的序号，网关当成重复包丢掉——这才是反复断连的根因。
-                        switch incoming.frame {
-                        case .keepAliveBRequest, .keepAliveBReply:
-                            packetSeq &+= 1
-                        default:
-                            break
                         }
-                        if case .keepAliveBReply(let reply) = incoming.frame {
-                            if !loggedBReply {
-                                loggedBReply = true
-                                emit(.log("保活B 应答首包：类型 7 子类型 \(reply.round) 长度 \(reply.raw.count)（已识别，不再当未知报文）"))
+                        for packetIndex in 0..<2 {
+                            bCounter &+= 1
+                            let type = packetIndex == 0
+                                ? PacketLayout.KeepAliveB.typeA
+                                : PacketLayout.KeepAliveB.typeC
+                            let bContext = KeepAliveBContext(
+                                type: type,
+                                counter: bCounter,
+                                session: serverSessionID,
+                                timestamp: currentTimestamp(),
+                                tail: tail,
+                                // 抓包里 A 包校验为 0，只有 C 包带校验字
+                                check: packetIndex == 0 ? 0 : UInt32.random(in: 0...UInt32.max),
+                                clientIP: packetIndex == 1 ? ticket.clientIP : nil)
+                            let datagram = try codec.makeKeepAliveB(bContext)
+                            if !loggedFirstB {
+                                loggedFirstB = true
+                                emit(.log("保活 B 首包（\(datagram.count) 字节）=\(Hex.string(datagram))"))
                             }
-                            emit(.log(String(format: "保活B 应答 round=0x%02X seq=0x%02X size=%d mirror=0x%08X",
-                                             Int(reply.round), Int(reply.seq),
-                                             reply.raw.count, Int(reply.mirror))))
-                            // 真实网关回的是 272 字节（不是 40），`parseKeepAliveBReply`
-                            // 只认 40 字节；这里必须用 classify 已经解出来的 mirror，
-                            // 否则 mirror 永远是 0，后续 B 请求网关不认，十几分钟后掉线。
-                            mirror = reply.mirror
+                            emit(.log(String(format: "保活B 发送 type=0x%02X counter=0x%02X session=0x%04X tail=0x%08X size=%d",
+                                             Int(type), Int(bCounter), Int(serverSessionID), Int(tail),
+                                             datagram.count)))
+                            try await context.channel.send(datagram)
+                            let incoming = try await receive(matching: { frame in
+                                switch frame {
+                                case .keepAliveBRequest, .keepAliveBReply: true
+                                default: false
+                                }
+                            }, timeout: configuration.keepAliveInterval)
+                            switch incoming.frame {
+                            case .keepAliveBRequest(let replyType, let replyCounter, let replyTail):
+                                emit(.log(String(format: "保活B 应答 type=0x%02X counter=0x%02X tail=0x%08X size=%d",
+                                                 Int(replyType), Int(replyCounter), Int(replyTail),
+                                                 incoming.payload.count)))
+                                tail = replyTail
+                            case .keepAliveBReply(let reply):
+                                // 272 字节：网关对文件包的确认，**不是** A/C 应答，tail 不取。
+                                emit(.log("保活B 文件包应答 \(reply.raw.count) 字节（不参与 tail）"))
+                            default:
+                                break
+                            }
                         }
-
-                        misses = 0
+                        bTimeouts = 0
+                    } catch let error as DrcomError where error == .cancelled {
+                        throw error
+                    } catch {
+                        // B 保活收不到回执**不判定掉线**：会话存亡由保活 A（带服务端统计）
+                        // 和在线巡检决定。B 失败只记日志，下一轮继续试。
+                        bTimeouts += 1
+                        if bTimeouts <= 3 || bTimeouts % 10 == 0 {
+                            emit(.log("保活B 无应答（累计 \(bTimeouts) 次，不判定掉线）"))
+                        }
+                        try? await clock.sleep(for: .seconds(1))
                     }
                 }
             } catch let error as DrcomError where error == .cancelled {
                 throw error
             } catch {
+                // 只有保活 A 的失败会走到这里（B 的失败在 B 分支内部就吞掉了）。
                 misses += 1
-                if kind == .a {
-                    emit(.log("保活A 超时（第 \(misses) 次，间隔 \(configuration.keepAliveInterval)）"))
-                } else {
-                    // 真机上 B 常常整场都收不到回执：只记前几次和每 10 次，
-                    // 别让这一行把诊断日志刷满
-                    bMisses += 1
-                    emit(.log(String(format: "保活B 超时（累计 %d 次）", bMisses)))
-                }
+                emit(.log("保活A 超时（第 \(misses) 次，间隔 \(configuration.keepAliveInterval)）"))
                 // 先用真实探测确认网络是否真断：网关不回保活应答 ≠ 会话失效
                 if misses >= 2, let liveness = configuration.livenessCheck,
                    await liveness(context.interface) {

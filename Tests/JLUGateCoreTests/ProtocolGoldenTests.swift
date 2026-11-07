@@ -139,36 +139,50 @@ struct KeepAliveGoldenTests {
         #expect(status.stats.count == 6)
     }
 
-    @Test("保活 B 的第 1、第 2 包都能逐字节复现")
+    @Test("保活 B 的第 1、第 2 包都能逐字节复现（类型 1=A、3=C）")
     func keepAliveBPair() throws {
         let session = try Fixtures.session()
         let captured = session.all("c2s", length: 40)
         #expect(captured.count == 12)
         guard captured.count >= 2 else { return }
         let codec = DrcomCodec()
+        // 抓包里 [0x05] 是**包类型**（01=A 包、03=C 包），[0x01] 是计数器（05、06）。
         let first = KeepAliveBContext(
-            round: 0x05, seq: 0x01, session: 0x02DC, timestamp: 0x0073B8E4,
-            mirror: 0x4CF8447A, check: 0, clientIP: nil)
+            type: 0x01, counter: 0x05, session: 0x02DC, timestamp: 0x0073B8E4,
+            tail: 0x4CF8447A, check: 0)
         #expect(hexString([UInt8](try codec.makeKeepAliveB(first))) == hexString(captured[0]))
 
         let second = KeepAliveBContext(
-            round: 0x06, seq: 0x03, session: 0x02DC, timestamp: 0x0073B8E4,
-            mirror: 0x4CF84672, check: 0x00F171C9,
+            type: 0x03, counter: 0x06, session: 0x02DC, timestamp: 0x0073B8E4,
+            tail: 0x4CF84672, check: 0x00F171C9,
             clientIP: IPv4Address("192.0.2.10"))
         #expect(hexString([UInt8](try codec.makeKeepAliveB(second))) == hexString(captured[1]))
         #expect(Array([UInt8](try codec.makeKeepAliveB(second))[0x1C..<0x20]) == [192, 0, 2, 10])
     }
 
-    @Test("保活 B 应答：序号与请求共用一个自增计数（请求 01 → 应答 02）")
+    @Test("文件包的版本域是 0F 27，普通包是 DC 02")
+    func keepAliveBFilePacket() throws {
+        let codec = DrcomCodec()
+        let normal = try codec.makeKeepAliveB(KeepAliveBContext(
+            type: 0x01, counter: 0x01, session: 0x02DC, timestamp: 1, tail: 0, check: 0))
+        #expect(Array(normal[0x06..<0x08]) == [0xDC, 0x02])
+        let file = try codec.makeKeepAliveB(KeepAliveBContext(
+            type: 0x01, counter: 0x01, session: 0x02DC, timestamp: 1, tail: 0, check: 0,
+            isFilePacket: true))
+        #expect(Array(file[0x06..<0x08]) == [0x0F, 0x27])
+        #expect(file.count == 40)
+    }
+
+    @Test("保活 B 应答：0x05 是「应答类型 = 请求类型 + 1」（A→02）")
     func keepAliveBReply() throws {
         let session = try Fixtures.session()
         let replies = session.all("s2c", length: 40)
         guard let reply = replies.first else { return }
         let parsed = try DrcomCodec().parseKeepAliveBReply(Data(reply))
-        #expect(parsed.round == 0x05)
-        #expect(parsed.seq == 0x02)
+        #expect(parsed.round == 0x05)      // 0x01 计数器
+        #expect(parsed.seq == 0x02)        // 0x05 应答类型（A=01 → 02）
         #expect(parsed.session == 0x02DC)
-        #expect(parsed.mirror == 0x4CF84672)
+        #expect(parsed.mirror == 0x4CF84672)   // 0x10 起的 tail，下一包要带回
     }
 
     @Test("长度不对的保活包必须报错")
@@ -251,7 +265,7 @@ struct KeepAliveBLongReplyTests {
         return Data(bytes)
     }
 
-    @Test("272 字节的类型 7 报文要认成保活 B 应答，而不是未知报文")
+    @Test("272 字节的类型 7 报文认成「文件包应答」，且不提供 tail")
     func classify() {
         let frame = DrcomCodec().classify(payload)
         guard case .keepAliveBReply(let reply) = frame else {
@@ -262,5 +276,8 @@ struct KeepAliveBLongReplyTests {
         #expect(reply.seq == 0x06)
         #expect(reply.session == 0x02DC)
         #expect(reply.raw.count == 272)
+        // 关键：272 字节是网关对「文件包」的确认，不是 A/C 保活应答。
+        // 把它的 0x10 当 tail 抄进后续请求，会让网关把包全丢掉。
+        #expect(reply.mirror == 0, "文件包应答不参与 tail")
     }
 }

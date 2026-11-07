@@ -197,22 +197,38 @@ public enum PacketLayout {
 
     // MARK: 保活 B（40 → 40）
 
+    /// 一「对」B 保活 = A 包（类型 1）+ C 包（类型 3），网关分别用类型 2、4 应答。
+    /// 字段含义以官方抓包 + `jlu-drcom-ng v2.0.0` / `drcom-generic` 为准。
     public enum KeepAliveB {
         public static let kind: UInt8 = 0x07
-        public static let roundOffset = 0x01
+        /// 0x01：计数器，每发一个 B 包 +1（既不是子类型，也不是序号）。
+        public static let counterOffset = 0x01
         /// 长度域：字节是 `28 00`，**小端** 40（CHECKLIST §6.2 的写法是对的，别按大端读成 10240）。
         public static let lengthFieldOffset = 0x02
         public static let lengthFieldValue: UInt16 = 40
         public static let flagOffset = 0x04          // `0b`
         public static let flagValue: UInt8 = 0x0B
-        public static let seqOffset = 0x05           // 请求/应答共用自增计数
-        public static let sessionOffset = 0x06       // `dc 02` = 小端 732
-        public static let timestampOffset = 0x08     // 小端 u32
-        /// 4 字节，镜像服务器上一次的取值，会话内稳定（抓包实测在 0x10，CHECKLIST 写作 0x14）。
-        public static let mirrorOffset = 0x10
-        /// 4 字节，每包不同（只在"一对里的第 2 包"出现，第 1 包为 0）。
+        /// 0x05：**包类型**。请求 A=0x01 / C=0x03，应答 +1（02 / 04）。
+        ///
+        /// 这里原来被当成「请求/应答共用的自增序号」，发 01/03/05/07…：
+        /// 第一对（01、03）刚好等于合法类型，网关应了；从第三包起类型变成 05，
+        /// 网关直接丢包 → 保活 B 只回前两包、之后整场超时，
+        /// 会话在十几分钟后被服务端释放（诊断里「每 12 分钟重登」）。
+        public static let typeOffset = 0x05
+        public static let typeA: UInt8 = 0x01
+        public static let typeC: UInt8 = 0x03
+        /// 0x06–0x07：版本域。普通包 `DC 02`（= 会话别名 0x02DC），文件包 `0F 27`。
+        public static let versionOffset = 0x06
+        public static let versionFile: UInt16 = 0x270F
+        public static let timestampOffset = 0x08     // 小端 u32，官方客户端每包都变
+        /// 0x10–0x13：上一包应答里的 tail；C 包必须原样带回，A 包沿用上一轮的值。
+        public static let tailOffset = 0x10
+        /// 0x18–0x1B：C 包的校验字（A 包为 0）。
         public static let checkOffset = 0x18
-        public static let clientIPOffset = 0x1C      // 一对中的第 2 包装 IP，第 1 包为 0
+        public static let clientIPOffset = 0x1C      // C 包装 IP，A 包为 0
+        /// 文件包应答（272 字节）：长度域 `10 01` = 小端 272，字节 0x02 = 0x10。
+        public static let fileReplyMarker: UInt8 = 0x10
+        public static let fileReplyLength: Int = 272
     }
 
     // MARK: 摘要

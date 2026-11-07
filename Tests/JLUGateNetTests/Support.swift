@@ -166,7 +166,10 @@ enum RecordedGateway {
     static func keepAliveBReply(to request: Data) -> Data {
         var bytes = [UInt8](request)
         guard bytes.count == 40 else { return request }
+        // 0x05 是包类型：A=01 → 应答 02，C=03 → 应答 04
         bytes[0x05] = bytes[0x05] &+ 1
+        // 0x10 起的 tail：下一包要原样带回
+        bytes[0x10...0x13] = [0xAA, bytes[0x01], 0x00, 0x00]
         bytes[0x18...0x1B] = [0x72, 0x46, 0xF8, 0x4C]
         return Data(bytes)
     }

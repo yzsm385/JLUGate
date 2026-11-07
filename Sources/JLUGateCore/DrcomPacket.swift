@@ -169,31 +169,42 @@ public struct KeepAliveAStatus: Sendable, Equatable {
 }
 
 public struct KeepAliveBContext: Sendable, Equatable {
-    public var round: UInt8
-    public var seq: UInt8
+    /// 0x05：包类型 —— A 包 0x01、C 包 0x03、文件包 0x01。
+    public var type: UInt8
+    /// 0x01：每发一个 B 包 +1 的计数器。
+    public var counter: UInt8
+    /// 0x06–0x07：普通包填会话别名（0x02DC）；文件包改用 `0F 27`。
     public var session: UInt16
     public var timestamp: UInt32
-    public var mirror: UInt32
+    /// 0x10–0x13：上一包应答里的 tail（C 包必须原样带回）。
+    public var tail: UInt32
     public var check: UInt32
-    /// 一对里的第 2 包装客户端 IP，第 1 包留 0。
+    /// C 包装客户端 IP，A 包留 0。
     public var clientIP: IPv4Address?
+    /// 首轮的「文件包」：版本域换 `0F 27`，网关回 272 字节确认。
+    public var isFilePacket: Bool
 
-    public init(round: UInt8, seq: UInt8, session: UInt16, timestamp: UInt32,
-                mirror: UInt32, check: UInt32, clientIP: IPv4Address? = nil) {
-        self.round = round
-        self.seq = seq
+    public init(type: UInt8, counter: UInt8, session: UInt16, timestamp: UInt32,
+                tail: UInt32, check: UInt32, clientIP: IPv4Address? = nil,
+                isFilePacket: Bool = false) {
+        self.type = type
+        self.counter = counter
         self.session = session
         self.timestamp = timestamp
-        self.mirror = mirror
+        self.tail = tail
         self.check = check
         self.clientIP = clientIP
+        self.isFilePacket = isFilePacket
     }
 }
 
 public struct KeepAliveBReply: Sendable, Equatable {
+    /// 0x01：网关计数器/回显
     public var round: UInt8
+    /// 0x05：应答包类型（A 回的 02、C 回的 04）
     public var seq: UInt8
     public var session: UInt16
+    /// 0x10–0x13：下一包要带回去的 tail
     public var mirror: UInt32
     public var raw: [UInt8]
 
@@ -219,7 +230,7 @@ public enum DrcomFrame: Sendable, Equatable {
     case loginFailure(reason: String)
     case keepAliveARequest
     case keepAliveAReply(KeepAliveAStatus)
-    case keepAliveBRequest(seq: UInt8, round: UInt8)
+    case keepAliveBRequest(type: UInt8, counter: UInt8, tail: UInt32)
     case keepAliveBReply(KeepAliveBReply)
     case unknown(type: UInt8, subtype: UInt8, length: Int)
 
