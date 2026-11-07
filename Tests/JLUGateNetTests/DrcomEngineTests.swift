@@ -527,6 +527,53 @@ struct DrcomEngineTests {
         await engine.stop()
     }
 
+    @Test("诊断里带保活 B 自检结论：方言不对时第一轮就能看出来")
+    func keepAliveBSelfCheckLog() async throws {
+        // 方言对：两包都应答
+        let (engine, _, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: wellBehavedResponder())
+        let stream = await engine.events()
+        let logs = Atomic<[String]>([])
+        let collector = Task {
+            for await event in stream {
+                if case .log(let message) = event { logs.withLock { $0.append(message) } }
+            }
+        }
+        await engine.start()
+        try await expectEventually("出结论", timeout: .seconds(10)) {
+            logs.withLock { $0.contains { $0.contains("保活B 自检：全部应答") } }
+        }
+        collector.cancel()
+        await engine.stop()
+
+        // 方言不对：一包都不回
+        let silent: @Sendable (Data) -> [Data] = { datagram in
+            if Self.isLoginFrame(datagram) { return [RecordedGateway.loginSuccess()] }
+            switch datagram.count {
+            case 20: return [RecordedGateway.challengeReply()]
+            case 38: return [RecordedGateway.keepAliveAReply()]
+            default: return []
+            }
+        }
+        let (engine2, _, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: silent)
+        let stream2 = await engine2.events()
+        let logs2 = Atomic<[String]>([])
+        let collector2 = Task {
+            for await event in stream2 {
+                if case .log(let message) = event { logs2.withLock { $0.append(message) } }
+            }
+        }
+        await engine2.start()
+        try await expectEventually("出否定结论", timeout: .seconds(10)) {
+            logs2.withLock { $0.contains { $0.contains("保活B 自检：全部无应答") } }
+        }
+        collector2.cancel()
+        await engine2.stop()
+    }
+
     @Test("保活 B 整场收不到回执也不判掉线（会话由保活 A 决定）")
     func keepAliveBFailureDoesNotDropSession() async throws {
         // 只应 A，40 字节的 B 包一个都不回 —— 真机上就是这个样子。

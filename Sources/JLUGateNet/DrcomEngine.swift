@@ -478,6 +478,10 @@ public actor DrcomEngine {
         var tail: UInt32 = 0
         /// 每个会话只在第一轮 B 发一次「文件包」（版本域 `0F 27`），网关回 272 字节确认。
         var sentFilePacket = false
+        /// 保活 B 自检：本会话发了几包、回了几包（写进诊断，一眼看出方言对不对）
+        var bSent = 0
+        var bAnswered = 0
+        var bLoggedVerdict = false
 
         while isCurrent(epoch) && !Task.isCancelled {
             round &+= 1
@@ -562,6 +566,7 @@ public actor DrcomEngine {
                                              Int(type), Int(bCounter), Int(serverSessionID), Int(tail),
                                              datagram.count)))
                             try await context.channel.send(datagram)
+                            bSent += 1
                             let incoming = try await receive(matching: { frame in
                                 switch frame {
                                 case .keepAliveBRequest, .keepAliveBReply: true
@@ -570,6 +575,7 @@ public actor DrcomEngine {
                             }, timeout: configuration.keepAliveInterval)
                             switch incoming.frame {
                             case .keepAliveBRequest(let replyType, let replyCounter, let replyTail):
+                                bAnswered += 1
                                 emit(.log(String(format: "保活B 应答 type=0x%02X counter=0x%02X tail=0x%08X size=%d",
                                                  Int(replyType), Int(replyCounter), Int(replyTail),
                                                  incoming.payload.count)))
@@ -589,9 +595,21 @@ public actor DrcomEngine {
                         // 和在线巡检决定。B 失败只记日志，下一轮继续试。
                         bTimeouts += 1
                         if bTimeouts <= 3 || bTimeouts % 10 == 0 {
-                            emit(.log("保活B 无应答（累计 \(bTimeouts) 次，不判定掉线）"))
+                            emit(.log("保活B 无应答（累计 \(bTimeouts) 次，不判定掉线；本会话 应答 \(bAnswered)/\(bSent)）"))
+                        }
+                        if bTimeouts == 3 {
+                            emit(.log("保活B 连续 3 轮无应答：网关可能不认这套格式——诊断里请带上上面 type/counter/tail 那几行"))
                         }
                         try? await clock.sleep(for: .seconds(1))
+                    }
+                    // 第一轮 B 结束（不论成败）就给一行自检结论：
+                    // 方言不对时不用等十几分钟、看会话掉线才发现。
+                    if !bLoggedVerdict, bSent > 0 {
+                        bLoggedVerdict = true
+                        let verdict = bAnswered == 0
+                            ? "全部无应答 ❌"
+                            : (bAnswered >= bSent ? "全部应答 ✅" : "\(bAnswered)/\(bSent) 包有应答 ⚠️")
+                        emit(.log("保活B 自检：\(verdict)（已发 \(bSent) 包 / 应答 \(bAnswered) 包；type 必须 01/03）"))
                     }
                 }
             } catch let error as DrcomError where error == .cancelled {
