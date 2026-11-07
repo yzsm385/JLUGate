@@ -138,6 +138,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "detail": .detail
         case "status": .status
         case "inspect": .inspect
+        case "gpa": .gpa
         case "portal": .portal
         default: nil
         }
@@ -221,7 +222,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func inspectFromMenu() { model?.show(.inspect) }
     @objc private func gpaFromMenu() {
         guard let model else { return }
-        NSWorkspace.shared.open(model.gpaURL)
+        // 和主面板的小卡片走同一个入口：先确认学院、选专业，再直接进计算器。
+        model.show(.gpa)
+        if popover?.isShown != true {
+            showPanel()
+        }
     }
     @objc private func settingsFromMenu() { model?.presentSettings() }
     @objc private func quitFromMenu() { NSApp.terminate(nil) }

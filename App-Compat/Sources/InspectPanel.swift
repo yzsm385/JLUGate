@@ -59,9 +59,10 @@ struct InspectPanel: View {
             module("Cloudflare", timingKey: "cloudflare", value: cloudflareValue, hint: cloudflareHint)
             module("WebRTC（STUN）", timingKey: "webrtc", value: webRTCValue, hint: webRTCHint)
             module("DNS", timingKey: "dns", value: dnsValue, hint: dnsHint)
-            module(Copy.t("P08"), timingKey: "captcha", value: captchaValue, hint: captchaHint)
+            module(Copy.t("P08"), timingKey: "captcha", value: captchaValue, hint: captchaHint,
+                   alignValueRight: true)
 
-            // 网络诊断：认证通道 / Ping / 测速（测量入口从「详情」页挪到这里）
+            // 网络诊断：认证通道 / Ping（测量入口从「详情」页挪到这里）
             diagnosticsTools
 
             // IP 纯净度：住宅 or 机房
@@ -105,9 +106,17 @@ struct InspectPanel: View {
                 }
             }
 
-            // 带宽三档
+            // 带宽三档：随体检自动测，不再单独放「测速」按钮。
             VStack(alignment: .leading, spacing: 6) {
-                Text(Copy.t("P12")).font(.caption).bold()
+                HStack(spacing: 6) {
+                    Text(Copy.t("P12")).font(.caption).bold()
+                    if model.speedRunning {
+                        Text(Copy.t("P17"))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                }
                 if let direct = model.speedDirect {
                     speedRow(Copy.t("P13"), direct)
                 }
@@ -117,21 +126,13 @@ struct InspectPanel: View {
                 if let viaProxy = model.speedViaProxy {
                     speedRow(Copy.t("P15"), viaProxy)
                 }
-                HStack(spacing: 6) {
-                    TextField(Copy.t("P16"), text: Binding(
-                        get: { model.speedProxy },
-                        set: { model.speedProxy = $0 }))
-                        .textFieldStyle(.roundedBorder)
-                        .font(.caption2)
-                    Button(model.speedRunning ? Copy.t("P17") : Copy.t("P18")) { model.runSpeedAll() }
-                        .buttonStyle(.bordered)
-                        .disabled(model.speedRunning)
+                if !model.speedRunning, model.speedDirect != nil {
+                    Text(model.speedProxy.isEmpty
+                         ? Copy.t("P19")
+                         : Copy.f("P20", model.detectedProxy?.label ?? "本地代理", model.speedProxy))
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                Text(model.speedProxy.isEmpty
-                     ? Copy.t("P19")
-                     : Copy.f("P20", model.detectedProxy?.label ?? "本地代理", model.speedProxy))
-                    .font(.system(size: 10)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(8)
@@ -195,7 +196,7 @@ struct InspectPanel: View {
         return Copy.t("P26")
     }
 
-    // MARK: 网络诊断（测速 / 认证通道 / Ping）
+    // MARK: 网络诊断（认证通道 / Ping）
 
     private var diagnosticsTools: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -248,33 +249,6 @@ struct InspectPanel: View {
                 .disabled(model.diagnosticsBusy)
             }
 
-            Divider().opacity(0.4)
-
-            // 测速
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Copy.t("D36")).font(.caption2).bold()
-                if model.speedResults.isEmpty {
-                    Text(Copy.t("D37")).font(.system(size: 9)).foregroundStyle(.secondary)
-                } else {
-                    ForEach(model.speedResults, id: \.self) { result in
-                        Text(result.description).font(.caption.monospaced())
-                    }
-                    if !model.speedResults.contains(where: { $0.boundInterface != nil }) {
-                        Label(Copy.t("D38"), systemImage: "info.circle")
-                            .font(.caption2).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                Button {
-                    model.runSpeedTest()
-                } label: {
-                    Label(model.diagnosticsBusy ? Copy.t("D39") : Copy.t("D40"),
-                          systemImage: "speedometer")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(model.diagnosticsBusy)
-            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -283,7 +257,8 @@ struct InspectPanel: View {
     }
 
     private func module(_ title: String, timingKey: String? = nil,
-                        value: String, hint: String) -> some View {
+                        value: String, hint: String,
+                        alignValueRight: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Text(title).font(.caption).bold()
@@ -292,7 +267,11 @@ struct InspectPanel: View {
                 }
             }
             if !value.isEmpty {
+                // 人机验证这类短结论靠右放，别紧贴标题左边。
                 Text(value).font(.caption.monospaced()).foregroundStyle(.primary)
+                    .multilineTextAlignment(alignValueRight ? .trailing : .leading)
+                    .frame(maxWidth: .infinity,
+                           alignment: alignValueRight ? .trailing : .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(hint).font(.system(size: 10)).foregroundStyle(.secondary)
@@ -374,10 +353,14 @@ struct InspectPanel: View {
     }
 
     private func purityLine(_ label: String, _ value: String) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            // 30pt 连「归属运营商 (ASN)」都放不下，标签会一字一行地竖着排；
+            // 给到和主面板明细一样的 96pt，长标签允许在栏内折行。
             Text(label).font(.system(size: 9)).foregroundStyle(.tertiary)
-                .frame(width: 30, alignment: .leading)
+                .frame(width: 96, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
             Text(value).font(.system(size: 10)).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

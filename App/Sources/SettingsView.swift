@@ -9,6 +9,7 @@ struct SettingsView: View {
     @Environment(AppModel.self) private var model
     @State private var draft = Draft()
     @State private var saved = false
+    @State private var showGuide = false
 
     struct Draft {
         var account = ""
@@ -34,11 +35,13 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            // 新生打开设置第一眼就能看到：去哪儿查自己的账号 / IP / 网费。
-            Section {
-                SelfServiceGuideCard(link: draft.link)
-            } header: {
-                Label(Copy.t("S01"), systemImage: "questionmark.bubble")
+            // 第一次 / 还没填完：萌新指南顶在最上面。
+            if !guideCanCollapse {
+                Section {
+                    SelfServiceGuideCard(link: draft.link)
+                } header: {
+                    Label(Copy.t("S01"), systemImage: "questionmark.bubble")
+                }
             }
 
             Section(languageSectionTitle) {
@@ -50,16 +53,6 @@ struct SettingsView: View {
                         Text(lang.displayName).tag(lang.rawValue)
                     }
                 }
-                Text(languageHint)
-                    .font(.system(size: 9)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            Section {
-                FreshmanTipsCard()
-                    .padding(.vertical, 2)
-            } header: {
-                Text(Copy.t("R15"))
             }
 
             if !LoginItem.isEnabled {
@@ -269,6 +262,18 @@ struct SettingsView: View {
                     .buttonStyle(.bordered)
                 }
             }
+
+            // 参数填完、成功连过：指南收到底部，需要时再展开。
+            if guideCanCollapse {
+                Section {
+                    DisclosureGroup(isExpanded: $showGuide) {
+                        SelfServiceGuideCard(link: draft.link)
+                            .padding(.top, 6)
+                    } label: {
+                        Label(Copy.t("S01"), systemImage: "questionmark.bubble")
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -307,6 +312,26 @@ struct SettingsView: View {
             })
     }
 
+    /// 已经填完静态参数并成功连接过 → 指南收到底部折叠；
+    /// 第一次用、或参数还没填全 → 继续顶在最上面。
+    private var guideCanCollapse: Bool {
+        let profile = model.config.currentProfile
+        let completeStatic = profile?.ip != nil && profile?.mask != nil
+            && profile?.gateway != nil && profile?.registeredMAC != nil
+        let hasAnyStatic = profile?.ip != nil || profile?.mask != nil
+            || profile?.gateway != nil || profile?.registeredMAC != nil
+        let staticReady: Bool
+        switch model.config.link {
+        case "wired", "jluPC": staticReady = completeStatic
+        case "jluWiFi": staticReady = true
+        default: staticReady = hasAnyStatic ? completeStatic : true
+        }
+        let connected = model.config.lastSuccessfulLogin != nil
+            || model.state.isOnline
+            || model.observingExistingSession
+        return staticReady && connected
+    }
+
     // MARK: 语言
 
     private var languageSectionTitle: String {
@@ -330,14 +355,6 @@ struct SettingsView: View {
         case .zhHans: "跟随系统"
         case .zhHant: "跟隨系統"
         case .en: "Follow system"
-        }
-    }
-
-    private var languageHint: String {
-        switch Copy.language {
-        case .zhHans: "切换后立即生效（面板会按新语言重建一次）。"
-        case .zhHant: "切換後立即生效（面板會按新語言重建一次）。"
-        case .en: "Applies immediately (the panel is rebuilt once)."
         }
     }
 

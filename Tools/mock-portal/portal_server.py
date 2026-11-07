@@ -6,6 +6,8 @@
     GET  /generate_204   → 未登录：302 到 /portal ；已登录：204 No Content
     GET  /portal         → 200 登录页（<form action="/login">，标准 input）
     POST /login          → 账号密码对：Set-Cookie + 302 /ok ；错：200 + 错误文案
+    GET  /drcom/login    → Dr.COM 4.0 网页登录接口（吉大实际用的就是它）
+                           JSONP，result=1 成功 / result=0 + msg + msga 失败
     GET  /ok             → 200 "login ok"
     POST /logout         → 清会话
 
@@ -66,6 +68,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         query = urllib.parse.parse_qs(parsed.query)
+
+        # Dr.COM 4.0 网页登录接口（吉大 net.jlu.edu.cn 实际走的就是这个）：
+        # GET /drcom/login?callback=dr1003&DDDDD=...&upass=...&0MKKey=123456
+        # 成功 → JSONP result=1；失败 → result=0 + msg/msga。
+        if path == "/drcom/login":
+            user = query.get("DDDDD", [""])[0].split("@", 1)[0]
+            password = query.get("upass", [""])[0]
+            if user == self.user and password == self.password:
+                STATE["logged_in"] = True
+                payload = (f'{query.get("callback", ["dr1003"])[0]}'
+                           f'({{"result":1,"msg":1,"uid":"{user}","ss4":"020000000001"}})')
+            else:
+                payload = (f'{query.get("callback", ["dr1003"])[0]}'
+                           f'({{"result":0,"msg":1,"msga":"userid error1",'
+                           f'"uid":"{user}","ss4":"020000000001"}})')
+            body = payload.encode("gbk")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/javascript; charset=gbk")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
 
         # 仅测试夹具：`?autologin=1` 直接置为已登录，方便自动化验证
         # （App 侧不做任何 DOM 操作——决策 D-001）

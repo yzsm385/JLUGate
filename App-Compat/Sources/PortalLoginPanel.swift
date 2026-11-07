@@ -44,6 +44,20 @@ struct PortalLoginPanel: View {
                     NSWorkspace.shared.open(url)
                 }
                 .buttonStyle(.bordered)
+
+                Button {
+                    model.dismissSystemPortalPopup()
+                } label: {
+                    Label(Copy.t("A30"), systemImage: "xmark.rectangle")
+                }
+                .buttonStyle(.bordered)
+
+                if let message = model.systemPortalPopupMessage {
+                    Text(message)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, trusted ? 40 : 20)

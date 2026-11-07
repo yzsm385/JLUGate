@@ -470,6 +470,10 @@ public actor DrcomEngine {
         // 抓包里保活 B 的轮次从 0x05 起（A 型用 0x04 之前的号）。
         // round 在循环里先 +1，所以这里放 0x04，第一轮 B 就是 05/06。
         var round: UInt8 = 0x04
+        // B 型的子类型单独计数：抓包里第一对是 05/06，下一对 07/08。
+        // 之前用 A/B 交替的 round 直接当 B 子类型，第一对变成 06/07，网关不应答，
+        // 表现为"保活 B 无应答"越积越多、十几分钟后被门户拦下重新登录。
+        var bRound: UInt8 = 0x04
         var misses = 0
         var bMisses = 0
         var loggedFirstB = false
@@ -496,13 +500,15 @@ public actor DrcomEngine {
                     ticket = current
                     self.ticket = current
                     emit(.traffic(secondsOnline: status.secondsOnline, stats: status.stats))
+                    emit(.log("保活A 应答 在线=\(status.secondsOnline)s stats=\(status.stats)"))
                     misses = 0
                 case .b:
                     // 实测：一轮里发两包，`round` 每包 +1，`seq` 与应答共用一个自增计数
                     // （请求 01 → 应答 02 → 请求 03 → 应答 04）。
                     for packetIndex in 0..<2 {
+                        bRound &+= 1
                         let bContext = KeepAliveBContext(
-                            round: round &+ UInt8(packetIndex), seq: packetSeq,
+                            round: bRound, seq: packetSeq,
                             session: serverSessionID,
                             timestamp: currentTimestamp(), mirror: mirror,
                             check: UInt32.random(in: 0...UInt32.max),
@@ -514,6 +520,9 @@ public actor DrcomEngine {
                             // 下次诊断就能和网关的未知报文对照
                             emit(.log("保活 B 首包（\(datagram.count) 字节）=\(Hex.string(datagram))"))
                         }
+                        emit(.log(String(format: "保活B 发送 round=0x%02X seq=0x%02X session=0x%04X mirror=0x%08X size=%d",
+                                         Int(bRound), Int(packetSeq), Int(serverSessionID), Int(mirror),
+                                         datagram.count)))
                         try await context.channel.send(datagram)
                         packetSeq &+= 1
                         let incoming = try await receive(matching: { frame in
@@ -522,14 +531,27 @@ public actor DrcomEngine {
                             default: false
                             }
                         }, timeout: configuration.keepAliveInterval)
-                        if case .keepAliveBRequest = incoming.frame {
+                        // 抓包：请求/应答共用同一个自增序号（请求 01 → 应答 02 → 请求 03 …）。
+                        // 真网关的应答是 272 字节，会被归成 .keepAliveBReply；以前只对
+                        // 40 字节的 .keepAliveBRequest 加序号，272 字节应答后下一个请求
+                        // 又用了应答的序号，网关当成重复包丢掉——这才是反复断连的根因。
+                        switch incoming.frame {
+                        case .keepAliveBRequest, .keepAliveBReply:
                             packetSeq &+= 1
+                        default:
+                            break
                         }
-                        if case .keepAliveBReply(let reply) = incoming.frame, !loggedBReply {
-                            loggedBReply = true
-                            emit(.log("保活 B 应答：类型 7 子类型 \(reply.round) 长度 \(reply.raw.count)（已识别，不再当未知报文）"))
-                        }
-                        if let reply = try? codec.parseKeepAliveBReply(incoming.payload) {
+                        if case .keepAliveBReply(let reply) = incoming.frame {
+                            if !loggedBReply {
+                                loggedBReply = true
+                                emit(.log("保活B 应答首包：类型 7 子类型 \(reply.round) 长度 \(reply.raw.count)（已识别，不再当未知报文）"))
+                            }
+                            emit(.log(String(format: "保活B 应答 round=0x%02X seq=0x%02X size=%d mirror=0x%08X",
+                                             Int(reply.round), Int(reply.seq),
+                                             reply.raw.count, Int(reply.mirror))))
+                            // 真实网关回的是 272 字节（不是 40），`parseKeepAliveBReply`
+                            // 只认 40 字节；这里必须用 classify 已经解出来的 mirror，
+                            // 否则 mirror 永远是 0，后续 B 请求网关不认，十几分钟后掉线。
                             mirror = reply.mirror
                         }
 
@@ -541,14 +563,12 @@ public actor DrcomEngine {
             } catch {
                 misses += 1
                 if kind == .a {
-                    emit(.log("保活 A 无应答（第 \(misses) 次）"))
+                    emit(.log("保活A 超时（第 \(misses) 次，间隔 \(configuration.keepAliveInterval)）"))
                 } else {
                     // 真机上 B 常常整场都收不到回执：只记前几次和每 10 次，
                     // 别让这一行把诊断日志刷满
                     bMisses += 1
-                    if bMisses == 1 || bMisses % 10 == 0 {
-                        emit(.log("保活 B 无应答（累计 \(bMisses) 次）"))
-                    }
+                    emit(.log(String(format: "保活B 超时（累计 %d 次）", bMisses)))
                 }
                 // 先用真实探测确认网络是否真断：网关不回保活应答 ≠ 会话失效
                 if misses >= 2, let liveness = configuration.livenessCheck,

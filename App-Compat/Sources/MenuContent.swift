@@ -27,6 +27,8 @@ struct MenuContent: View {
                 embedded { InspectPanel() }
             case .sites:
                 embedded { SitesPanel() }
+            case .gpa:
+                embedded { GPAPanel() }
             case .developer:
                 embedded { DeveloperPanel() }
             case .portal:
@@ -166,14 +168,6 @@ struct MenuContent: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if !model.recentLog.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(model.recentLog.prefix(3).enumerated()), id: \.offset) { _, line in
-                        Text(line).font(.system(size: 9)).foregroundStyle(.tertiary)
-                            .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-            }
             if let action = model.statusStory.action {
                 Label(action, systemImage: "hand.point.right")
                     .font(.caption2)
@@ -197,7 +191,7 @@ struct MenuContent: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(model.statusStory.title + AppIdentity.displaySuffix).font(.headline)
                 Text(model.statusStory.oneLiner)
-                    .font(.caption)
+                    .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -208,9 +202,7 @@ struct MenuContent: View {
     private var detailGrid: some View {
         VStack(alignment: .leading, spacing: 6) {
             detailRow(Copy.t("M04"), model.linkTitle, hint: linkHint)
-            if let ip = model.clientIP {
-                detailRow(Copy.t("M05"), ip, hint: Copy.t("M06"), mono: true)
-            }
+            // 本机 IP 是排障信息，不在主面板占一行；完整信息在「详情」页。
             if model.state.isOnline {
                 detailRow(Copy.t("M07"), timeText, hint: Copy.t("M08"), mono: true)
             }
@@ -219,17 +211,23 @@ struct MenuContent: View {
 
     /// 一行明细：左边标签，右边值，值下面一句人话注解（说明贴着它自己那一行）
     private func detailRow(_ label: String, _ value: String,
-                           hint: String, mono: Bool = false, small: Bool = false) -> some View {
+                           hint: String, mono: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text(label).font(.caption2).foregroundStyle(.secondary)
+            // 标签和值统一 11pt：以前标签 caption2、值 caption，视觉上差一档。
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(width: 96, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
                 Text(value)
-                    .font(mono ? .caption.monospacedDigit() : (small ? .caption2 : .caption))
+                    .font(mono ? .system(size: 11, design: .monospaced)
+                               : .system(size: 11))
                     .lineLimit(2)
-                Text(hint).font(.system(size: 10)).foregroundStyle(.tertiary)
+                Text(hint)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -381,6 +379,23 @@ struct MenuContent: View {
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+
+                // 系统的「捕获门户助手」可能一直赖在屏幕上；给它一个随时可点的出口。
+                if SystemPortalPopup.isRunning {
+                    Button {
+                        model.dismissSystemPortalPopup()
+                    } label: {
+                        Label(Copy.t("A30"), systemImage: "xmark.rectangle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+                if let message = model.systemPortalPopupMessage {
+                    Text(message)
+                        .font(.system(size: 9))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             if !model.isConfigured {
@@ -451,9 +466,12 @@ struct MenuContent: View {
         }
     }
 
-    /// GPA / 保研：直接交给系统浏览器，避免面板内的 WKWebView 崩溃风险。
+    /// GPA / 保研：先在本机认出学院，再打开网页让用户选专业。
+    /// 网页仍然交给系统浏览器，避免菜单栏面板里嵌 WKWebView 的崩溃风险。
     private var gpaEntry: some View {
-        Link(destination: model.gpaURL) {
+        Button {
+            model.show(.gpa)
+        } label: {
             HStack(spacing: 9) {
                 Image(systemName: "chart.bar.doc.horizontal")
                     .font(.system(size: 15))
@@ -462,18 +480,20 @@ struct MenuContent: View {
                     Text(Copy.t("GPA01"))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.primary)
-                    Text(Copy.t("GPA02"))
-                        .font(.system(size: 9))
+                    Text(model.gpaSubtitle)
+                        .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 4)
-                Image(systemName: "arrow.up.right")
+                Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
             .background(
                 RoundedRectangle(cornerRadius: 9, style: .continuous)
                     .fill(.primary.opacity(0.04))

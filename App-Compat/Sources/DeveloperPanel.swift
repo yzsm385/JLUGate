@@ -15,6 +15,15 @@ struct DeveloperPanel: View {
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                action("抓取实际认证网页", "doc.text.magnifyingglass",
+                       detail: "只读 GET，不提交账号密码；记录真实 URL、标题、表单和脚本，并把 HTML 原文保存在本机。") {
+                    model.capturePortalPage()
+                }
+                if let status = model.portalPageCaptureStatus {
+                    Text(status).font(.caption2).foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+
                 action(Copy.t("X03"), "square.and.arrow.up",
                        detail: Copy.t("X04")) {
                     model.exportDiagnostics()

@@ -112,7 +112,7 @@ JLU Gate 想把这三个门并成一个闸口 🚪✨。账号密码填一次，
 | 🛤️ **代理与路由** | 你开的代理像条岔路，认证包可能走着走着就被拐走了；这块帮你量清楚两条路差多远 | 实测"认证通道延迟：直连 vs 经代理"；路由出口是不是被 TUN 接管、ConfigMethod 是不是 Manual，都直接给结论 |
 | 🖥️ **界面与状态** | 不跟你拽术语，像旁边站了个懂行的人，指着那一行告诉你"现在这样、下一步该干嘛" | 菜单栏常驻不占 Dock；文案说人话少用术语；启动看门狗——崩过一次就进安全模式（不自动连、不读密码），保证能进来改配置 |
 | 🔄 **更新与卸载** | 来了就走、走了不留痕 | 设置里检查更新，有新版自己下载 → 退出 → 替换 → 重开，不用手动覆盖；卸载脚本删掉 App、配置、日志和钥匙串条目 |
-| 🔒 **安全上的克制** | 该它管的它管，不该它碰的一根手指都不伸 | JLU.WIFI 走系统浏览器，程序不碰明文密码、不做 DOM 操作或自动填充；预检只提示不拦截，放不放行由学校服务器定 |
+| 🔒 **安全上的克制** | 该它管的它管，不该它碰的一根手指都不伸 | JLU.WIFI 优先在后台直接调门户登录接口（HTTPS；密码只在内存里用一次，不落盘、不写日志），接口不认才回退系统浏览器；不做 DOM 操作或自动填充；预检只提示不拦截，放不放行由学校服务器定 |
 
 ---
 
@@ -228,7 +228,7 @@ Once you're on 1.0.1, updating is one click: **Update** in the panel → check �
 | 🛤️ **Proxy & routing** | Your proxy is a detour that may hijack auth packets; this measures both paths | "Auth-channel latency: direct vs via proxy"; whether the route is TUN-hijacked or ConfigMethod is Manual—clear verdicts |
 | 🖥️ **UI & status** | No jargon—like a savvy friend pointing at the line saying "here's where you are, here's what to do next" | Menu-bar resident, no Dock; plain-language copy; launch watchdog—crashes once → safe mode (no auto-connect, no password read) so you can still open settings |
 | 🔄 **Update & uninstall** | Arrives cleanly, leaves cleanly | In-app update check: download → quit → replace → relaunch; uninstall script removes app, config, logs, keychain entries |
-| 🔒 **Restraint** | It minds its own business and doesn't touch what it shouldn't | JLU.WIFI goes through the system browser; the app never handles plaintext passwords, no DOM ops or auto-fill; pre-checks only advise, never block—the server decides |
+| 🔒 **Restraint** | It minds its own business and doesn't touch what it shouldn't | JLU.WIFI first calls the portal login API directly in the background (HTTPS; the password is used once in memory, never persisted or logged) and only falls back to the system browser if the API refuses; no DOM ops or auto-fill; pre-checks only advise, never block—the server decides |
 
 ---
 

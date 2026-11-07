@@ -49,11 +49,16 @@ public struct PortalPage: Sendable, Equatable {
     public var statusCode: Int
     public var body: String
     public var location: String?
+    public var responseURL: URL?
+    public var contentType: String?
 
-    public init(statusCode: Int, body: String, location: String? = nil) {
+    public init(statusCode: Int, body: String, location: String? = nil,
+                responseURL: URL? = nil, contentType: String? = nil) {
         self.statusCode = statusCode
         self.body = body
         self.location = location
+        self.responseURL = responseURL
+        self.contentType = contentType
     }
 }
 
@@ -197,9 +202,14 @@ public struct URLSessionPortalFetcher: PortalPageFetching {
 
         let (data, response) = try await session.data(for: request)
         let http = response as? HTTPURLResponse
+        let contentType = http?.value(forHTTPHeaderField: "Content-Type")
+        let encoding = http?.textEncodingName
+            ?? PortalTextCoding.charset(in: contentType)
         return PortalPage(
             statusCode: http?.statusCode ?? 0,
-            body: String(decoding: data, as: UTF8.self),
-            location: http?.value(forHTTPHeaderField: "Location"))
+            body: PortalTextCoding.decode(data, encoding: encoding),
+            location: http?.value(forHTTPHeaderField: "Location"),
+            responseURL: response.url,
+            contentType: contentType)
     }
 }

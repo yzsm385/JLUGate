@@ -45,8 +45,9 @@ public struct PortalConfiguration: Sendable {
 /// 与 Dr.Com 的唯一共同点是"都要先选对物理网卡"（PLAN §5.4）：
 /// 没有 61440、没有摘要、没有心跳，在线判定全靠 204 探针。
 ///
-/// 认证本身交给 `WKWebView`（`PortalBrowser`），程序**不碰明文密码**，
-/// 也就自然免疫"页面改版 / JS 加密 / 验证码"（PLAN §5.4.2）。
+/// 认证本身优先交给 `EportalClient`（直接调门户登录接口，不弹网页）；
+/// 接口不认时才回退到 `PortalBrowser`（系统浏览器，由用户自己输密码）。
+/// 两条路都不做 DOM 操作 / 自动填充（决策 D-001）。
 public actor PortalEngine: AuthProvider {
     public nonisolated let link: AccessLink = .jluWiFi
 
@@ -56,10 +57,14 @@ public actor PortalEngine: AuthProvider {
         case note(String)
         case online
         case needsUser
+        /// 门户确认接受了这组账号密码（静默接口或用户手动登录都算）。
+        /// 没有 Dr.Com 会话号，只用来把凭据标成"已验证"。
+        case authenticated(account: String)
     }
 
     private let probe: any ConnectivityProbing
     private let browser: any PortalBrowser
+    private let eportalClient: any EportalAuthenticating
     private let detector: PortalDetector
     private let configuration: PortalConfiguration
     private let clock: any Clock
@@ -74,17 +79,21 @@ public actor PortalEngine: AuthProvider {
     private var lastNotice: String?
     private var lastPromptAt: ContinuousClock.Instant?
     private var currentInterface: InterfaceSnapshot?
-    /// 静默登录用的账号密码（由 App 层注入；不写日志、不落盘）
-    private var credentials: PortalCredentials?
+    /// 静默登录用的账号密码（由 App 层同步注入；不写日志、不落盘）
+    private let credentials: PortalCredentials?
     private var interfaceIP: String? { currentInterface?.ipv4 }
 
     public init(probe: any ConnectivityProbing = ConnectivityProbe(),
                 browser: any PortalBrowser,
+                credentials: PortalCredentials? = nil,
+                eportalClient: any EportalAuthenticating = EportalClient(),
                 detector: PortalDetector = PortalDetector(),
                 configuration: PortalConfiguration = PortalConfiguration(),
                 clock: any Clock = SystemClock()) {
         self.probe = probe
         self.browser = browser
+        self.credentials = credentials
+        self.eportalClient = eportalClient
         self.detector = detector
         self.configuration = configuration
         self.clock = clock
@@ -126,7 +135,15 @@ public actor PortalEngine: AuthProvider {
             emit(.note("还没有拿到门户地址：请先让程序探测一次（或到设置里填入口 URL）"))
             return
         }
-        _ = await presentLogin(url: url)
+        let result = await presentLogin(url: url)
+        // 静默登录成功（或用户手动登录完成）后也确认一次 204，
+        // 别让菜单点了"登录"、界面却一直停在未连接。
+        if case .succeeded = result,
+           let interface = currentInterface,
+           await waitForOnline(epoch: epoch, interface: interface) {
+            emitAuthenticatedIfPossible()
+            markOnline()
+        }
     }
 
     public func pendingEntry() -> URL? { currentEntry }
@@ -135,11 +152,6 @@ public actor PortalEngine: AuthProvider {
 
     /// 菜单里要显示的说明（被踢原因 / 重进代价）。
     public func noticeText() -> String? { lastNotice }
-
-    /// 注入静默登录用的凭据（App 层在 connect 前调用）。
-    public func setCredentials(_ credentials: PortalCredentials?) {
-        self.credentials = credentials
-    }
 
     /// 用户点"重新抢回在线"：立刻走一次登录（会踢掉队列第二台，UI 需先提示）。
     public func reclaim() async {
@@ -154,6 +166,7 @@ public actor PortalEngine: AuthProvider {
         case .succeeded:
             if let interface = currentInterface,
                await waitForOnline(epoch: epoch, interface: interface) {
+                emitAuthenticatedIfPossible()
                 markOnline()
             }
         case .cancelled:
@@ -231,6 +244,7 @@ public actor PortalEngine: AuthProvider {
                 switch result {
                 case .succeeded:
                     if await waitForOnline(epoch: epoch, interface: interface) {
+                        emitAuthenticatedIfPossible()
                         markOnline()
                         do { try await monitor(epoch: epoch, interface: interface) } catch {}
                     } else {
@@ -305,7 +319,7 @@ public actor PortalEngine: AuthProvider {
 
         if let credentials, !credentials.account.isEmpty, !credentials.password.isEmpty {
             emit(.note(Copy.t("R29")))
-            let outcome = await EportalClient(timeout: configuration.probeInterval)
+            let outcome = await eportalClient
                 .login(entry: url, account: credentials.account, password: credentials.password,
                        clientIP: interfaceIP, clientMAC: credentials.clientMAC)
             switch outcome {
@@ -333,6 +347,13 @@ public actor PortalEngine: AuthProvider {
     }
 
     // MARK: 工具
+
+    /// 只有 204 真正确认在线后才把凭据标成已验证。
+    /// 静默接口说"成功"、或用户点了"我已完成登录"，都还需要这一步。
+    private func emitAuthenticatedIfPossible() {
+        guard let account = credentials?.account, !account.isEmpty else { return }
+        emit(.authenticated(account: account))
+    }
 
     private func markOnline() {
         setState(previous: authState, next: .online)
@@ -388,3 +409,33 @@ public protocol PortalLoginControlling: Sendable {
 }
 
 extension PortalEngine: PortalLoginControlling {}
+
+extension PortalEngine: SessionTelemetryProviding {
+    /// 把引擎内部的 `.note`（静默登录失败原因、被挤下线、204 恢复…）接进协调器的遥测流。
+    ///
+    /// 以前这里没接：静默登录明明返回了 `.unsupported`、失败原因也生成了，但
+    /// `AuthCoordinator` 只订阅 `state` 和 `telemetry`，于是 UI 和日志里什么都看不到，
+    /// 用户只看到"又弹浏览器了"。
+    public nonisolated var telemetry: AsyncStream<AuthTelemetry> {
+        AsyncStream { continuation in
+            let task = Task { [weak self] in
+                guard let self else {
+                    continuation.finish()
+                    return
+                }
+                for await event in await self.events() {
+                    switch event {
+                    case .note(let message):
+                        continuation.yield(.note(message))
+                    case .authenticated(let account):
+                        continuation.yield(.portalAuthenticated(account: account))
+                    default:
+                        break
+                    }
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in task.cancel() }
+        }
+    }
+}

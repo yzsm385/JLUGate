@@ -1067,6 +1067,11 @@ sudo tcpdump -i en7 -n "udp port 61440" &   # 同时跑（环境 B 有线口）
 任务：`PortalDetector`（302/200 判定）、`PortalEngine`（actor）、`PortalLoginView`（纯 WKWebView + Cookie）、`AuthCoordinator` 链路切换、`Tools/mock-portal/portal_server.py`。
 
 **决策 D-001（2026-11-03）**：v1 不做表单自动化。收尾项：
+
+> **1.4.1 修订（2026-11-06）**：上面的"程序不接触明文"只适用于**浏览器兜底**。
+> 吉大门户实际支持 `GET https://net.jlu.edu.cn/drcom/login`，App 现在优先在内存里
+> 用一次账号密码直接调这个接口（HTTPS，不落盘、不写日志）；仍然**不做 DOM 自动填充**。
+> 详见 `docs/protocol-findings.md` §10。
 1. 删除 `PortalEngine.Configuration.autoFill` 与其传递链（`PortalEngine.swift` → `PortalBrowser.presentLogin(credentials:)`）；
 2. `presentLogin` 只接收 `url`；
 3. 设置页不放任何“自动填写”开关；

@@ -438,19 +438,20 @@ func runPortalCheck(_ options: Options) -> Int32 {
         failTolerance: 2,
         dnsServers: dnsServers,
         successChecks: 2)
+    // 调试用：有账号密码就试一次后台静默登录（不弹网页）
+    let credentials: PortalCredentials?
+    if !options.account.isEmpty, !options.password.isEmpty {
+        credentials = PortalCredentials(account: options.account, password: options.password,
+                                         clientMAC: interface.mac)
+        print("静默登录：已注入账号 \(options.account)（密码不打印）")
+    } else {
+        credentials = nil
+    }
     let engine = PortalEngine(probe: ConnectivityProbe(),
                               browser: SilentPortalBrowser(),
+                              credentials: credentials,
                               detector: PortalDetector(),
                               configuration: configuration)
-    // 调试用：有账号密码就试一次后台静默登录（不弹网页）
-    if !options.account.isEmpty, !options.password.isEmpty {
-        let account = options.account
-        let password = options.password
-        let credentials = PortalCredentials(account: account, password: password,
-                                            clientMAC: interface.mac)
-        Task { await engine.setCredentials(credentials) }
-        print("静默登录：已注入账号 \(account)（密码不打印）")
-    }
 
     let semaphore = DispatchSemaphore(value: 0)
     let box = PortalStateBox()
@@ -466,6 +467,7 @@ func runPortalCheck(_ options: Options) -> Int32 {
                 case .note(let message): print("日志：\(message)")
                 case .online: box.online = true
                 case .needsUser: print("需要人工登录")
+                case .authenticated(let account): print("门户已接受凭据 → \(account)")
                 }
             }
         }
@@ -767,6 +769,10 @@ func runPortalSelfTest(_ options: Options) -> Int32 {
     let engine = PortalEngine(
         probe: LocalPortalProbe(base: base),
         browser: CLIPortalBrowser(account: account, password: password),
+        // 自测走真正的静默登录（EportalClient）——浏览器只作为兜底，
+        // 这样模拟门户能验证 `/drcom/login` 的请求格式和结果解析。
+        credentials: PortalCredentials(account: account, password: password),
+        eportalClient: EportalClient(timeout: .seconds(3)),
         detector: PortalDetector(configuredURL: base.appendingPathComponent("portal")),
         configuration: configuration)
 
@@ -785,6 +791,7 @@ func runPortalSelfTest(_ options: Options) -> Int32 {
                 case .note(let message): print("日志：\(message)")
                 case .online: print("已在线（204 通过）")
                 case .needsUser: print("需要用户登录")
+                case .authenticated(let account): print("门户已接受凭据 → \(account)")
                 }
             }
         }
@@ -807,7 +814,7 @@ func runPortalSelfTest(_ options: Options) -> Int32 {
     print("—— 自测结果 ——")
     print("状态序列：\(recorder.states.joined(separator: " → "))")
     if recorder.online {
-        print("✅ 网页认证自测通过（302 → 登录页 → POST → 204）")
+        print("✅ 网页认证自测通过（302 → 静默登录 /drcom/login → 204）")
         return 0
     }
     print("❌ 网页认证自测失败")

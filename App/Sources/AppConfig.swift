@@ -58,6 +58,8 @@ struct AppConfig: Codable, Sendable {
     var collegePrefixMap: [String: String] = [:]
     /// 手动选定的学院官网 host（学号认不出时的兜底）
     var myCollegeHost = ""
+    /// GPA 网页里手动选定的学院代码（空 = 按学号/账号自动识别）
+    var gpaCollegeCode = ""
     var link = "auto"
     var server = "10.100.61.3"
     var serverPort = 61440
@@ -101,7 +103,7 @@ struct AppConfig: Codable, Sendable {
     /// 静态 IP/网关/MAC 全部重置成默认值（0.2.0 起就踩过这个坑：更新后"突然连不上"）。
     /// 每个字段都用 `decodeIfPresent`，缺失就落回默认值。
     enum CodingKeys: String, CodingKey {
-        case schemaVersion, account, studentID, collegePrefixMap, myCollegeHost
+        case schemaVersion, account, studentID, collegePrefixMap, myCollegeHost, gpaCollegeCode
         case link, server, serverPort, localPort, channel, interfaceLock, accounts
         case autoDetect, verboseAuthLogging, routeGuard, portal, keepAlive, probe
         case backoff, launchAtLogin, autoConnect, declaredProxyMode
@@ -119,6 +121,7 @@ struct AppConfig: Codable, Sendable {
         studentID = try c.decodeIfPresent(String.self, forKey: .studentID) ?? ""
         collegePrefixMap = try c.decodeIfPresent([String: String].self, forKey: .collegePrefixMap) ?? [:]
         myCollegeHost = try c.decodeIfPresent(String.self, forKey: .myCollegeHost) ?? ""
+        gpaCollegeCode = try c.decodeIfPresent(String.self, forKey: .gpaCollegeCode) ?? ""
         link = try c.decodeIfPresent(String.self, forKey: .link) ?? "auto"
         server = try c.decodeIfPresent(String.self, forKey: .server) ?? "10.100.61.3"
         serverPort = try c.decodeIfPresent(Int.self, forKey: .serverPort) ?? 61440

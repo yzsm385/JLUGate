@@ -249,3 +249,61 @@ a9 f8 09 00 ff ff ff ff ff ff ff ff ff ff ff ff
 3. 保活必须实现**两种**（38/72 与 40/40），且 B 型的序号是**请求与应答共用**的自增计数。
 4. 登录失败要**直接展示服务器给的原因串**（`ldap.auth error`），不要自己翻译成"密码错误"——将来出现"欠费""顶号"时同理。
 5. 登录包里的 MAC/账号/版本/主机名必须按 §5 的偏移逐字节填，不能自创。
+
+---
+
+## 10. JLU.WIFI 网页认证（Dr.COM 4.0，2026-11 实测）
+
+> 目的：把"浏览器登录"变成后台静默登录（JLU Gate 1.4.1）。抓的是**页面自己的 JS**，
+> 不是猜测；同一条请求用假账号在真机上验证过返回格式。
+
+### 10.1 入口
+
+| 项 | 值 |
+|---|---|
+| 门户页（系统弹窗停的地方） | `https://net.jlu.edu.cn/`（`http://` 也会 302 到 https） |
+| 页面强制域名 | `domainName = "net.jlu.edu.cn"` |
+| eportal 端口 | http 801 / https 802 |
+| 登录接口（**实际走这条**） | `https://net.jlu.edu.cn/drcom/login` |
+| 另一套接口 | `https://net.jlu.edu.cn:802/eportal/portal/login` |
+
+> ⚠️ `http://net.jlu.edu.cn:801/eportal/?c=ACSetting&a=Login` 会返回 302，Location 指向
+> `https://10.100.61.7:802/...`。**不要直接连这个 IP**：证书是 `*.jlu.edu.cn`，
+> 按 IP 建 TLS 必然校验失败（旧实现就栽在这里，表现为"静默登录永远不支持"）。
+
+### 10.2 `/drcom/login` 请求
+
+`GET` + JSONP，参数全在 query（来自 `a40.js` 的 `default_login` / `portal_login`）：
+
+| 参数 | 值 | 说明 |
+|---|---|---|
+| `callback` | `dr1003` | JSONP 回调名 |
+| `DDDDD` | 账号 | **只取 `@` 前面**；运营商后缀另算 |
+| `upass` | 密码 | `en_md5=0` 时是明文（页面配置实测为 0） |
+| `0MKKey` | `123456` | 老 Dr.COM 的固定盐 |
+| `R1` `R2` `R3` | 空 | `R2=1` 仅当 `en_md5=1` |
+| `R6` | `0` | |
+| `para` `v6ip` | 空 | IPv6 联动时才有值 |
+| `terminal_type` | `1` | PC |
+| `lang` | `zh` | |
+| `v` | 随机数 | 防缓存 |
+
+### 10.3 返回
+
+```json
+dr1003({"result":0,"wopt":0,"msg":1,"uid":"...","ss4":"...","msga":"userid error1"})
+```
+
+- `result == 1` 或 `"ok"`：成功（仍需 204 探针确认）。
+- `result == 0`：失败。`msg` 是**数字代码**，`msga` 是服务端原因串：
+  - `0/1` + `userid error1` / `ldap auth error` → 账号或密码不对；
+  - `2` → 账号/终端已在线；
+  - `3` → IP 不在允许范围；`4` → 余额/时长不足；`5` → 停机；
+  - `6` → 系统繁忙；`7` → 超出时长/流量。
+- 响应头是 `charset=gbk`，要按 GB18030 解，否则中文原因会乱码。
+
+### 10.4 还有一个坑：凭据"已验证"状态
+
+网页认证没有 Dr.Com 的会话号，以前不会触发 `AuthTelemetry.session`，保存的密码
+永远停在"未验证"，下次启动又被向导拦下。1.4.1 起在 **204 确认在线后**发
+`portalAuthenticated(account:)`，App 据此 `CredentialStore.markVerified`。

@@ -1,0 +1,1714 @@
+// 由 gpa/tools/gen_app_programs.py 从 gpa/data/plans-index.js 生成，请勿手改。
+// 只含「学院 → 专业 → 年级 → 计算器路由」，课程内容仍由网页按需加载。
+
+import Foundation
+
+/// 一个 GPA 计算器路由（对应网页里的一套培养方案）。
+public struct GPAPlan: Sendable, Equatable, Hashable, Identifiable {
+    public let year: Int
+    /// 相对 `GPALink.base` 的路径，如 `plan.html?plan=…` / `software.html?cohort=2026`
+    public let route: String
+
+    public var id: String { route }
+
+    public init(year: Int, route: String) {
+        self.year = year
+        self.route = route
+    }
+}
+
+/// 同一专业跨年级的方案集合（按年份从新到旧）。
+public struct GPAMajor: Sendable, Equatable, Hashable, Identifiable {
+    public let name: String
+    public let plans: [GPAPlan]
+
+    public var id: String { name }
+
+    public init(name: String, plans: [GPAPlan]) {
+        self.name = name
+        self.plans = plans
+    }
+
+    /// 和网页 landing 一致：有入学年就取「≤ 该年级」的最近一套；
+    /// 没有入学年取最新一套。没有更早的方案时返回 nil，不拿更晚的顶替。
+    public func plan(for year: Int?) -> GPAPlan? {
+        guard let year else { return plans.first }
+        return plans.first { $0.year <= year }
+    }
+}
+
+public enum GPAProgramDirectory {
+    /// 全库方案数（按专业 + 年级去重后）：1011
+    public static let planCount = 1011
+
+    public static let majorsByCollege: [String: [GPAMajor]] = [
+        "01": [
+            GPAMajor(name: "劳动与社会保障", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=0a64e524c9c24e22b0728f3014044acd&v=91f125d585&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=2fbce0881cd847b7b2691d058265f3d2&v=f091525d11&y=2022"),
+            ]),
+            GPAMajor(name: "哲学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=4cbb692463574b4682ae19a6de737c7f&v=6f3c43f84d&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=bb60bb15169e437dadfc604a3734e5f1&v=81ff39904a&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=c2cfa77dcf244e3d8d93e145f39bd897&v=8b934dfb3b&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=61b3eedcaa4c48428fa0a8a7630d87d7&v=8702c225a0&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6da88378645c4dbf966d9dbe6ec4c678&v=a4c54a1921&y=2022"),
+            ]),
+            GPAMajor(name: "应用心理学", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=1af4a7dcc2174c45886781d78f840343&v=973d7b88bf&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=222d3f291c2f43048d9f64c4948f0f21&v=7d281321e9&y=2022"),
+            ]),
+            GPAMajor(name: "拔尖基地班（哲学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=5db0936900644a238cb13b6097e3bccc&v=4b4911ee78&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=22eb66617db041f1832103c6001a5ffb&v=423dda1ed3&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=5cc7a4e2546e4640aea7df5fb0c947ab&v=6374f80f4f&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=e306ecff16534916973c1848b258400d&v=dd3a4047c6&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=0fd62dd477fa4a0b8f7bf60c423087be&v=afc42ecb6b&y=2022"),
+            ]),
+            GPAMajor(name: "社会学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=dba8b191abc44f02882604b23bb3094d&v=572f6ee59f&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=718b3432a99b46ee820f649893ca75bd&v=985235212e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e7a06e936fe54c0cbf722fcce4f6b083&v=17a8399955&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=1838e32e31a3425781a41fd9531166f1&v=8068a6cbfb&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=612391c0597343b8b3dda3077fd1a348&v=e4d662495d&y=2022"),
+            ]),
+            GPAMajor(name: "社会学类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=fa397d3e6624438b8e884d422f388bbe&v=cef3341923&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=53432ee5cbac4439bf60ecbe1a026baa&v=82acecacbe&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=98ee41e9510d41fab99d2fe054802ef9&v=7c9583f321&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=39112f4434654ce19a32efc5d1f03fcc&v=80f9d4d023&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f40861f73ffc436d9282330ff4a6035e&v=cffa741ec5&y=2022"),
+            ]),
+            GPAMajor(name: "社会工作", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=67b7b5f679f347638b45f42d10a64d08&v=249da90924&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=10a4eab5cf5944c98a71419a30576884&v=1ad7166f48&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=d8da191b7ea940d98c17c3e329299c34&v=364ce3d46c&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=dc96a7c8c3e54a3d864211fb473a61e9&v=0fc31b856e&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=731b299803cb416c88cc8981219d179f&v=2a5e3c2c18&y=2022"),
+            ]),
+        ],
+        "02": [
+            GPAMajor(name: "人文科学试验班（文学与史学,匡亚明班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=eed6b62ae44c4e80b2b6a5c1be799d21&v=d13e745adc&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=ac557e2a86844d1685a97b96feeea895&v=c6a8199a44&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=8c7f828c550a4e74afa856a638ef72dc&v=ecc8530cc4&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=a00cfd80ac2c4d76953f54655df75ef1&v=2c92492bf8&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=781f931d097941f59baf69f1e4294ffc&v=94d7f0f9d6&y=2022"),
+            ]),
+            GPAMajor(name: "拔尖基地班（中国语言文学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=dff94ac592fa4af997048a08ac3990a7&v=c09bef3ede&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=ad56b30fdc214e0693156dc6699d92e5&v=3c0f90be12&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=6d06452045324a03a27a71557bda95b9&v=e0ab7d5689&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=9821ec70fa6a42e09fa5e77e1d008533&v=1a48b0f6b7&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=ddcfabe877f6422b84f795822ccedfe0&v=7bd5179754&y=2022"),
+            ]),
+            GPAMajor(name: "汉语言文学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=95028917a2ab4a44b16f5b5e0afd2378&v=70f60f1e13&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=4defcbd4e888443b851e5689791624e4&v=a173f4da8e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=789654f2fab54a5b833b3594b07f9d85&v=52f0a43497&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=4bde12c5161c4a53a257136b68579120&v=3b42033bb5&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=cc1c9df870d7403d99ae8fde51157d3f&v=71ab09572d&y=2022"),
+            ]),
+        ],
+        "03": [
+            GPAMajor(name: "俄语", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=0a69654c3bbc4b60a3c523b15aeb8b57&v=1aac575670&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=357c3b7e5a18411ba45f6a3c6d9b3405&v=989c80fe15&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=453647e937084255bcac5dd55f10e5b9&v=7175f72a9d&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=131ac2f7a6034302a1b7c20337d5e11b&v=33c67076eb&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c58f98f22aee4a13bed30690b14f46cd&v=179a6ca9be&y=2022"),
+            ]),
+            GPAMajor(name: "俄语-国际经济与贸易", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=d5b308d31c3e4706857117ccfd5df9b6&v=28a7215eae&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=65f7abe41be647548a5209b659bd717c&v=9510dddb02&y=2025"),
+            ]),
+            GPAMajor(name: "日语", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=9b65c96e77494202a0159a2144971457&v=3bc9a05304&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=ddbfb414d1f74a3eafe35d8848ad49ec&v=b2e284b7d7&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e655b990d7e744969582f7ed9f243ae9&v=627f143abb&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=458f47b9f2dd4d7080204231ef7a7136&v=4aea27a4e6&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=ca8bfbc87e90419d86c7beb1eee3b947&v=fcbe5c06bc&y=2022"),
+            ]),
+            GPAMajor(name: "日语-国际经济与贸易", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=63ab7cc741954ddd963f2e26ccaf1eab&v=960c9e35f7&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=2f8c3c63c8e3449eb318edad2e6acb59&v=61f2895b07&y=2025"),
+            ]),
+            GPAMajor(name: "朝鲜语", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=e9634b6dd7544a7a871fe9031911ffba&v=d791061d0b&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=0c3e7e90343244b9bd0878e5512bda38&v=47add7c1da&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=4e7849d5a4d2462ea007592c34b9a3ad&v=d6a37bf485&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=6618e72321894098a31ed17ca0238229&v=c8d48bfc55&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=912b0fa6a9de4001ac16a96a818addf4&v=e9bf120275&y=2022"),
+            ]),
+            GPAMajor(name: "朝鲜语-国际经济与贸易", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=12716b24f2724d528e9ca40da1a71aa6&v=2c5fd58800&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=e5c1d8ab04924b938f91e4e7519d763f&v=6837f8b0f6&y=2025"),
+            ]),
+            GPAMajor(name: "英语", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2bc149d766e74e6ebfa73f41e3e36964&v=45b84eb514&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=0ad1c5424ac94dffb8c29c2e388e0f73&v=2ca623889f&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1da9155d5d34415c98b0cff597d0f10a&v=e92ce05d50&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=4baedbff3a3a41a7af923b3c9d0cd323&v=4176349794&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=a7bd16cd35594ebf80492c7072289baf&v=09fdd14c11&y=2022"),
+            ]),
+            GPAMajor(name: "英语（涉外法务英语特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=36dae802337646878a9c0824fe41baa6&v=6f40b948e5&y=2026"),
+            ]),
+            GPAMajor(name: "西班牙语", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=8f5c5e69b3cc4055b84f49d9653781cc&v=fe095120a7&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=b8239fa9ff5249cd8efdf5b7ae60146e&v=a87cab7970&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=8e0e41590ba44c0fb10e6ada43ebc4b6&v=7c84326b32&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=684b4eb7cda7413d88cf3ad3254e879c&v=02574d2eda&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=e4146ba81c7a4ae492fbfa6e67be0f82&v=c91f8d69e3&y=2022"),
+            ]),
+            GPAMajor(name: "西班牙语（双学士学位，西班牙语和国际政治）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=48c64d4df03e4dc3af07e66c1cb954e6&v=9969e2916c&y=2026"),
+            ]),
+        ],
+        "04": [
+            GPAMajor(name: "产品设计", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=a2c8b1a1860d4d4794c770ce45f3ab04&v=8ad4c931fb&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f7ccab4566564402946411f895834da0&v=2899e54ffd&y=2022"),
+            ]),
+            GPAMajor(name: "环境设计", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=5b316d3dc9aa4bf4a60d4b5a5921f0d6&v=fd28adfce3&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f995856b7bf244e0b25e08e374e60b00&v=56e202e829&y=2022"),
+            ]),
+            GPAMajor(name: "绘画", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=b1a7b6f4128543a081fcca5b8179645e&v=596ced458d&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=f9250e1a71f74d6da58660b1bea447f2&v=c0e24e9cf8&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=cdda2f63d14948f2939c9724ce422b41&v=229e659002&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=a9fd6939e53e4400b54cb7cde5af2858&v=3048b83534&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=5fffcf871bcc42219c33f09634f30b4f&v=019e060150&y=2022"),
+            ]),
+            GPAMajor(name: "艺术设计学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=d1d8785c8e824ca78fc233afa8edc34c&v=39b3d1426b&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=a356c76798074e7dbcdc04f157fbc37a&v=b08d75d004&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=74f783d169154a75903056aae5d063b2&v=ebcf101f06&y=2024"),
+            ]),
+            GPAMajor(name: "视觉传达设计", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=afe3132d16004e97bbfa17408cb378be&v=327bd18e79&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=a2a217ada7204c1f9d644bfdf11ff394&v=c6a4f01e8d&y=2022"),
+            ]),
+            GPAMajor(name: "设计学类", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=7792887e9f67463eaff60ce8e4ee5ed3&v=2a50843ad5&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=99f03f32f0e145dba8abf8dba0874cbc&v=9697071afd&y=2022"),
+            ]),
+            GPAMajor(name: "音乐学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6418e1bb3c124d82834496e11ec2eab2&v=414990ab6e&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=b8dd5f6f7fc64f48bcd005d1890f8abe&v=48711373c0&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=9940c995d3984310a1b888ed6887a774&v=5a9f63e8f9&y=2024"),
+            ]),
+            GPAMajor(name: "音乐表演", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=56c29c41a07d4115b30eedeac8ebfcde&v=6d48db5f10&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c25cdc7a5cba45dcb827bd5fb018e2a6&v=39a4a3d9b1&y=2022"),
+            ]),
+        ],
+        "05": [
+            GPAMajor(name: "冠军班（运动训练专业特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=e03d02b8fd2642e98482b3912fbe77a0&v=b47cebff99&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=daab1200e9124162be88daacd2498077&v=f6bd40500a&y=2025"),
+            ]),
+            GPAMajor(name: "社会体育指导与管理", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6704ede67c8e4607aecfdd4dd4d33ba2&v=394af18442&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=57f058f8f9664639ae22c4fd78d87dac&v=ca0160a5b4&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=00a14e4bbcec468d89e6aaaf1740af74&v=55aa84e4aa&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=f533911f8f9a43f5bc6a7ddcd711ad97&v=1d0c3b97d5&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=9246c2f1c83c41d8a2db879db61c4181&v=2f9e47a119&y=2022"),
+            ]),
+            GPAMajor(name: "运动训练", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=42e08a4e669247858f3b5e5d29ed0ecd&v=f096c866b1&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=800be6159b7241bfb429dfe04cedb231&v=17ed992858&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=9d847c82e5c743d5a2028880cb112172&v=1338bd928a&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=4208b3a2614d4757abc6413916e267a5&v=273aaf5a01&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=cf40be031ae4426499eb616cb6cf764d&v=86c7b57bfe&y=2022"),
+            ]),
+        ],
+        "06": [
+            GPAMajor(name: "国际经济与贸易", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=0038930c872242f58089a0320dab1fbf&v=7f54e420e2&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=788e76ae958e41f2a019afabae847c15&v=8399996d24&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=178abc3dde8742faa168bfffe149dec3&v=409c761e83&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=29511bee669647579a2cadaf6907490a&v=8d91bd5e29&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=e3bf7e1d23ea491f8db5bc4de1604f88&v=10050bda66&y=2022"),
+            ]),
+            GPAMajor(name: "拔尖基地班（理论经济学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=61c511185fd747339f8c556c8b9104e5&v=5c9040492b&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=b70f686c60bc4fa5bd5c31fd8ce26f4c&v=2b6ac8981b&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=9432901868954785944fa312297216ca&v=1f777fbd88&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=1129d998218546f18484b66cfd6e3a87&v=cb8f50b7c4&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=0f4bcdf9458a45348f99e6e5be1d51d8&v=c1416ee5a6&y=2022"),
+            ]),
+            GPAMajor(name: "经济学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2ceca8ed00944d7cb9d80e8b6d1d2171&v=ab2982016a&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=e6192a3f6a884045b687bd2c7bca3497&v=e65d4d3d07&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=24cbd37f8d9f4a17bfdd767ed2a02315&v=755f10fc1f&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=2755af31fccf4ffd85a2e5ffb0a7d5ce&v=93bd515011&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=cf606dd8a4f3459682948740878fce5b&v=ab344ab074&y=2022"),
+            ]),
+            GPAMajor(name: "经济学类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2dc901976c3d4ef48ff35a5ea8478e25&v=e54d832475&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=481ff40a583643fea704831440bbbccd&v=d7716bc7ea&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1fa3144c122f4576a4ca134a3e4a6576&v=59de0768f6&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=20703ebd974f4fb3bc53ffcfbcf27988&v=f77068a88a&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=01f73ae998b04e0da45702cb9495a006&v=57d6d6dce2&y=2022"),
+            ]),
+            GPAMajor(name: "财政学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=b7f7034d55494a6b8bb013bca468d734&v=41e8f75e19&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=59d6eb9952624c0e8b6d760239c55deb&v=31056f977e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=fcc5474cc2fc4a4e8f06ab410709d45d&v=4d5c085c22&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=e234f6e64ec046ef914c8312bc6ff75f&v=5e8dcbdcf4&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=7672636f30794635a800744f40731be1&v=e79b82cbaf&y=2022"),
+            ]),
+            GPAMajor(name: "金融学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=74670ec922a34de78c07c2235d3d6d72&v=88c075912d&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=5c4068840e104eb68eca66a86bb07b2b&v=36226ae5c3&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=dd8b284cf80b45e2b67b57660bb55bfc&v=c3c68f0476&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=23a7fc5a94e54a4a97bb29256f79942e&v=3fc6c831d0&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=adc4f5fde84b416ba5e80029a0bfc5d2&v=55b5eb8e86&y=2022"),
+            ]),
+        ],
+        "07": [
+            GPAMajor(name: "吕振羽班（法学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=d54f3f099a3c40c9b9e4dd4cb9481b31&v=8b1b208558&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=58d41fc81c64486f822cc362e78a9f41&v=70ca03801d&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=5c93dd651cc643a887ad06760df9b889&v=2062cb26c9&y=2024"),
+            ]),
+            GPAMajor(name: "法学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=acd146f378394a8a9114698d8756f5a4&v=bb773e3691&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=86c4c21870194f6aa33b469e645c8f5c&v=48c7bd8010&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=fd87e0e88fb84ec495fcb93d1cc72650&v=97beedb970&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=6051a84c0b33416d9fd68173616c4c6a&v=559cf5f6dc&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=56a381f4f02f4491830aa1174b5745a0&v=789c7a9102&y=2022"),
+            ]),
+            GPAMajor(name: "涉外法治人才试验班", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=29ca0ffca80a436d89ce780f0d984143&v=5ecb3e3c3c&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=9a9a37a581b84b2e8dfa42b96c9ab3a4&v=2fd84a4810&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=802abc028e534184bff1426ee9efae18&v=d9928a78c2&y=2024"),
+            ]),
+        ],
+        "08": [
+            GPAMajor(name: "国际政治", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=926ec06d1c334c21a3dbc452f50ba8b1&v=13c5a6f8cd&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=10d89fb5be124ea2b579a862294ee5e3&v=075c613aaa&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e7e7f2e6356d45b58f36bae8bbd05982&v=dba2883143&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=a3582543b4c141d18739da471376ed2b&v=9717ec1385&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=878e801f24f145f4880f2944904dd70a&v=3fd267fd4d&y=2022"),
+            ]),
+            GPAMajor(name: "政治学与行政学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=30cbb62e3852445483c85aee4f8c21b5&v=794e669174&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=8fbd40620bc847abb1fee48a266fecce&v=3de121657e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=3d4b0e401c5647918a5ad13044781dca&v=2bc66a1142&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=28e88e40c07b483ea18384d4c3d497fb&v=b6b316641d&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=644eceb03ac546e99f5d4f3e5887e389&v=2d43c57d74&y=2022"),
+            ]),
+            GPAMajor(name: "政治学与行政学类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=ea233bbb173340fd83d97ea387bde82c&v=f2f801709a&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=1f1ffb1e9e7c41f68d08b34ce1efb29e&v=0995227d18&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=094ebce10c924a5d81812a0dcabc2d95&v=a8e60ab3d4&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=bb063e3f6b784abbbf6208dcf3332c45&v=9f59278556&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=d15a089fb4cb46b6bb20976b65ba4a5d&v=a3f6ed0069&y=2022"),
+            ]),
+            GPAMajor(name: "行政管理", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=872a596fdc0a48178d033106108763aa&v=495e3e82ce&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=7e16279ed8b8464e838898176d988795&v=a60b1a4cc5&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=2b418aa62c834a8e9594bb0e1af24f25&v=e186fe06d7&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=fafbcd476f774a189063bb0707b0f30a&v=608bd21dfa&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=134abdcef8de47b48f33919da2a91893&v=dee9a1bb41&y=2022"),
+            ]),
+        ],
+        "10": [
+            GPAMajor(name: "信息与计算科学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=cbc91f4e08ea433b996f24d01e138806&v=fd4d09d721&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=89009dcaa25b4e6eb9d0526e0f3a160f&v=f3769fa709&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=249a9cf5c02047e086619015b570f009&v=62d98e0fd7&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=c59291b8d6774193857ce0081bd57d34&v=d613cad65d&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c56e48982e1440fab90e23e68d088b38&v=b5c5cd2514&y=2022"),
+            ]),
+            GPAMajor(name: "信息与计算科学（数学，唐敖庆班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=b5c9f9e9e2034212b585bd05586a7475&v=9850a69280&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=468e9fa195964d9e97dc82c44de8a81d&v=adf44ee9dd&y=2025"),
+            ]),
+            GPAMajor(name: "数学与应用数学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=7c529278eded445c9118fb84aeac9d1d&v=5cbea33951&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=7508b2d2ac3d414291cad1ace1fadfbf&v=9331b46005&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=c6323f8f36784f258d0e2e473a0819a2&v=e35f107ac2&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=b511905e5b754883a71b2a7e5f6eacee&v=330bfb01b7&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=ecc12d17fcb647709ee746936e818ff5&v=46364f729c&y=2022"),
+            ]),
+            GPAMajor(name: "数学与应用数学（中外合作办学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=781c64ab98964976afb3f90d9e6ce91f&v=f90d2d70de&y=2026"),
+            ]),
+            GPAMajor(name: "数学与应用数学（强基）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=65b193492430438f8c676fc69c2c5c94&v=072714cb8b&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=3d904bf642cd46c69059614f36e8dae0&v=09851596e2&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=f8c176ee6554467b94f861ee6d3652e6&v=831a5d2803&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=4ff518367d8647aa87a9f05630e86e13&v=8a863f8db1&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=da86f50dac51491abceacf3ea0b5d965&v=3d8d5b7cff&y=2022"),
+            ]),
+            GPAMajor(name: "数学与应用数学（数学，唐敖庆班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=ef5cf7c20f264f46b5ad69427b9b49b0&v=36af635043&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=7ed0a2f781754f858503601b74145926&v=c3b16f1c43&y=2025"),
+            ]),
+            GPAMajor(name: "数学类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=bcd0625566124f4b8365580dfdc6bc59&v=e20a555b1d&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=f0a03d6bf7cd4e88ab010196550abd58&v=130c82983b&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=ebd63992687d41fda67e7e08ad53b414&v=16c36a39b9&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=e0f5921697c94db4b36fcf44d280b6ca&v=e20cbf0820&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=534669c839fe402b89ae59a095cbb057&v=28fe6a4dcb&y=2022"),
+            ]),
+            GPAMajor(name: "理科试验班（数学，唐敖庆班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=117aa33e721e4203b4069b91df02fd66&v=ee030798fb&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=7e3aec8fd58741f2a707ce9dbb07d78e&v=e5b45e09b2&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=4c5b0aac708148d7b7286e139acd412b&v=d6fce8799c&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=f5367a39567b4e8098a2d53258139c57&v=9ef5da0435&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=cc846f53f3f34d2a934f77f2128ed98c&v=f7fd28021b&y=2022"),
+            ]),
+            GPAMajor(name: "统计学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=508ad61158084ccca5310974c9353b92&v=d00fd4defb&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=b936f21bc36b4bc6b42eb60a7ed7b9d4&v=325d03fac5&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=dc9d5d915797445683cadf191b0747d0&v=3368d0efba&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=01994c595d4b4a51bd4fd0b00e3897c5&v=4fd163df4d&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=a10d74f42c8a49cf853285f39c20781f&v=6330efa3aa&y=2022"),
+            ]),
+        ],
+        "11": [
+            GPAMajor(name: "光电信息科学与工程", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=996dd28c490f49dfae0bd0a5bf4c06ce&v=eb52518344&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=df6700050cbd43f387b59236126dbee7&v=705a689947&y=2022"),
+            ]),
+            GPAMajor(name: "应用物理学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=a06293da8e47400086a342db0ac55502&v=2c2c4464f6&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=da1aa3a9b9b74cedb1f3c7caa39efc64&v=2310ac607e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=73b93fa216a54db3a5b9ca61aed8c597&v=2000b06dff&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=af896cdac2de4315a457732126cd436c&v=17a90317b6&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=dba1ce8beedf440e96153bcd905cb19b&v=0fd3bf57bf&y=2022"),
+            ]),
+            GPAMajor(name: "核物理", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=78900b2a7c6546a0a494e3b1d67537e3&v=a94303c58b&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c8406211783044c982412b782fa0b88e&v=aa8f8f8607&y=2022"),
+            ]),
+            GPAMajor(name: "物理学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=723bb678a5c6411ca50c7d0dd827c0dc&v=87af94d8bd&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=465196727cda40a09864ba946e075a62&v=a1b8c0403c&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e9d1ba0736614a73a3011de0ed25520e&v=f41b602499&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=8d3b6ff5f8344405a75feb39297333fd&v=b838b96e2f&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f348d7a83e1640f18d6267a727662d54&v=aa19dba823&y=2022"),
+            ]),
+            GPAMajor(name: "物理学类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6cde61e44aac411780caf99aedfbea84&v=6c3ee2d1ae&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=bac7ab42cdc14824b2cd63ef71454b64&v=ebc5b5322f&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=31aaaa2b381648c09a32d1127e1247ee&v=5ce846ecab&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=941c8c8df3d944e085bf1cc687109f2d&v=b27397aa01&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=12cde201d66d483e92350dd1327cfbbd&v=f18fd4aeb2&y=2022"),
+            ]),
+            GPAMajor(name: "物理学（中外合作办学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=f148287d9caf493bbe5579e0af270231&v=cb3be80799&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=4c2069d9bfbd4dba95ef4e5bfd15da8a&v=7e87e7a1d4&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=010e6349e0cf4d62aa7c0ca2fa788366&v=92c1e9a9db&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=6a8f2d5b101f4137b5f7e4f88674e8e0&v=6a2585eb87&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=a5cfec3b1acc4ed0aa749affd69dfe04&v=896ac6fb43&y=2022"),
+            ]),
+            GPAMajor(name: "物理学（强基）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=71e549df7eca42a58576edff3ab8bc06&v=4a218d3276&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=41a0c54ca2ab44559732662de6f72535&v=d3ec635094&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=d3d5ebdd272f40b4bbe226c17bcb9b83&v=32edb7b3ae&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=268e1d1e61cc4d3a88f7c4f2b95fdf65&v=3c093e8176&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=81acd2297d2146a28090d5a71d95b437&v=cb4a164f58&y=2022"),
+            ]),
+            GPAMajor(name: "物理学（量子科技英才特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=106efd8af6804c838a54be89b0446036&v=270c535d4b&y=2026"),
+            ]),
+            GPAMajor(name: "理科试验班（物理学，唐敖庆班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=69e50f05b7a140dc854878f9b13f4725&v=60c1b0c599&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=5e64eede6c3f4981992f6ac50dc0dd7d&v=7a84da4340&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=b6b9b4175d65459a843b9c3e62fbefb3&v=90a24dd6fa&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=bcf47623418543908e5e06937a811991&v=34c735440e&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=ef3931a6b69940b98e167dc2d3fa1056&v=553318488e&y=2022"),
+            ]),
+        ],
+        "12": [
+            GPAMajor(name: "化学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=3d13515ce783417a9c72d8e01a3a18b6&v=4fe1db9aff&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=e0bf43f500874bc494f1d3b18f30362c&v=b249bb8d08&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=fac68a4921944629a954e845173d85f2&v=081bd8d7ae&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=dfa47e6588924b9a940ba05af43c10d0&v=8274a150fd&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c743ca3cc8cd442fabfa129347429030&v=66ac20104c&y=2022"),
+            ]),
+            GPAMajor(name: "化学工程与工艺", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=f27a348bb6d54734ae226e96f8d0018b&v=8ec35e6800&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=43a849a2d37e46e3a713cacdc6184cee&v=4831453ee6&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=50469ec793a84ca7ba851596a00ac9ca&v=ac8fcc545a&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=5ecf731935a1446c808d988f229cf8d5&v=3c30c58c4d&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=da3ceab3680048e19ba2086de2832515&v=8c6ea23b15&y=2022"),
+            ]),
+            GPAMajor(name: "化学类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=347e8f42c2594b18ada5be9e8ba43c75&v=4e5e1351e3&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=d811176051064f169377528abe645aad&v=ca5e56399d&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=4be1ccd2be274248ae04091bb51a92cc&v=b39616a527&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=f0f7cd909ed74053958f1fe4bae05170&v=271edde530&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=019ce7a874874e74866521ec329a5385&v=c0617a165b&y=2022"),
+            ]),
+            GPAMajor(name: "化学（强基）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=db454d2a70e1404296f1241bed60d0b2&v=478e23e81f&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=02fc99d47f1f4116a047fa5c7cf98db4&v=aa2265b4df&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=c25df430ce054cf6ba0cafb128ccd4f6&v=22abe29c02&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=91cf5f020da545fb90e6b88117981c11&v=5630c75b90&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=36db1c1098874ce483a00731aa012c21&v=c270f10140&y=2022"),
+            ]),
+            GPAMajor(name: "应用化学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=b2f684c4f67c47e196bdc029ebf788e1&v=ac770f19ad&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=685f9050079e4200a8ed7f571e1c69ab&v=5069050580&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=c5f7cb726489482aa6115d247fbc0033&v=95d2581a94&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=ec5b848466bb43f58412851e857a0d50&v=16905c7b1d&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=7044da8468c94983b1c2c53b2cee8a6e&v=4d75c4993c&y=2022"),
+            ]),
+            GPAMajor(name: "材料化学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=f9f40d3ea8f74cc288139eba44d70208&v=1241859b8c&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=542b5ecaea3041f3b00aca73fd9ea615&v=e15dceb4bf&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=7a969ef1aab04a72a5a13f5e14a452fa&v=59c5b6eb37&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=04815d8d62c1499984e6f745fbd99965&v=cb76c02eb0&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=4eca556267c646968dcaa95deb7de2be&v=f8db9d0a85&y=2022"),
+            ]),
+            GPAMajor(name: "理科试验班（化学，唐敖庆班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=7c4f894a19414cd186f1df63d2036270&v=d593ccfe50&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=3f194e66db2d4b109df10a35f6cadc50&v=60f13871a8&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e0702f5475a045bb8ce40e0002142b01&v=280dbf1b00&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=21fc661ec8cf463a8be3e5e3c2a3b161&v=0a9389ca9e&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=5f7577b1cae24069a9b9bb0a5f384cbc&v=47f3704d53&y=2022"),
+            ]),
+            GPAMajor(name: "高分子材料与工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=4562bef85cf941338f50c20f6a616679&v=25981a4ab4&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=35e46a43e20843c08ed5f2e4ee5f51e6&v=6927a20ef6&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=f752603c31164cf484ab3dfd8fb312fb&v=3ca0e7da7d&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=8486df43550d4e8b882ce1c7b4ce18ed&v=f6f3f873e8&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=43c34bcc8fd743c6a33bd8ca57d0b593&v=95ca9b1b97&y=2022"),
+            ]),
+        ],
+        "13": [
+            GPAMajor(name: "理科试验班（生物学，唐敖庆班）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=5fea8242f8574cb1a8280bafbfcabf01&v=f16524ebb5&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=2284fdb93a94482080255f25d02f9fcc&v=0282752b0f&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=33ee44fda78344b18514295c56029a13&v=e2dfe40824&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=a56a985f344248379e177a057d650dc6&v=6e160532d2&y=2022"),
+            ]),
+            GPAMajor(name: "生物制药", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=48e0b891e7004a1e8829b141aad710fd&v=dd845554ec&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=6ab6a531bcb64939bb9bc3e436070dae&v=b311d0a824&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=f651dd6a1b6847118a05fffe21087869&v=755b2b93bb&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=aa3c474f169e454b8a49b4a190cf4a82&v=bac05158c2&y=2022"),
+            ]),
+            GPAMajor(name: "生物工程", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=6ddd104ac843459190f2afe77ca27c7c&v=e5a17475bf&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=377d4bb4f043498bae7de6fc3339203a&v=7b1e6c33a2&y=2022"),
+            ]),
+            GPAMajor(name: "生物工程类", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=fd2d4ea90f1c485ea6c78d846cb6a36b&v=d3916a23ed&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=9ced51822e4c43238dbeb24318c8f619&v=afc89feb22&y=2022"),
+            ]),
+            GPAMajor(name: "生物技术", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=586b6b411e2d4fafa2cde057452a8280&v=23e8ab207a&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=d0a2afcd5b3d4cf0a0cc9f9f836b58d2&v=a59429c684&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=253a342c8f2d4bc0be911a6ef5badf99&v=fe02d62452&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=417d679b8278442a830e9bc898572e70&v=971adaa5a3&y=2022"),
+            ]),
+            GPAMajor(name: "生物科学", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=c40a463793ff4ed0a47a118a75c4a5ff&v=ad34979b04&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=631e8fb838fc4622869f3a28cec5410f&v=c1b24be6cf&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=65d1a9b36fc441faa778851d6adc4640&v=fa276a0d75&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c4d3a85bc5a44aaa855d3ad8f576e962&v=99e550466a&y=2022"),
+            ]),
+            GPAMajor(name: "生物科学类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2cdcbb31a834414a9cc8fdbd8c883adb&v=f2b60f8dce&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=02ab2b3519bc4581bef0217136fe5676&v=b86acf6f1f&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=5e7bf07c52ca42a2bfc3eefde819095d&v=79a077fa04&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=e87829749deb4f4f912d88d4145b93f1&v=f593294398&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6561cb2b0c9f4caf8915764360135f12&v=3a859cfec2&y=2022"),
+            ]),
+            GPAMajor(name: "药物制剂", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=f07b6fd048284e769d653cd2fb320c7d&v=c3433ef4cc&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=89ef07e2c25e459c8ad94f48af748516&v=c207014270&y=2022"),
+            ]),
+        ],
+        "14": [
+            GPAMajor(name: "工业工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=cb079617d2ab4ad785fe5bc8c67e85f2&v=55564a64a8&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=50f5a0f04b3c405aa5898c5b38353fbd&v=1349366707&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=d8387808ec034f4588edc3d306278b18&v=cb35aa2ced&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=1527604416ef40ad950697ab4079bb29&v=32ec442d18&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=54466b92145742728c5d184f0387561f&v=8d9d795045&y=2022"),
+            ]),
+            GPAMajor(name: "工程力学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=a8e3a6fc5b0d4e37b77fb6bc3b35a2e4&v=6ab17e15a6&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=8a737928781543f7ae86224d9650c6a6&v=4cee9824ab&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=435b1dc45e604cbaab191a9e27a1caed&v=eacab2b84d&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=d8fdd90b4d7c4f58ace46031fe321bb8&v=dfc654074f&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=528eed8ad7784e6e92030c4d1c68703d&v=7ce95d92aa&y=2022"),
+            ]),
+            GPAMajor(name: "智能制造工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6afba38cc6d540cdbf5104c72cfaf819&v=841af9f636&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=5a2f3ddb072f4297a212eb02ff90fe94&v=3376f26085&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=92a2214565c44961b9ce5e200f1bf496&v=24b1622344&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=6e444926afa5466989c8dc98c2147cfc&v=c3eb32f9aa&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=bc4ea7f5dc7e4bd7a3c871cf628fcebc&v=94bf557eac&y=2022"),
+            ]),
+            GPAMajor(name: "机械工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=70fa7edf93a84672860123ce31526f3e&v=78bf6fb1d7&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=71f1b8e6e40045fbb1a0f6eb2176f15b&v=de3eaf7d5e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=b2c3585d3844407e91cdce0dc6d792ab&v=05e308580e&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=4585cf8e83a64466a1a49b3f74769525&v=fa908a3972&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=249d3dfabb584659b326eadd977c24bf&v=e40ade4c81&y=2022"),
+            ]),
+            GPAMajor(name: "机械工程（智能机器人）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=469d7dad8fe347b29f90f04e6aa4145e&v=e8d6ffcc9e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1d5f51ab951e4de6bec68452204c632d&v=084c32bfb3&y=2024"),
+            ]),
+            GPAMajor(name: "机械工程（饶斌班,本研贯通）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2185c016d5b2493d8049f9777f3e6d45&v=872842e7ba&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=760aaf98803b43b3822770e5d3616a3c&v=d882e5b53b&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=de9e4116f5984e99bd55d90c5746f3ef&v=5c57a81cea&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=98292739f8d4482db2ecff6f1c726b8b&v=0d819cc7e2&y=2023"),
+            ]),
+            GPAMajor(name: "机械工程（高端装备智能设计制造）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=daf0f0240be84012b14f7755d6ec4bd9&v=dbff3a1324&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=38050945ae9d4918870380c13cb2a19d&v=94b758ddbc&y=2024"),
+            ]),
+            GPAMajor(name: "机械类", plans: [
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082B23CD2E0532F29C80A45F1&v=9b85b677cb&y=2022"),
+            ]),
+        ],
+        "15": [
+            GPAMajor(name: "工业设计", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=c39bf995afab403987faaad3304ceea7&v=566643b0f8&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=44379e4a57dc44d2827d7d51baaf4e3a&v=77de061dee&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=ba16034ec58448b4a3f6caaf0fda378e&v=65aaef417b&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=c821043757174076af32bac9566ed6f7&v=5c36013645&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=366897b079b7403abe85f2540caadc75&v=df20e6e73e&y=2022"),
+            ]),
+            GPAMajor(name: "工业设计（低空运载工具）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=759a0638f2584e868bab56041d787448&v=db660f4ba3&y=2026"),
+            ]),
+            GPAMajor(name: "能源与动力工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=5360eb21537e44a4839dff4efdd3f03f&v=69a4e3d314&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=b95218f450cb4273a1f54a1f18ab25b8&v=892fbbb3c3&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=70ddb1476ee64fe1ba5f62d086695872&v=3e36bbdc33&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=e13df1255e394afa9f93bc6b59e135a3&v=236279b011&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c4071e63b33f42b99d73abefd1f6684d&v=046fda8618&y=2022"),
+            ]),
+            GPAMajor(name: "车辆工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=c23c3b515ff246daa09e7eddd1de8d2c&v=ee3df12a16&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=ce0b29cfc8944f7f89cad27ff951d012&v=cae6e934da&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=d319e19741264f5c847a23e4370ed9bb&v=2de7a5d400&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=b2f46e33d3ee45c7885903fbc686e404&v=a9fbf0f82e&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=909246eecfce40168c9c9731e0f6fe04&v=9d82cb467a&y=2022"),
+            ]),
+            GPAMajor(name: "车辆工程（具身智能车辆）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=600851e275a341c4a9112c795e51c2cf&v=37c41dc924&y=2026"),
+            ]),
+            GPAMajor(name: "车辆工程（饶斌班,本研贯通）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=d064ac3fc2c5410488f262f25e7ebbc1&v=ea10e75d8b&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=9530c79d3fa4446db7317392967c6c32&v=b73d74d710&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=7359e53f4493410db69c0a7c871366c5&v=a669b967e7&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=4aec03b259fa4c8e9f1416ed6094b430&v=62d4cfe30f&y=2023"),
+            ]),
+        ],
+        "16": [
+            GPAMajor(name: "无机非金属材料工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6214d15273d64be1867dc420f8c5afb0&v=af27fc4cae&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=0f1a1e17efd24e3e90dac8b806b33436&v=5eb9958314&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=c98b2a89dd1847f4b452a26e815d09e6&v=d46e09c04a&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=dd396a5a10994b1cb16d6c92516f75c0&v=0934b59b49&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=2a91b8ba03c34491a718d081c6cb0fdd&v=3b7f38355f&y=2022"),
+            ]),
+            GPAMajor(name: "材料成型及控制工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=9ce5bf5598354774aca17b59b8e81ac0&v=b8ae95aed9&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=461e1cc382f24ad09485d8dbdae088d0&v=8811867605&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=f2c3f5c998d148ed817343b38e1c1ca3&v=33af958909&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=f11515180bb44ca881e3271ffa1e5ab6&v=d675b01179&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=90dbe3906f28494ebb477d06ededfbce&v=f7daa98c5d&y=2022"),
+            ]),
+            GPAMajor(name: "材料物理", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=c5b8d84e2a0f47de8626f2fceed37680&v=978747c951&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=523c369f63624bd5a4f99072f9d44dab&v=2bbff6debb&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=77790af349f941b4a4c48843998d363b&v=752d544df2&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=3ba5833032224a9482caf1ff6a335a04&v=fac3bb9120&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=bc4eeb79540d4a228746542d613df092&v=9d62b399ad&y=2022"),
+            ]),
+            GPAMajor(name: "材料科学与工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2c37ab2821364c21bf2a55e34de4b5a2&v=c9c6075a73&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=5003cb85f8284f3286b3367880208e8f&v=b7369bc042&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=507df5fbf9f8408e9b46cd9a9ba160fd&v=786be68e16&y=2024"),
+            ]),
+            GPAMajor(name: "材料科学与工程(金属材料工程)", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=fb4a40b885004dd391798ac94b9031f5&v=65491a949b&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=343f92642cc64ab591e0119b26122055&v=29eba997b3&y=2022"),
+            ]),
+            GPAMajor(name: "材料科学与工程(高分子材料与工程)", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=8da6b5b7cb9e4c6e97ee71776ee2ee39&v=d9fd9972ef&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6be252a8c6f241b0851070fcb2705ea5&v=9ddc00e054&y=2022"),
+            ]),
+            GPAMajor(name: "材料类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=b34eecf71dbf4ded822c39f37725c468&v=4c67915820&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=b5e6d59f38614633b39f8a6d7609d6ef&v=36a413f916&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=8c95ab2f7d484e228ece88c3c3492482&v=526777c1f1&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=34061b4f894c45a7a69e13ffbb0fdf47&v=4946dac80a&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6ba742dba1a24ce5926d0353a3273430&v=155d51d52d&y=2022"),
+            ]),
+        ],
+        "17": [
+            GPAMajor(name: "交通工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6024cbf7d54e40e78b5d06ab1539d3e8&v=0ea599377a&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=1282dbd38cdb4416bbf3e6024f3a04ef&v=eb91175284&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=11aa22ec4dce4caba66ab052af4c80b9&v=0303c49006&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=bd1bd86a4c614be2848b327e9592ebda&v=da8dab1abb&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=79d50c674f894aa99d22fa0041d9feb8&v=c3697f3535&y=2022"),
+            ]),
+            GPAMajor(name: "交通运输(汽车运用工程)", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=19937f1bb5dd440b80831b4202aeb4c9&v=dede4e4170&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=a0891c4a765d4ad99026420033748b73&v=b05fc1bf60&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=6b0f4f00c87b45bcaf7641b02e5780de&v=b6f5b2b223&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=4899fdda2b044828bc1b78af40c00bb9&v=2994f11d88&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=4df7960284a94a8988bb720dea1ecba4&v=b52dcbaebe&y=2022"),
+            ]),
+            GPAMajor(name: "交通运输(规划与管理)", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=c525b09776ed4f7fb77ddd1bd98d566f&v=c90498c9c5&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=4f9e52c69c954bada47bed6deedcdfdb&v=ce464715fa&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=7f12e6b01d264fce98516bc66024f0b7&v=092f3818f6&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=380a95fdc9ea48769f9afe96538ddc86&v=02c4679e7e&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=50050355bfe9466ba5b1105f80027115&v=99af97ed52&y=2022"),
+            ]),
+            GPAMajor(name: "交通运输类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=960e182a7597419181a6ff605cd2f2bb&v=dbd9160593&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=6d40dec6e482411f97dda4231545b742&v=538075bbc1&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=c86ddb63656e46eb94d155fc5003a6fd&v=fccc2f2845&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=a0cdab41e9b94b8e8b18753a815d8a3d&v=7c58d29874&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082B43CD2E0532F29C80A45F1&v=0fb3c77aa8&y=2022"),
+            ]),
+            GPAMajor(name: "交通运输（低空交通科技英才特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=5d9f7b7583ba4111bf67fdd73e153505&v=35f54a3903&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=0a0b2d39b937422d8542e229995db4e2&v=15772d1573&y=2025"),
+            ]),
+            GPAMajor(name: "汽车服务工程", plans: [
+                GPAPlan(year: 2022, route: "plan.html?plan=1840d6cb751f4d6089e5168edbcb953b&v=beb18daed2&y=2022"),
+            ]),
+            GPAMajor(name: "道路桥梁与渡河工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=50be32d2997e4487a33bfbd1a43bfacf&v=07d35d3e71&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=744e2fe4938a44bfb74e20d3cb47f111&v=3eee2383fa&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=9a5d7c6862e948fa89079c68fe022f57&v=3f29db3505&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=68c7677dadc14219bf19e479130c3090&v=5dcb8e1dff&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c9e29216a1f64bc6b1b3ecf760f6db70&v=32d5d0692e&y=2022"),
+            ]),
+        ],
+        "18": [
+            GPAMajor(name: "仿生科学与工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=589eb6c1eb9a462a8907c8a051f45581&v=b2091bc3d3&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=d866ee8708fc416eaeb8d603fe5b4c69&v=05d4c7a001&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=f2f46eb5c44e4c72addf4a4ca5f1222d&v=4f97ef8c83&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=15f84adaf6b74df0989d4020f19b5c19&v=79641e5283&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=3277b88085e54e1d964c305ef3c35157&v=9cb0b9934b&y=2022"),
+            ]),
+            GPAMajor(name: "仿生科学与工程（仿生智能机器人特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=987b8205c5964ceca65499bf45a9d86e&v=ebd4d3a741&y=2026"),
+            ]),
+            GPAMajor(name: "农业机械化及其自动化", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=8919796a9417463682c501a8afe2544b&v=8bad996bb0&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=d8f937ba37d54c62a40bfb9ec68a6d75&v=8382022196&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=b8e45b98e3e9440c818eb579685680d9&v=9e8c1b8ee6&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=d60de97b07104284ba042466641d795f&v=1c494533be&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c660bfdcc83740cf8c3b4e593fe49e05&v=191bcd34a6&y=2022"),
+            ]),
+            GPAMajor(name: "农业机械化及其自动化（智能农业装备特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=066ed8b267824f83b57835b2fb476083&v=9ac71ca679&y=2026"),
+            ]),
+            GPAMajor(name: "农业机械化及其自动化（饶斌班,本研贯通）", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=99ed2d9f4ae0454887ff931380498435&v=af7b993436&y=2023"),
+            ]),
+            GPAMajor(name: "农林经济管理", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=2c3b3d2c34e548a2a9df94ace438192b&v=7af50e704a&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=67a7ac50d0b14ef98e19f63d9d99b603&v=836eee913b&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=c610ba3a5b6c46c8b35bc0b434b436f5&v=496c1f56cf&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=992bbfdbd1f04dc08d36bff4d1d30790&v=16c580af54&y=2022"),
+            ]),
+            GPAMajor(name: "农林经济管理（大数据分析与智慧管理）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=a86c180315ea4a2c85422ec0d9359805&v=1e6a44677a&y=2026"),
+            ]),
+        ],
+        "19": [
+            GPAMajor(name: "微电子科学与工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=977cc95954f0464392b870accc274edb&v=51ea5d0c29&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=c1fc44a4473b4b99a5c0608b58bd238e&v=05758bafb8&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=fc606453b83a4befb9c61746111a283f&v=ddc5c2bdc9&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=c465f058533d4e9798885bf5928f0acd&v=8297e125c6&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=29efb693980748f5808653bd46344b0f&v=03dc4518bb&y=2022"),
+            ]),
+            GPAMajor(name: "生物医学工程（电子科学与工程学院）", plans: [
+                GPAPlan(year: 2022, route: "plan.html?plan=2121c4ee76134cbeb2b4d2685a32b88a&v=4e2351d6c1&y=2022"),
+            ]),
+            GPAMajor(name: "电子信息工程", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=4232a9e075b748d1ad2b16a8467bfd64&v=6b082875ff&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=04778e205c704228af9337e93fa8ac55&v=bfa3ac03d9&y=2022"),
+            ]),
+            GPAMajor(name: "电子信息科学与技术", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=511fac433fe84d15a80eec906db8672c&v=7a176e01d9&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=9569c70345dd47d18c942f7a323bb622&v=2212af02b1&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=3121133c98e648368bd72fbcb876e9a6&v=f6c266ece0&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=fa32548661db4bd79b897460381ef7c0&v=39754edeb3&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=335b56434651425995e63426ca49d180&v=7d625b5921&y=2022"),
+            ]),
+            GPAMajor(name: "电子信息类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=98ef24676859409698a4ec00bf8d43f5&v=879a7e3271&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=c7121173d1154ab4865e9aff2f3ccd69&v=80e2be12e7&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=09c5127b689942a3bb2af74ac3682c6c&v=cec4f5c94d&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=af72cc9a94ad401b98d21131b52e475f&v=86132ee8c0&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082B63CD2E0532F29C80A45F1&v=707515f249&y=2022"),
+            ]),
+            GPAMajor(name: "电子科学与技术", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=0a1b9705ef8b4ea08f5127e16dc0d0a7&v=92db90b712&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=e152df242a7e41e1b844a476b00293e4&v=72ce6dc996&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=0e3962e31a404efcac8adadb7eb4ffee&v=4be0246a4b&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=87cfc16b111943faa24f540446601d51&v=0d99108719&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=b22b998158a447d4bbad5351307e4d7e&v=7bdc6256c2&y=2022"),
+            ]),
+            GPAMajor(name: "集成电路设计与集成系统", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=c3f725237c7e46fd93b8d29c993bf1f2&v=4b4b3357ac&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=ba971707b0674e96a6c808b2ddd55c4f&v=3fa8200e6d&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=0dbd16e750f04d618b25e9d7f4dd17ac&v=3465a15f57&y=2024"),
+            ]),
+            GPAMajor(name: "集成电路设计与集成系统（科技英才特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=d37e6497cdc945be87717092ab3fe77f&v=7606f97155&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=487e16523acf47808750d112e567c6e8&v=ceb79f865d&y=2025"),
+            ]),
+        ],
+        "20": [
+            GPAMajor(name: "信息工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=d7b605dc9200465e8cdae646f36d0b48&v=47a0ed6fae&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=11e40ce34a3045bd8a0211fde235f16b&v=f0c8e35747&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=64572e7bf7764d1597f7a420acd043b0&v=3134dc554f&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=c9c014fea2f542c3b6afc529b7c05616&v=b0daf9ac4a&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=7c39eb902a2041bb8c879230c316c2b9&v=2d851bd49c&y=2022"),
+            ]),
+            GPAMajor(name: "机器人工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=3950f0a942be4f04814b8c0b63c30914&v=3e6635d496&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=1c640665b788415d8056fcddff6fe1a8&v=d48d6ae22f&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=cf6316d330b342e693f92150e2da8cb8&v=ceb87d392c&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=1fdca399653748f3aa0df88a53718259&v=c85ffabfa0&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6b7d3d0a49bc41218a5952ec8585b789&v=cb8cce238e&y=2022"),
+            ]),
+            GPAMajor(name: "空间信息与数字技术", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=dcde91c5bc384e32ab7bcc476c57f524&v=bd712a7c46&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=68e1405f70ac4b3c94d828b17b5dfe1e&v=0d075f527a&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=f7d5e36c15df4103b2308f7a9592cad5&v=0459a9174e&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=1151e81aef4841429d37ea918e64b704&v=04d00c5112&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=d180d55c76d44f198536f44b32d89c96&v=f4c510e668&y=2022"),
+            ]),
+            GPAMajor(name: "自动化", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=9f367c67d57a4a038118b6891f53c5b0&v=49afc01b56&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=5818bc9a3963499e913970b5b04a349e&v=deb1a4fcfe&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=b4af773c53154d97850293f8e26d5691&v=6a85fa4d43&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=dcf95e18526342ddbd7dfaf174036f27&v=d321b2d57a&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c1e973d4cc6a4b158daf1eccc96a938a&v=93664c68aa&y=2022"),
+            ]),
+            GPAMajor(name: "自动化类", plans: [
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082BA3CD2E0532F29C80A45F1&v=13631199e8&y=2022"),
+            ]),
+            GPAMajor(name: "通信工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=d22106bc77644083a6594c2abfc60f4e&v=aa1660d9c0&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=6592d108e9c44e578fe70b022bc1e6fa&v=18a0f47d4e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=9033253dd94c40e4b5c3db6efee61bbe&v=502e84ee49&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=8c3f6bf30dfa4727b186f5952f69901e&v=eeef58b3c5&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=15b4638213554b3a8dfdacc28e35ce25&v=eb072e1329&y=2022"),
+            ]),
+            GPAMajor(name: "通信工程类", plans: [
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082B83CD2E0532F29C80A45F1&v=ffa44b7264&y=2022"),
+            ]),
+        ],
+        "21": [
+            GPAMajor(name: "物联网工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=71228a618f4640cda4fd58eba02862d1&v=b0bb2ae010&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=b0b346ff88b0449f9bb3cf542f2aa471&v=f1cc54fa2b&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=24a28d71fa894a1f952e6dd003c4ab0c&v=f74e312557&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=7de55c5b27eb4a818a064004c564d720&v=4826117160&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=796e226c0c4c424fa79461dd610b92a8&v=8a1a5e2c07&y=2022"),
+            ]),
+            GPAMajor(name: "理科试验班（计算机，唐敖庆班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=9c08a0c47343499c8c483bda82cdd2c2&v=673a406ccf&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=fb120a5435c04524a7c5a7ffb7e4fe56&v=d24ea466a4&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=c55424ecabfe44189b29d90c5a52ac56&v=29c2605d6a&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=9c286591a89645589b46dd20321eecdf&v=a6550ff9b0&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=cac365635f4049df8a3f2301e89670e7&v=8f12c721d2&y=2022"),
+            ]),
+            GPAMajor(name: "网络空间安全", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=ac5f6edbcd694d25ac7c3faa3d4975c6&v=4ecd7bac56&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=12d480b8078c4cee90fa65a870e472f3&v=366d0b132b&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=4ae308939fc84806a24be562dbd7a491&v=abf0fd2d5b&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=b1d47b27ca734bc48064e32c3c65aa4c&v=9a6f201799&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f24b11c4c6c4405bbac03953b5be993e&v=a51f4bd9ed&y=2022"),
+            ]),
+            GPAMajor(name: "网络空间安全（王湘浩班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6c9a38c5e1a04a0d8558d9840287b10b&v=bd1d4976e0&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=35700fd3a2504e908b4d77f5d94e5d4c&v=4b7c71015e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=b9c9833f0c1b46118c75ff7f1b3ae2b6&v=c56cc5df80&y=2024"),
+            ]),
+            GPAMajor(name: "计算机科学与技术", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=4f63f8dc57a446d6a7323031c7cd4647&v=d10dce11b9&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=41e17a58519c4d0280504e9a90eb1b97&v=e2c6a904f0&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=253c410b9cf849b9be4e5657801b38e1&v=24f068bc10&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=01eee99b255941f38a021a92a1990d2a&v=5a85dd380d&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=713aee6decc04d54876488f146fed270&v=6fe135184a&y=2022"),
+            ]),
+            GPAMajor(name: "计算机类", plans: [
+                GPAPlan(year: 2022, route: "plan.html?plan=7b3e37763a064d9f98492b7342ed54d5&v=51d55aad15&y=2022"),
+            ]),
+        ],
+        "22": [
+            GPAMajor(name: "土地资源管理", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=c959c41c7f4a4f0c8c71454896d6f81f&v=a63516df67&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=dbcc58c779be4437b71f5d9c646f093a&v=ab85d07109&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=f194015bb6ae4fde8fbf0f44b8382ae8&v=2ca6d758e0&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=190731d06be341ec8fbeab0012b7d5b7&v=288ef73a8b&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=85f9ca59f3c847928c416265e526c7b1&v=23e82e3e30&y=2022"),
+            ]),
+            GPAMajor(name: "地质学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=0819ba965443492889604abf4b6dd6a7&v=b80e065b48&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=f3302f714e344c86a9cb0cd873da3199&v=ed929bb846&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=88f44c3e5db845b3980c7335f4fa167e&v=7d8d8bfb72&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=0e29135d60a740ea9741d3cc0c45ba01&v=9534eb4dd0&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=b9c611bd194b463dbbc3e59938a08365&v=1db10e4804&y=2022"),
+            ]),
+            GPAMajor(name: "地质学（李四光班,本研贯通）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=4d9c613355ef485088bfca360c2a2038&v=6402b1be04&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=6d6b9a37fddb4b3dbe3eebb15b7d6515&v=51e3a234bc&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=21f6869067a34c64ad8b787ad9a3443d&v=02ec3e24f7&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=76e1170287be40ef84e09a57d77961f3&v=5766d2f6f7&y=2023"),
+            ]),
+            GPAMajor(name: "地质类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=09ce913e2af944868f36fd9e5a0d95a0&v=2fb2af30fa&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=6f8f510d11de44ee904e57d3ace1a66d&v=9e97f13687&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=428655e90ce147c08ba9bc6440c00a01&v=2e614e7be4&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=8513d043b94946f0bea3816da683d722&v=b654ea0e44&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082BC3CD2E0532F29C80A45F1&v=ef9e660740&y=2022"),
+            ]),
+            GPAMajor(name: "资源勘查工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6fe0c3ed92b74c5fb8db8f665f0ec4f3&v=fb0f88565a&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=9af38b1f4f4445e1905ad23b0e809201&v=9455b5630e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=330d134fa90d48d3b42d30205101ed87&v=5cac7f1334&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=4eb79c9a8420447f82090c25418a6ff6&v=e5329f2e82&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=1eb60e5427ad4fb496449a17b1f31ae4&v=aaf5c61186&y=2022"),
+            ]),
+        ],
+        "23": [
+            GPAMajor(name: "勘查技术与工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=baa521e5503647a4a68b8788fe181c8c&v=1d9272cfab&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=5dc3355f9307448882f9e55700aec4a7&v=2dc1d24df7&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=964355b17442485abb3914119b374608&v=13b00b3df4&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=b75c3c9ceeff42ef876593947dde06ea&v=d3896574f7&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=ba669771da4b4338a9c24b28eac56faa&v=7affa96266&y=2022"),
+            ]),
+            GPAMajor(name: "勘查技术与工程类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=c9fb4b7a01714c89822a155b4fa825e3&v=1fffe11a87&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=22dfa7311c9f4702a3e0b50865a85edc&v=69cf771cb2&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=8a3b62a177994c23aae102b74fa26b43&v=f7d63182b0&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=56145695eb944a5c874ac663bfce1519&v=d3399687b9&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082BE3CD2E0532F29C80A45F1&v=749a431084&y=2022"),
+            ]),
+            GPAMajor(name: "勘查技术与工程（黄大年班,本研贯通）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=e64c540de60f413fb5433908b8709bf1&v=bf1ce5ddc1&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=fd912e3d399a437eba25372a452bf7b3&v=a900490130&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=8ddc7b105e844f6f886e17c8b94dcb61&v=d2fdf59705&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=13b26a7709344a969e1fdf7ba35c74ea&v=49d1358b20&y=2023"),
+            ]),
+            GPAMajor(name: "地球物理学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6f1653c662c543a99973fece60c5e1bf&v=926ade3e02&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=d4dc32d7e12c498dae29160c94049713&v=4c3a5147a8&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=d03b0d6c89aa442289a24b20bd220049&v=9a9aa7704c&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=859a406796564388a3766a8b397356aa&v=45295d6945&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=841fe6a61e0d4ef892212db0cc886ba3&v=9f5358ff4a&y=2022"),
+            ]),
+            GPAMajor(name: "地球物理学（李四光班,本研贯通）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=0f9451636b314677a434def224e43c8a&v=e8c5a34732&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=2454f58f930e4f748182c1b722aec29f&v=c8e56bc5a1&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1fea8440d2764e55a2284644ea90ab87&v=4ad5498bc0&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=866fda288d014924b132ce190afb00b9&v=7049207713&y=2023"),
+            ]),
+            GPAMajor(name: "地理信息科学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=d1642064ebb547cabcaf2b104710c8db&v=4ba2a7ccca&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=12e611ef8f644228b1f7779b613229e1&v=0a1a2089e8&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=8449a31b54794a2d963c5b0ecec53563&v=1861f5f725&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=41c5776aa2804ec3a465ec313a824ae1&v=b45f5d2f28&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=97db068d062f4932bfc5e6012f0b43b7&v=dca158b5b7&y=2022"),
+            ]),
+            GPAMajor(name: "地理信息科学（遥感科学与技术）特色班", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=8bd809a2655849869393ac917ff85ff5&v=10eae3df03&y=2026"),
+            ]),
+            GPAMajor(name: "测绘工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=a90e8516b36448c98fb6a0561c76226b&v=fbe0df00a3&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=9e569cccc78f4996b76d8dd5b877fe3f&v=68c5f937f1&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=9f04815862e44f5598970748e8080f70&v=6edd4c34bf&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=c50d3d0c180d46af831681378a9f9f4d&v=693071d1ea&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=1efe7dff03bc45b98201d435c57d5f68&v=ed212da290&y=2022"),
+            ]),
+        ],
+        "24": [
+            GPAMajor(name: "土木工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=63e86ce5957046f2868059ac03f66a6c&v=5079fdd972&y=2026"),
+            ]),
+            GPAMajor(name: "土木工程（岩土工程）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=f3ec24b7839242f78d40039c3403af92&v=9609b200fa&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=536d7e2748a540a9b492149b1d6a6406&v=be1f2d38bd&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=f2911dab9e9f4c0b815b0eec8c2a5f62&v=4040086d3d&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=4929f6a5a81b426ea46a3cc374891597&v=f0315a818d&y=2022"),
+            ]),
+            GPAMajor(name: "土木工程（建筑工程）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=a4e1e7b8fc11477cbbfb06fd5dfc7189&v=ae0ddd63e5&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=2f3d1f5667034bd38ba704d7e889d78a&v=c3baf1dde6&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=ffc05d47d1a54e5da5be19306eeddf43&v=a94eb6ab18&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=100120c39e7249a995a1a201d2603441&v=90c7076a7a&y=2022"),
+            ]),
+            GPAMajor(name: "土木工程（道桥工程）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=f5fa23195ac846d58744122d54046a05&v=e1b671b730&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=328aab7599464904a15a68a6f52b30af&v=ac678d9f45&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=3c5d82e935884581ae62181597bafdc2&v=79914e7f5f&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=cf87e36c96ba478c8d21830398da794b&v=4f22e947de&y=2022"),
+            ]),
+            GPAMajor(name: "土木工程（隧道与地下工程）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=4f9c03f9107249be8d5d6c9a9effb019&v=446e725bd1&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=98ce220b0a9441589e7aedab97b50304&v=c7e15a701c&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=a73fc38418aa46bd87fda65fed3d8372&v=2b54a40d86&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=0ff4853d96e2471f909dce6606d3f8a6&v=dc49223aad&y=2022"),
+            ]),
+            GPAMajor(name: "土木类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=cd601ac3a28a45e8873b55c8c7ba54aa&v=3ac0e56db2&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=1b7ad203e578464392c5fd2a7efb2f2c&v=2a649395c5&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=fcb8d9b74c494e6c92fbc7b809f29972&v=1c9bf8a557&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=8d259640e7c848adad1161e9e083678e&v=3c03055b61&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082C03CD2E0532F29C80A45F1&v=995e516430&y=2022"),
+            ]),
+            GPAMajor(name: "地质工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=a068fd9e8ca74afb8f48a521225d1525&v=3f1a112b30&y=2026"),
+            ]),
+            GPAMajor(name: "地质工程(勘察工程)", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=4f9e5b2eb4444431882995833eacace2&v=611290e618&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=cd7b30f340a9412caf7d1789c15389c8&v=0f4e17baba&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=9c5eb77144d24d4caff9861dc668fd34&v=e4b2370542&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=216e1afba4e947c19e047affb18403f7&v=61a3bd47e8&y=2022"),
+            ]),
+            GPAMajor(name: "地质工程(工程地质)", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=6eda8952c9ae424fbf97d4f5d6069226&v=7d30f5101b&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1ea3b7d7e88d4b4aa5641bad3eab612d&v=649624b3f7&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=7054b3f723684a4193c0bc1d50d846c9&v=36a0ffc3c6&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f7b7cddc16fb4d97ab8ae1e9421c2a9c&v=3e8173b188&y=2022"),
+            ]),
+            GPAMajor(name: "地质工程（深地极地探测特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=79bea872c7c74baf87feb53142287379&v=77a64466ce&y=2026"),
+            ]),
+            GPAMajor(name: "地质工程（灾害监测预报特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=b1031926a95f454c951ab8d62692892e&v=5a629f9440&y=2026"),
+            ]),
+            GPAMajor(name: "地质工程（黄大年班,本研贯通）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=381a184e56d544b18f383cfed2975df3&v=e12b43ecc0&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=412b1055c7464224b01028d647f2f446&v=2017a7ad67&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1c93bf38ba1e48b4a14683a4949734db&v=aa5205d045&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=404eba48153f48ce81f85667af65642a&v=b4d3238a69&y=2023"),
+            ]),
+        ],
+        "25": [
+            GPAMajor(name: "地下水科学与工程", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=ff3e3199bfae4cb58ec50d7e5d19dc09&v=51ebddefb3&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=2c3f2bca4cff4459b929ef2246deae50&v=94eab591ee&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=786043aab98a4036946533354fc223bd&v=0369d1f6eb&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=40555d65179f4c4fafbd025ce8faaab8&v=109b8b5db4&y=2022"),
+            ]),
+            GPAMajor(name: "地下水科学与工程（黄大年班,本研贯通）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=1f4246384131433e902a15c3e27ad773&v=0655597cc9&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=438ccc22b1b846f5802a03fc64598f56&v=3167bfd5e6&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=43ae18f73ef04540ba57c7cd0eff8427&v=a08612aec1&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=5f624e00e49143088854bcfafb8f495a&v=3f681c932d&y=2023"),
+            ]),
+            GPAMajor(name: "新能源科学与工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=8a16bd706c724e1584f005ff2ac17e56&v=3156159cf6&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=74ed8db6686f4dc8b12378d65c482188&v=4e7eff38ac&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=d95a5fb5086d491c950558be3ff133b1&v=f241106f9c&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=b89e9e3d3daf41aebb233c3c30a76706&v=1b6747e025&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=be58d364439343c5bbcf7080c3f88efe&v=c975c4f712&y=2022"),
+            ]),
+            GPAMajor(name: "水利类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=cbcdd940e445432c88fd931bebc46d55&v=395d208fe9&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=a9eab79a35ea4573878ca9d0927e5895&v=5a70d4147c&y=2025"),
+                GPAPlan(year: 2022, route: "plan.html?plan=bdcf064341e34bd9b85d85a1763680ea&v=1b24115240&y=2022"),
+            ]),
+            GPAMajor(name: "水文与水资源工程", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=d164874cef1d415299990b1c2072b3fd&v=5d9adedd5d&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=bd36cc97e0f64a859628f7117000f251&v=0c89f04277&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=5458f3a290ed4689ab6c3236f2a79222&v=d120c3ca10&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=e5e3f22ac3464f5184027886b7af93ad&v=b316384db8&y=2022"),
+            ]),
+            GPAMajor(name: "环境工程", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=8b1f15a0f7a843e98294bf97e570c926&v=c9dd6cb997&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=dd43bb29dcb64272a6df5f65780dd1e2&v=8d9c7b06e7&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=06f69aa6e4514b0c9940d34549236b9d&v=2ee7e08bcc&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=b5dd956e2ff342e680d6da7c937ccbb8&v=b5fd75cc40&y=2022"),
+            ]),
+            GPAMajor(name: "环境科学", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=c7f6ef00484643f0863e668c073c9d8f&v=839eb1af84&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=43672bb7892846379642e47935c878f9&v=79b9a36605&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=31e3307b303f46b1ab55278c614c11ba&v=37083605b2&y=2023"),
+            ]),
+            GPAMajor(name: "环境科学(环境化学)", plans: [
+                GPAPlan(year: 2022, route: "plan.html?plan=cc12022ab28d46888d5851b704d2413c&v=2db2076f40&y=2022"),
+            ]),
+            GPAMajor(name: "环境科学与工程类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2d368f958e2642a88421a0646c672024&v=24a5fedec0&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=2ef3b52cba764ba89ef9410f19f10888&v=f0198cbd50&y=2025"),
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082C23CD2E0532F29C80A45F1&v=867e382251&y=2022"),
+            ]),
+        ],
+        "27": [
+            GPAMajor(name: "放射医学（五年）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=8036e31acb4e4dfd82217d7bfcb36a81&v=3205371118&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=241f25c107ce4ffb8858f98243b2f32d&v=8e6a0d669d&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=723a3cf8de2c41fc881eca9f042e1f71&v=c6af048e6e&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=68cb61eddf62423c8583703580dcce4a&v=0560ce3343&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f439948bd6f14c0b8a073a1d35405a2f&v=f31ae5eb4b&y=2022"),
+            ]),
+            GPAMajor(name: "预防医学（五年）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=f481b344f2bd499bad68f89ff43ccb37&v=f266da16b2&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=84e724cf0fd64c3b8ddb8ebe99b2bedb&v=51d6fd81d0&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=9576f8c41bb74c498cefb45f3cfcc3dc&v=4fb23caf9c&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=5169c0974589403e84ea09aaafe8dccf&v=11d5addafa&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=56caf0ae095f4b7c8d269f415de70a30&v=ccf48f3e78&y=2022"),
+            ]),
+        ],
+        "28": [
+            GPAMajor(name: "临床药学（五年）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=a141800724c24a178407c9cac94eaa38&v=47133ba955&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=b6f6d1144dc14db58a9fcbc23e9faf23&v=233c64ca41&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=69382c55829e49e59a065e3c63c26ef1&v=85eea4df1d&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=094193c2d383466e95595dacd01f8b94&v=b5fde68f13&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=88b6c03286cf4e4bbc9f349d45f1b9a6&v=478b151324&y=2022"),
+            ]),
+            GPAMajor(name: "药学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=aa850b208a544bf39ec7f991e27e962c&v=1e2a2c160f&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=1d950bd4785b4122874c1c19fc2478af&v=69df76529c&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=82feec633f9642aabb074e0e908a2e9d&v=c2f309856d&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=2686e1cdf84040b883221ef857b0b732&v=d6db0a1a39&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=69c2901b2f6445d58a5feccfc9f9e0d7&v=9dac2aa018&y=2022"),
+            ]),
+            GPAMajor(name: "药学（未来药学）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=367bcf64195444bca3d7a8d44c8ae295&v=d1e3bd73ea&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=f7efdae4e6ad42e184d5c12b5f55fe30&v=dd18049349&y=2024"),
+            ]),
+            GPAMajor(name: "药学（生物医药菁英特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=f5e220ce46474b4b82b994c8038d28a2&v=1583f2058a&y=2026"),
+            ]),
+        ],
+        "29": [
+            GPAMajor(name: "康复治疗学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=0fcaa9389beb4e1b844954661f2e90bc&v=d80cf5483e&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=03965d584d3c42de822742d3f0ba6fe8&v=bae2038145&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=4250718410d741819eb361c768114b31&v=9e86d0c19e&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=a9a2c1b8ae5b454ba293f9a497c8ebeb&v=5e4b54d3be&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=dd9ec28425fe4dedb4d23f326c07f38d&v=268ed66050&y=2022"),
+            ]),
+            GPAMajor(name: "护理学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=1c8662d664f449d5a4f7bf0216410092&v=ff3d9884e3&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=6697a0a97d984e709383ce023fc5d771&v=f8a41a5e2a&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=cbafc890e4d245af9bf54c3eb78b8874&v=2763e88976&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=c640d1ea0b134df98e8f9ef84cafcade&v=a93b60bc18&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=3fb706ef57d9425199e919c4af53e9cc&v=5f51560753&y=2022"),
+            ]),
+        ],
+        "30": [
+            GPAMajor(name: "经济学（国别与区域经济）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=b72bff0862ff48379ec357ad7c10b3f8&v=fb7381f446&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=0f7dd78a3ba4490085b0e8af69ec4b73&v=a2df1b9016&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=acbaa752b876457f825a29d636efdf4c&v=94270bcae3&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=71c3301e0f20446783d5e60fb2b6cdcd&v=9acb6ac771&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=2041418227654671aa26164fb034a34b&v=de466a8aec&y=2022"),
+            ]),
+        ],
+        "31": [
+            GPAMajor(name: "历史学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=de7d488bf01340bd9fb9ea0cb87ab09a&v=700a25918c&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=7fb6f271ffac4026811395078478a715&v=09c33544c2&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=0093d6c529654bc49d9f582a800956a8&v=29684c7a83&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=e64aa4b1927c4cab970b35b06cce1f63&v=7e9b996308&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=070c04b2ddd44857962f564de3c607f2&v=efb2556a68&y=2022"),
+            ]),
+            GPAMajor(name: "历史学（双学士学位，历史学和英语）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=fe3436028a4343ee85b621ac1566102f&v=41877e79e3&y=2026"),
+            ]),
+        ],
+        "33": [
+            GPAMajor(name: "口腔医学（5+3）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6bf8587c988c415c8d1434cc1f29ae9a&v=565cf8dbe6&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=2d09294729914e84955f9aba8a20eb0a&v=cc7d2225af&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=cdc0045ebdcc4a658a029729b04fef37&v=f0435c2b92&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=8c6522ea103e41a798cc563f98b1ef72&v=0b0e17c548&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=d3c9339c8b6542eb80d70da7a0744f82&v=5a60637de3&y=2022"),
+            ]),
+            GPAMajor(name: "口腔医学（五年）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6b2ac2a34c6e4faf9aaf957708e6de6a&v=17f7b12486&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=1040ecb488854fd6b42fcd6dc4c21819&v=c2d2c22eb5&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=01008396cc3941ac83b739bef10b5c04&v=25834f7acf&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=7851ae1c31404af2817e6bcec96fe996&v=95334dce64&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=bcd71641942c4c4e8334c4e7ae0f7214&v=f648a2bb04&y=2022"),
+            ]),
+        ],
+        "35": [
+            GPAMajor(name: "人力资源管理", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=5ad83042001644bca5f53965f18ec752&v=a59a6eead4&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=a815ca783a7e42b7b409e96effd25cbc&v=7bc5452d04&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1f8e9a2601ee468297b04810929a2c9e&v=801d0c6247&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=0863cd5475be465f87be5a66e52ee5c5&v=65a4652458&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=a2ade4bcf1fe42c98ad79daf24a586f4&v=c542e2a880&y=2022"),
+            ]),
+            GPAMajor(name: "会计学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=3a8b9725c26d49478fce77a7493d84da&v=ca5b2914c4&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=544f891e506c4964932517b06b35657b&v=b63f391a41&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1f07d274ee9849ac8317e64aee507651&v=e2da587fff&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=cc645d00efeb486c800a9db0e7261c0c&v=f0bb29cf1e&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=e592c175f622490d913a92ab46588298&v=6a0fa5320c&y=2022"),
+            ]),
+            GPAMajor(name: "会计学（含会计学、财务管理、信用管理、经济学（数量经济））", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=7823435caffd4477815db78e8139023a&v=eac19ca734&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=a8578e079b1243ec8fceb666ba16910d&v=baa286d331&y=2022"),
+            ]),
+            GPAMajor(name: "会计学（含会计学、财务管理、信用管理）", plans: [
+                GPAPlan(year: 2024, route: "plan.html?plan=187c4918d3e14fe7b3db9992d4c26fbe&v=484ab91937&y=2024"),
+            ]),
+            GPAMajor(name: "会计学（含会计学、财务管理）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=178cd14e671042109173ac2e04d7170a&v=dec199ffb4&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=a2ccf89c0fbe439aa4354ecf8a82baf3&v=682710e72c&y=2025"),
+            ]),
+            GPAMajor(name: "信息管理与信息系统", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=ca306395ad8e403a8d6528034b29124a&v=9ed13f3a0f&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=3efc4d1093af41adb9b81adf03729d74&v=6ef99304c1&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=4eb75d2072054cb0922758875a6a31de&v=8f5ddd4a82&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=4d0b3b322b1e435bad11ff323b1d8233&v=41f450c0a0&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f0c1aeccb7294b61a0fc814634c5eaa2&v=9364483d74&y=2022"),
+            ]),
+            GPAMajor(name: "信用管理", plans: [
+                GPAPlan(year: 2024, route: "plan.html?plan=59c77d88ad604e8786b9dda3400ce91d&v=fd061b0289&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=910bf0cafa544f398518c65b7b451167&v=21a1dff806&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=eaee0c56d04f41ba9a08182817aca6b9&v=c91425f628&y=2022"),
+            ]),
+            GPAMajor(name: "大数据管理与应用", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=fdbd62fb8d1d4bce8185ab126f0ca7b2&v=e68d9b7753&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=231ed0650b2c472b969be35f00435012&v=a7dad0c06c&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=901f5fb2878f4e8b953c592f94adc218&v=2e8d93014c&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=b8bfabd33df84923b02f8dbc3566e122&v=376179bd5c&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=d2c61d68d0c44ca7951528c4e7a26b20&v=d46a296d06&y=2022"),
+            ]),
+            GPAMajor(name: "大数据管理与应用-法学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=faddfb1db3254f4894e08bea6c6c81b6&v=203ea0ca9a&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=31577b083abe4fd4b074e02314fbbab1&v=b5163413e4&y=2025"),
+            ]),
+            GPAMajor(name: "工商管理-国际经济与贸易", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=14a751e28b234f2d990d4797f338232b&v=421aca770b&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=a490a3a48997411da84ae3d7ffc5e6e0&v=fe4ef852a5&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1007b40e2b5248d7905c86c0054024f8&v=afcac46242&y=2024"),
+            ]),
+            GPAMajor(name: "工商管理-法学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=03bf343ac4014e5588c48e0a6d7b926f&v=9e801d3938&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=410fbfff6b2846db8979a0ffb7c38598&v=d0e6deeae4&y=2025"),
+            ]),
+            GPAMajor(name: "工商管理类", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=fde151f87b6f47a28687c619f4e95cd0&v=4d5cc4c9f3&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=61f909ec9e2342e1b315b12f081fa9b9&v=9d1bc8e3ea&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=ff6b7719b5b84b50b13616fdb4c9f900&v=ffb84073ee&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=7335e11dd7d1442cb81653477ef44631&v=c51f720657&y=2022"),
+            ]),
+            GPAMajor(name: "工商管理（吕振羽班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=4c20a6a64bb14c8aad6d7eced741f685&v=6d735d054d&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=a453c18f39ea47038f6597c977ad58da&v=0b6473a015&y=2025"),
+            ]),
+            GPAMajor(name: "工商管理（国际商务）", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=b87dcb70fda546c781a2e47c1ec86c95&v=d4cd8bbb6c&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=bd45daf30fac4943811ce70022039860&v=e06802c38c&y=2022"),
+            ]),
+            GPAMajor(name: "工商管理（战略与运营管理）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=fda27500086f481bb045da2750ed7ba7&v=226f839318&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=a8b5e4c08380419aa93853b922a515e4&v=211d5f42ca&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=61f68dc33e8244b280930f46d2c1ec14&v=2e2b2de8ee&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=e49ac9bb9d904e7fba589ea16370aba9&v=10416a49f6&y=2022"),
+            ]),
+            GPAMajor(name: "工商管理（数字经济与投资管理）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=c41e53b3e2eb4b899b60ccd7dbc6c2b8&v=afa22a3043&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e7ca2311c2c9488d8fb08628a5a12f08&v=4a1d85e898&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=d58cf9d07f624d62983b275c62f9baba&v=d7f7b709f6&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=fdfb1ccd3a6b40de8cc15b710e9efc33&v=5ffd66e3bd&y=2022"),
+            ]),
+            GPAMajor(name: "工程管理", plans: [
+                GPAPlan(year: 2024, route: "plan.html?plan=35e9fbd5737144b3be78afe8536cbd64&v=7cc9a03ebd&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=c583620b0e624e0caa7634839d181e60&v=16951729c1&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=5e1063fb967348358931e595c0372200&v=06091bfdb5&y=2022"),
+            ]),
+            GPAMajor(name: "工程管理-智能制造工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=690f0c4a552c4c5f9f95e1ddf96a2cd9&v=4a524f78d5&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=abb45a3fd54a44e2b78dded762e83f6b&v=d517898778&y=2025"),
+            ]),
+            GPAMajor(name: "市场营销", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=e5911caf46794d07aebee5a4c3e258c0&v=5dfb919b30&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=0fd7c64cecc64255a4fae44a6326e1b7&v=1f0350647c&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=7a436c54a1d34ae2b1f190682abfeb6d&v=0cdfdecfd6&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f5865469c55345ed8797d90e2d8138bc&v=fbae0059b7&y=2022"),
+            ]),
+            GPAMajor(name: "市场营销-数据科学与大数据技术", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=e94c64ce22924d7fadc0b482fec61ea8&v=56339a2290&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=247782fea4cb4335825a54f2d68f6c55&v=b301f318a5&y=2025"),
+            ]),
+            GPAMajor(name: "档案学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=4a5151de978d477e90eda25ff92ec30c&v=d9d26dbc75&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=2a3540e82b46494898b50aee715a6db6&v=c6b9578cfa&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=725c737bfb0e43fa9c4328c2d7f252b1&v=451c43d754&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=49253776e21d41459686d32d0851b7e6&v=6aed741743&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f9c631cb26b64c94bbf02306fcdd3d99&v=8c87729fd7&y=2022"),
+            ]),
+            GPAMajor(name: "物流管理", plans: [
+                GPAPlan(year: 2024, route: "plan.html?plan=b530b3f5fd8943a4a12e072942aefbdc&v=9f568d9804&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=029626fc0ffc4a37967cc9654e02a36f&v=d31268e9e0&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=859f0fe38b6b4e1fad15dbd7ea1a6e13&v=3439e441c0&y=2022"),
+            ]),
+            GPAMajor(name: "物流管理-计算机科学与技术", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=7fcffd1e56724f66aa10795105c7bbb1&v=224c3fb5ce&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=581dbd27a9254fbaaa303ce03b79ce89&v=6916a9a482&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=fd974358d000472dade8695c4e773124&v=12b4760ddf&y=2024"),
+            ]),
+            GPAMajor(name: "管理科学与工程类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=324664fbf400466ab16fe6ae5282c852&v=d3fc1ab37f&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=4f581a980f124942ba049007413a922f&v=2f4ab47174&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=967aeb6b302c4e9da2ee51526ce4c71a&v=9f293ef225&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=a04f5d42f08b4e2883229e0807d57c5b&v=7b29c3072b&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=dc2387437add4d76ab812cc030314e8d&v=30355c3001&y=2022"),
+            ]),
+            GPAMajor(name: "经济学", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=e3b1208a8b144686884b497842a5957c&v=d6d2d70d1c&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=9d8d0a5e17a7448884feb9e57d4396d3&v=c3e7298c98&y=2022"),
+            ]),
+            GPAMajor(name: "经济学（数量经济）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=9573be4be85846f38ea020e64ffa1b3b&v=c2c78da418&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=19fe8e0e439e4813bf87fd59a357c1b4&v=2b3190223f&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=535d436f27dd4dde977a5400d83cf525&v=76085571b8&y=2024"),
+            ]),
+            GPAMajor(name: "财务管理", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=724dd547be554cd0be07508dcbd15b3d&v=85bf46c638&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=f4b372d9cd9b41f69c08ddd3c42330ee&v=6ccd4fba21&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=eb2703574ca140d986d057b6126bd360&v=e2f3036d4b&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=5908dd09322d426291d69c32206e97e1&v=9c5f0146ac&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=13b243fa298a42288c379f66eb83e173&v=b9d68d68c0&y=2022"),
+            ]),
+            GPAMajor(name: "金融科技", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=adb10edc1799495288b3cbfb0dad9e2b&v=fbf8cab352&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=742b021ac5ff4fdf9894f1da0435b533&v=8de9d676f6&y=2025"),
+            ]),
+        ],
+        "36": [
+            GPAMajor(name: "外交学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2cd961ca023d4e41b3c81dcaa14a9b11&v=be1db9f9e8&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=4efbae7f8ef744519dae2471c8199fbc&v=21c092dfe9&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=315b5e7f3e5b45029cf1a76ac8adfb89&v=2b3c875138&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=a764cafca95648df86c5fef489938ce8&v=c6a8b2cd1c&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=56e2ec3e2abc4e528c48d9bababe95df&v=30163ab828&y=2022"),
+            ]),
+            GPAMajor(name: "外交学（国家安全与全球治理特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=0af53cddbc3543019595293c42547b88&v=29d56fa046&y=2026"),
+            ]),
+        ],
+        "37": [
+            GPAMajor(name: "广告学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2624e510c900415591f5e1607c6d3175&v=77bc572e5e&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=3bf500cf28844b259361312f09e0f7df&v=7a9a3b305a&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1840c961f7f6445987f993e2f6b8f449&v=56d71e7538&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=0d70875331854c0987c112c2ce98f286&v=1704d8c696&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=b8122608fbf4479ab19ac6b0b548eeaf&v=d1caf73b6c&y=2022"),
+            ]),
+            GPAMajor(name: "广播电视编导", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=31f1cc4afb984beab695e16527850f28&v=38ad969378&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=9fd5fcb32036424184cfc755ca55a938&v=75eedcb230&y=2022"),
+            ]),
+            GPAMajor(name: "播音与主持艺术", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=0ce8f9cc989f4610948afef717d285d2&v=255e3f11bd&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=4bb64361d7a946ccb7a1f7140e546677&v=56de3ffc2b&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e371ca7cb437468c8bb4568a7b5eecef&v=ead454b573&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=2ad00b3fb916476c98ba48aeb6202120&v=d2442d8fc2&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=aeb6a1c04ef943a68e42999615c10d15&v=c3b127499a&y=2022"),
+            ]),
+            GPAMajor(name: "新闻传播学类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=513adfeaea494968bfef047743986aa9&v=0e40cffafd&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=d1783f85daca4dbfa6c1d9922717a4b5&v=3cb64ffffd&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=8059082e2ebd420a9ec446d71db7f300&v=39c492a104&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=412b9cbc6c834253b7009831df908d6b&v=1d69531124&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082C63CD2E0532F29C80A45F1&v=25125d1e79&y=2022"),
+            ]),
+            GPAMajor(name: "新闻学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=480017ab7965412483c4d7e22bdb1494&v=a3f20edd54&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=9ce5ef8d5f6d45b9bc7727752f5f2f25&v=2fed6966e7&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=284c407c75254adea3e493f428694ef0&v=ceaac24361&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=53a891a44e064035b68c741a0fe73563&v=b770cf0439&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=a0b60a1d5e034576bfdd67c4faa28738&v=33a7731d16&y=2022"),
+            ]),
+            GPAMajor(name: "融媒体技术与艺术", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6a1fe58c23f14637866b9afcd486ec56&v=78348bf432&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=74c2fd76c86a42bb8b115e1d7158f6b1&v=c37824243c&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=625d9f1d85b54f679365c2353027352c&v=237ff157b6&y=2024"),
+            ]),
+        ],
+        "38": [
+            GPAMajor(name: "古文字学（强基）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=192c82a3c5ff4ab6889f875e127d3ac1&v=0567adc01f&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=1030257fefb64da5ba4bce47a0e0bcf8&v=9fb4cce8ce&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e5e09638f0fc434f859cb398f22835e7&v=2b921db574&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=76591323a7e34c138f51312b9e87fdef&v=523b775ac5&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=f5e2149445684bc6ac02a6cc4561239e&v=e73908ecf7&y=2022"),
+            ]),
+            GPAMajor(name: "拔尖基地班（考古学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=36fd4dfe8fa3497d81aa073a3abba02c&v=ce731011c6&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=0b7135de9fbe493baee2699407fe3c82&v=b4a9941c7e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=ff411113e60a44b98fb2e25ac99b149d&v=9febaaf520&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=ef1d41246b434c7cab07ff36a0e2fc51&v=d257263856&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6fb50daf785540d6adc07959c60b929e&v=e1851f0cd2&y=2022"),
+            ]),
+            GPAMajor(name: "文物与博物馆学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=59b3e1f08c964d61bfaf686dddcb303b&v=271ea10696&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=96ceda2309064159aacaef559e8dd9f2&v=2052a4a5ba&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=4b5c80d0a05a46d4b40cd7681e9c5b59&v=1fa8663dd1&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=ae85ea65dfea4b73ab0bc1388bdf9d20&v=4f47bc7294&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=de872b0753f6465d8790b2e1ef2ffec7&v=e529053678&y=2022"),
+            ]),
+            GPAMajor(name: "考古学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=3823834d51ce476fb8a5deb492e41d28&v=bf8bada1f3&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=b474c18b5f8c4520b8adbf5fae0b9154&v=1a8ab3b325&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=d820563297dc439a8bef881d99b50663&v=bf8bd3f9ff&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=c2886de4e7804fd0b77c60a7520c32ca&v=06eae0fb4c&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=fe5b8b3f6aa44ec589ba7e66b3a5b82d&v=4044762d34&y=2022"),
+            ]),
+            GPAMajor(name: "考古学类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=a9ebe0268b3048dfb19f8f0e8b2fa0bc&v=438a6836e5&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=306252da898b46198c9ea4b8b4385268&v=2f3e9b13cc&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=d6798660893c4d0e9cfab1de14634ed4&v=d141a9b136&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=ea313c6ecc2049b0abc543a34c84c5c8&v=78f35b0fac&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082C83CD2E0532F29C80A45F1&v=303e35011c&y=2022"),
+            ]),
+        ],
+        "39": [
+            GPAMajor(name: "PPE（哲学、政治学、经济学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=7f25b3abf8aa4a2094464657e44c0d9e&v=4a521f41a4&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=e24d5d1b98f843e886a270298c72a0c8&v=0e3e383eb7&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=23a092144a5247e38a22d6804dd357c4&v=5aa858d06d&y=2024"),
+            ]),
+            GPAMajor(name: "思想政治教育", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=6ff9fa892d664e7d823de6d58afba276&v=643ff174e6&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=478cd26d7ae94749a74d67559d85bc83&v=3629a9b844&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=808f6711c3fc43ccb461df776c37d42f&v=f3bacb6386&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=d89b96f6b3c34853ab3761409a1dea49&v=3b6c48cfdf&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=cc488019aac343db854908a53e55d72f&v=1b72c6232d&y=2022"),
+            ]),
+            GPAMajor(name: "马克思主义理论", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=94b823eec1774d4882e447b90748a95e&v=45b6e31995&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=d45a2cbc8af04beeb1188f92d3432462&v=8f06fac6b9&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=41f520cd1ee946998d091b8f36e66fef&v=ce691e9325&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=11654462369a47cc96f33c30139b52e7&v=c0572dcdd7&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6953280b61ba47e9a3b4e031b4b8eca7&v=b4a5e16e80&y=2022"),
+            ]),
+            GPAMajor(name: "马克思主义理论（吕振羽班,本研贯通）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=f701520bd44c474a8f6389c8a4db6afd&v=80973770b8&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=c3aa36b7e4d1431289613ef15e528374&v=ca2c3cc2fa&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=23b85e3d3463463abb825ab8c69ecea5&v=5b47332d1e&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=fe0a0b69b94343efa9a8e672c63ed51d&v=24f350b4da&y=2023"),
+            ]),
+        ],
+        "40": [
+            GPAMajor(name: "人工智能", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=9f7ab2e77aa14456bdcf2793b2a83596&v=63fd9fda27&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=fa3b09e3dbcd4364a13669bebd2f03a0&v=489940f3dd&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=8528434faa6f4fda99f81c49a21305de&v=a2f4d87e5f&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=2b88595279d1437691a3f2cc65d5a0f4&v=1809d8129a&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=4534b0b7ac90498cb57db95b9bd82efb&v=4fe5f327ad&y=2022"),
+            ]),
+            GPAMajor(name: "人工智能(王湘浩)", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=87c30507ef6d4127aab471e2b7736361&v=25a7adccb3&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=e02cd95d305c46819d5df279c1c16f4f&v=5a1f9937e4&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=eeee5136bc184f0691f4303ada957f15&v=85aa28300d&y=2024"),
+            ]),
+        ],
+        "55": [
+            GPAMajor(name: "工科试验班（软件工程）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=8c5abae7ccdb49908489318fadfcdd1e&v=67d50822a6&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=b49a9f4bd5dd4ebdb0096a9a8789a6b2&v=1c488178df&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=fbc902aede374f0d9bdb1759f4328895&v=2cb9a5889d&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=400b0a56399f47a0a4685553633919fd&v=5209990266&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6e830c75ae114278b9e5f88a805afcb4&v=c9051064fa&y=2022"),
+            ]),
+            GPAMajor(name: "数据科学与大数据技术", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=34b78538fb234a1f95d7507bbb7c8eb4&v=70e74c151b&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=5c47042dee714e92922fcfd3f94ee919&v=36f8f053c0&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=9cfd99c3ebe24775864a1f7640985dcf&v=210312448f&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=3a1f1b87c01f476da5ccae8dc0c20f40&v=809ba4de51&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c9040b75b96d465b84f926096f9a38fe&v=ad778f9f3d&y=2022"),
+            ]),
+            GPAMajor(name: "软件工程", plans: [
+                GPAPlan(year: 2026, route: "software.html?cohort=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=a2901242e21447c5ba6b1dcc58c87ad2&v=715e48ca56&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=519c38dd3e8b4570ba20081a1dbc562d&v=7712ad5f7b&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=1165912df5bc4ca3a8b79eadb1ccface&v=128b2a24d5&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=24b2fd93e94b47a3ab1b6861e62e633f&v=1ee35c44f8&y=2022"),
+            ]),
+        ],
+        "65": [
+            GPAMajor(name: "仪器类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=982e64370f574c368e13c423725eea27&v=53c68af378&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=d48728553d964d458db39aaf8d64a7b0&v=6f4c50fdb3&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=46ee00c6d8bf4a33a676e647e7f310fd&v=d6052055c7&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=fd49739e7ccf43849a6b72bfd1ebb299&v=2d8bc9ed71&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082CA3CD2E0532F29C80A45F1&v=047783245e&y=2022"),
+            ]),
+            GPAMajor(name: "智能感知工程", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=39c3b457210e47a18817bf54d092608d&v=978330d71b&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e7a8effff4f648fca6837e478aa70c22&v=4624df11ed&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=97fe4ef852f84e879f422ac071ebcc1a&v=52e311498b&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6263e590b48d4595890b1e9c34aa4606&v=c51bf7b99a&y=2022"),
+            ]),
+            GPAMajor(name: "测控技术与仪器", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=fbb21646a6d045a88f32181a9741f89d&v=c88b42c7d6&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=3512090cfaed4eb6845aa7cc11a812d6&v=d672e8cefe&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=63dde8135bee49b289a30a2307efdb90&v=e87274c7d4&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=b1f39df990cc4ff78cb504aaaeb35c20&v=b0dd409eab&y=2022"),
+            ]),
+            GPAMajor(name: "测控技术与仪器（黄大年班，本研贯通）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=ab5d1b5bbebb480aaeef7add4ef70e2c&v=156d79d3ec&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=45954c85b6154a9c8dcfb44c960b123d&v=8da06ee003&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=7d96caa35faf40d0be08238c7f1bdc6b&v=d3757cc91e&y=2023"),
+            ]),
+            GPAMajor(name: "电气工程及其自动化", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=78ba265c06fa46438b7d01c9d2c44669&v=035004da1e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=10a8a4aebeec43f199b1b4a4d954dc4e&v=dd5ce00542&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=3e3e34d6a6114f1590da424950242f46&v=e87b88d67b&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=d4561fe18d414839a6f8a440502fc0e9&v=4029f4b2d0&y=2022"),
+            ]),
+        ],
+        "71": [
+            GPAMajor(name: "生物医学科学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=31c222b4d7b94bec8f1be15e3f5c6b2c&v=fc50f74603&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=ad3ccf1624c940c29f6b9712603e2a5f&v=df2dee4ded&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=69c7aefad0644c668dc65244bb33880c&v=6753b1826d&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=a32575432b7f4650a443a78a06c8c363&v=d032028e4e&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=b1343085ee9742ed8c961b8166a7474d&v=eadf41f866&y=2022"),
+            ]),
+            GPAMajor(name: "白求恩试验班（生物医学科学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=3322f385bab24ae58a10cf2050a374f1&v=70b46d15d4&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=52cb823ffa644a1eb38dd53ce8905bdb&v=6526158433&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=ae41f028d4214d1489aec69dfe80f111&v=7f1c693f84&y=2024"),
+            ]),
+        ],
+        "72": [
+            GPAMajor(name: "临床医学（5+3一体化，儿科学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=1c3a21f6c41a4ed3a2fe20f72a7817ce&v=d9b346de88&y=2026"),
+            ]),
+        ],
+        "75": [
+            GPAMajor(name: "临床医学", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=df1441dacd3744f0a3e26dce4726a9f8&v=329aed7a92&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=f179bcc5cb9a452b8ea9c1faf22440b7&v=1f33d43b4e&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=6e88f298e6ca4dbc91f9fbb09670a850&v=69e88d0376&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6e6d031740694408aec6f90f9065fb59&v=1faa7ef61b&y=2022"),
+            ]),
+            GPAMajor(name: "临床医学(5+3一体化)", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=55773a4e1028436aafa166643a8e3801&v=a293609044&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=9c33c21553014dafb68008e092afd25f&v=b44caed9f4&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=d3a8845816ea46dfa24872d63d6ed32c&v=7460bddd29&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=d2c34309595741f6accc2e77008db6af&v=e598257189&y=2022"),
+            ]),
+            GPAMajor(name: "临床医学(5+3一体化,儿科学)", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=b0ae39d3c7604aee87bec67aae985181&v=de4a012686&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=5235ab857c4748d8b00e77b9b30bcd4b&v=68ecf8a28f&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e09f480deea84cc99c618fca7c483887&v=511a810a1c&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=ba62cd68d42c4788a413e7939f4d97ac&v=1044237aa7&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=17e573f62e4f406d9f6713a9016d6f29&v=65dd44e220&y=2022"),
+            ]),
+            GPAMajor(name: "白求恩试验班（临床医学专业）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=34b34b01e2814eb4ba89d7e4a485733f&v=9eabec2c7f&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=9ea01f545e8541089c652f9a52a08c91&v=21407c9b1e&y=2024"),
+            ]),
+        ],
+        "76": [
+            GPAMajor(name: "临床医学", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=2d3e7e5e4aea4fe98d06e12612d96433&v=728cf00f7e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=662f72ff00ec4747945ad43a1a7a288f&v=f5a481c216&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=e63561bcdad142c3b368beb2dc4d4b02&v=7de437bb97&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=cf3e7d4513be4a8884e8c556670c741d&v=087f82920e&y=2022"),
+            ]),
+            GPAMajor(name: "临床医学(5+3一体化)", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=9ffe61dbd13345b5be9904c880590c3c&v=6f5b9747f7&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e886c058537d4091af8a94df827bd1b3&v=74c93abe35&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=6cec2937a0c34e77bc02a6920d10b1c7&v=91adebbe37&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=e46d8552613e4caa92f5198b886e518b&v=958cfd5e18&y=2022"),
+            ]),
+            GPAMajor(name: "白求恩试验班（临床医学专业）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=53cb3aa15f084908b260e4e7efab9248&v=86fe1f8f50&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=a98b2abbe8894212aa458f3364a5a9a8&v=0ad50ed13d&y=2024"),
+            ]),
+            GPAMajor(name: "眼科学", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=ac90dfa027ca4157b40df1a0e5c309fb&v=1f86049c2e&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=b0c5a3c63db94e908b41d3dece395a16&v=c71ec942ed&y=2024"),
+            ]),
+        ],
+        "77": [
+            GPAMajor(name: "临床医学", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=f9a8e063c99040af95882a6461e85060&v=c37a5b1109&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=25dea4e5ddf647c08cff93435c46cb46&v=b2624a2c7b&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=09625229963a461eb44d948397a0dd05&v=7d666e08fe&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=1aad7e0f71f748809003aa39e5690768&v=f500301552&y=2022"),
+            ]),
+            GPAMajor(name: "临床医学(5+3一体化)", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=4a4dbaa49060420baf76387460c9694a&v=c67b73fe35&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=757976090cf0493fa37e4bc7fa21d561&v=973af7f52f&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=9f21ebf28f3c4bd888a56688bf5461e6&v=ebc16cf359&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=743a4a4fd29a4ac4a77024cde7dbd580&v=521c30cbae&y=2022"),
+            ]),
+            GPAMajor(name: "白求恩试验班（临床医学专业）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=8c31d5acecf74e03a9d0d5679c32f7a4&v=7bd57d5566&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=29ddeeaaf94f440c8872d421749f2839&v=202dc685b3&y=2024"),
+            ]),
+        ],
+        "78": [
+            GPAMajor(name: "临床医学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=3d311cf265034e71a3d76401c36c8cbd&v=e37f56340d&y=2026"),
+            ]),
+            GPAMajor(name: "临床医学（5+3一体化）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=67509fd6f4394f4f84f758e2b01dbfbb&v=96e7c065fc&y=2026"),
+            ]),
+            GPAMajor(name: "白求恩试验班（临床医学）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=36a6eeb52a7944d482836fe49501d592&v=1e28fadb8a&y=2026"),
+            ]),
+        ],
+        "81": [
+            GPAMajor(name: "动物医学(卓越农林人才)", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=4f8c08df1ef847458f85eee7d9fa20d5&v=ed4ba3451e&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=ddf0e8f3791344dbbd41699a5cfceaad&v=6a693112b8&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e8b92eb1277143a481f9ff397cfb348f&v=310a22cebb&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=014cf9b28fe9455182f67e495ad31c03&v=327f19608f&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=e8ff465ceece4b1697805e1a13f1c9f1&v=97020523cc&y=2022"),
+            ]),
+            GPAMajor(name: "动物医学（五年）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=8f7b9d2695c34ae6971a790eabf47b99&v=0ce604864e&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=4fa9bdd19e5d4a99bb8de3f074fbf167&v=9cb7016b77&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=627c7239054d4d9ab3de9874209c10e9&v=44bdc1af20&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=8e45249d477947d08ecabcdbf147e81e&v=af91bd0534&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c878c1260a114c02b2942a2a6b5ec39a&v=6f9f091b17&y=2022"),
+            ]),
+            GPAMajor(name: "动物医学（人兽共患病特色班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=baf7a0ed2d0b4f768f7a7eda07711070&v=3e362c1692&y=2026"),
+            ]),
+            GPAMajor(name: "动物医学（徐华清班）", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2702770caf144fb0a0103fa2952ae730&v=ad3e84d05f&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=92faaa24fc1d4063a3eb53f9c154d1c4&v=46ffba236c&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=93b3c3694b8046e69b5ff29b16501939&v=f3929d734f&y=2024"),
+            ]),
+        ],
+        "82": [
+            GPAMajor(name: "农业资源与环境", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=bba7375eca35455990d46120d2e5f556&v=dafa91c8c8&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=db9b6716fcca45e1ac49a0dc95bd8126&v=ebcd797d7a&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=34cfde1ee2e54b2dbe4d0564e0f8d312&v=2e2e0f1583&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=815f520bba204dcab801873c8f6f782a&v=01613d0b89&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=17490efcc1be4f6e8a074ef69840d2cd&v=18b86e6637&y=2022"),
+            ]),
+            GPAMajor(name: "农学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=f21b0bddcecf47c7bda91c10965a1df9&v=e0a90d772d&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=dff3f7411d0c49ccbc727001fd0d2cb7&v=bfa80aa827&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=1e8f5d5cd8484b0eac2cb7a0723d3325&v=b5c79a6beb&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=2c579bd81aa248a6a677a4260b0a05de&v=87ebc93579&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=94fcd262d8984fb18efd3a9eeb25a289&v=95848db8c4&y=2022"),
+            ]),
+            GPAMajor(name: "农学（“生物育种”班,本研贯通）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=f17a06c24f544aaeb3cf11ac13987408&v=2d4c68eb7a&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=d7f5ebd0bfb048eda5be58bc9e911504&v=06d31aa87b&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=a0e7c60e4f8a4041af943cb46c0ba9e6&v=7060f97838&y=2023"),
+            ]),
+            GPAMajor(name: "园艺", plans: [
+                GPAPlan(year: 2023, route: "plan.html?plan=da096421eb6a4036bb4c99ddc4ab9bb4&v=2d34738220&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=c222a0561821460e8e9b0d713a8662fb&v=5841a24678&y=2022"),
+            ]),
+            GPAMajor(name: "智慧园艺", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=cbcf224a977d4fcf8885d57b03dce993&v=97f95fd6a9&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=e2e485f767b5408baec654464f31b380&v=2db04d1107&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=ef3f2d804fba45148f63eca0b3d43368&v=a550963642&y=2024"),
+            ]),
+            GPAMajor(name: "植物保护", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=8f9a0402fffb44c08c835ee9635d60c9&v=6184974995&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=d6826a27ed934dc19c602076d810f04b&v=dc8628d780&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=16b6239f43b54808afe620b165de76e1&v=1374f55319&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=d530c119853c452aa2fa8273adbe44b7&v=1f56dddf8e&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=a25ac78a215e4f3e892c0c1abcb8f954&v=eae249dac8&y=2022"),
+            ]),
+            GPAMajor(name: "植物生产类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=bad4b7f5c38540eeaa678c49729133a2&v=ddc40623e7&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=83eaeceff17f45f6a8050f0fc3c88059&v=fd33c46d26&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=57828144852b4e638c77fe63eff21d3b&v=7c3dc4e8dd&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=b82a4a8421ae4c2bb9636967b7b210c4&v=19da9c5184&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=DD795FC082CC3CD2E0532F29C80A45F1&v=943348a1f2&y=2022"),
+            ]),
+            GPAMajor(name: "生物育种科学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=ea5c0d887e864b7a88e5f4e2a6c2c50a&v=ba9f95a6eb&y=2026"),
+            ]),
+        ],
+        "85": [
+            GPAMajor(name: "动物科学", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=425733bd0b5f40acb274dad86bbf0897&v=b282d6e324&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=ff23a94ee96d4ff28e3ca16d73ef1e08&v=984f38319b&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=26cc4e5e2fdb44018318a8050d83b71d&v=66e3a3ff13&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=e4dfe195688c4c9f909464a32f4c895a&v=50daf79e9b&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=6f61d1a5352749e18022a9b62c7482ad&v=b5bd09550d&y=2022"),
+            ]),
+            GPAMajor(name: "动物科学（“生物育种”班,本研贯通）", plans: [
+                GPAPlan(year: 2025, route: "plan.html?plan=ca420bf98a394b2bbb864c217e121a39&v=d5824e3628&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=e5362c462957419e95466c6623045aa4&v=c0cbc32f00&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=be6ac2b7815e4c7387f806fb59bac926&v=7cfd8ee869&y=2023"),
+            ]),
+        ],
+        "87": [
+            GPAMajor(name: "食品科学与工程", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=9a088dba6f4c40378e10597090fb50ef&v=ead81fe0fb&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=e03700bd0b1540c9b9941f243c205d0c&v=3d0ede7c4c&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=6bc1c6e8ce8c4847b186a2affae23908&v=18ac253aca&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=2005bdbdac1f4c9aa607cb85752fe0ed&v=e4391a0526&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=853cc80665c640e591f1031cf4cea832&v=21371057b9&y=2022"),
+            ]),
+            GPAMajor(name: "食品科学与工程类", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=85a743f8cfac415abdb301cec5fa3204&v=a67988331c&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=52b58f88befe47fcb69cc6f78e6fe6e2&v=70e796a173&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=41bd16a685ae4eabbcf5065a97197910&v=728c37275d&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=c499aa63b1434bb7a94302b025c893d9&v=b92452c24c&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=9c2dfcee94b147b88099265ea4e6d53d&v=f98cb53eca&y=2022"),
+            ]),
+            GPAMajor(name: "食品质量与安全", plans: [
+                GPAPlan(year: 2026, route: "plan.html?plan=2eb6013c2c0e440f80fe938e9692e064&v=40aefceb14&y=2026"),
+                GPAPlan(year: 2025, route: "plan.html?plan=c4368151757d43db847c19b3b085d1f6&v=93eb16983b&y=2025"),
+                GPAPlan(year: 2024, route: "plan.html?plan=7d968dfd1ecb4dc3a5d9a092a4be9483&v=8f753d0d36&y=2024"),
+                GPAPlan(year: 2023, route: "plan.html?plan=ed94f5d4292a496a99cb73d6bf20444a&v=3fd8f3de98&y=2023"),
+                GPAPlan(year: 2022, route: "plan.html?plan=d93792b311fe409f82610dae1186a5a7&v=f8001021cc&y=2022"),
+            ]),
+        ],
+    ]
+
+    public static func majors(collegeCode: String) -> [GPAMajor] {
+        majorsByCollege[collegeCode] ?? []
+    }
+
+    /// 只留「该年级及更早还有方案」的专业；年份为空时全部保留。
+    public static func majors(collegeCode: String, year: Int?) -> [GPAMajor] {
+        majors(collegeCode: collegeCode).filter { $0.plan(for: year) != nil }
+    }
+
+    public static func major(named name: String, collegeCode: String) -> GPAMajor? {
+        majors(collegeCode: collegeCode).first { $0.name == name }
+    }
+
+    public static func plan(collegeCode: String, major majorName: String, year: Int?) -> GPAPlan? {
+        major(named: majorName, collegeCode: collegeCode)?.plan(for: year)
+    }
+
+    public static func url(for plan: GPAPlan) -> URL? {
+        URL(string: plan.route, relativeTo: GPALink.base)?.absoluteURL
+    }
+}

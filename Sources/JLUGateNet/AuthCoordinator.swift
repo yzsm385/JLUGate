@@ -55,6 +55,9 @@ public enum AuthTelemetry: Sendable, Equatable {
     case session(account: String, clientIP: String?, session: UInt16)
     case traffic(secondsOnline: UInt32, stats: [UInt32])
     case note(String)
+    /// 网页认证链路确认成功：没有 Dr.Com 的会话号，但账号密码确实被门户接受了。
+    /// App 层用它把保存的密码标成"已验证"，下次启动才能安心自动登录。
+    case portalAuthenticated(account: String)
 }
 
 public protocol SessionTelemetryProviding: Sendable {

@@ -18,10 +18,13 @@ struct SelfServiceGuideCard: View {
     var compact: Bool = false
     /// 当前选的接入方式；用来决定讲"静态参数"还是讲"网页认证"
     var link: String? = nil
+    /// 向导里的一行版已经够长了：只在设置页的完整指南里带「新生小贴士」。
+    var showsFreshmanTips: Bool = true
 
     @State private var showSteps = false
     @State private var showPasswords = false
     @State private var showMACHint = false
+    @State private var showFreshmanTips = false
 
     private var bodySize: CGFloat { compact ? 9 : 11 }
     private var titleSize: CGFloat { compact ? 10 : 12 }
@@ -81,6 +84,16 @@ struct SelfServiceGuideCard: View {
             }
 
             if showSteps { steps }
+
+            if showsFreshmanTips {
+                Divider().opacity(0.35)
+                disclosureButton(Copy.t("R15"), isOpen: showFreshmanTips) {
+                    showFreshmanTips.toggle()
+                }
+                if showFreshmanTips {
+                    FreshmanTipsCard()
+                }
+            }
         }
         .padding(compact ? 9 : 12)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -255,7 +268,7 @@ struct SelfServiceHintRow: View {
                     .multilineTextAlignment(.leading)
             }
             if expanded {
-                SelfServiceGuideCard(compact: true)
+                SelfServiceGuideCard(compact: true, showsFreshmanTips: false)
             }
         }
     }

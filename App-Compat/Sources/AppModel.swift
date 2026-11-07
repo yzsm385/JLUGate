@@ -39,6 +39,7 @@ final class AppModel {
         case status
         case inspect
         case sites
+        case gpa
         case developer
         case portal
         case portalLogin
@@ -165,12 +166,98 @@ final class AppModel {
     /// 站点合集里"复制账号"用
     var account: String { config.account }
 
-    /// GPA / 保研测算网页。账号只放在 fragment，避免出现在服务器日志里。
+    /// GPA 学院是怎么认出来的（面板上用来解释，不用让用户猜）。
+    enum GPACollegeSource: Equatable {
+        case manual
+        case myCollege
+        case studentID
+        case account
+    }
+
+    struct GPAResolution {
+        var college: GPACollege?
+        var year: Int?
+        var source: GPACollegeSource?
+    }
+
+    /// 优先级：GPA 面板里手动选的 > 手动设的「我的学院」 > 登录邮箱前缀 > 学号。
+    ///
+    /// 学生账号本身就是「姓名拼音 + 学院代码 + 入学年份」（如 zhangcyy5525），
+    /// 所以默认直接从登录账号解析，不要求用户再填一次学号。
+    private var gpaResolution: GPAResolution {
+        let acct = GPACollegeDirectory.match(account)
+        let sid = GPACollegeDirectory.match(config.studentID)
+        let year = acct?.year ?? sid?.year
+        if let manual = GPACollegeDirectory.college(code: config.gpaCollegeCode) {
+            return GPAResolution(college: manual, year: year, source: .manual)
+        }
+        // 只认用户在「站点 → 我的学院」里明确设过的那一个；不拿学号学出来的
+        // 前缀映射来覆盖邮箱里的代码。
+        if !config.myCollegeHost.isEmpty,
+           let manual = CollegeDirectory.college(forHost: config.myCollegeHost),
+           let mapped = GPACollegeDirectory.college(forName: manual.name) {
+            return GPAResolution(college: mapped, year: year, source: .myCollege)
+        }
+        if let parsed = acct?.college {
+            return GPAResolution(college: parsed, year: year, source: .account)
+        }
+        if let parsed = sid?.college {
+            return GPAResolution(college: parsed, year: year, source: .studentID)
+        }
+        return GPAResolution(college: nil, year: year, source: nil)
+    }
+
+    var gpaCollege: GPACollege? { gpaResolution.college }
+    var gpaYear: Int? { gpaResolution.year }
+    var gpaCollegeSource: GPACollegeSource? { gpaResolution.source }
+
+    /// GPA / 保研测算网页。
+    ///
+    /// 学院已经认出来时只传 `college` + `year`；认不出才把学号/账号放进 fragment
+    /// 让网页端再认一次。fragment 不会出现在服务器日志里。
     var gpaURL: URL {
-        var c = URLComponents(string: "https://yzsm385.github.io/JLUGate/")!
-        let a = account.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !a.isEmpty { c.fragment = "account=" + a }
-        return c.url!
+        let res = gpaResolution
+        return GPALink.make(collegeCode: res.college?.code,
+                            year: res.year,
+                            studentID: config.studentID,
+                            account: account)
+    }
+
+    var gpaBaseURL: URL { GPALink.base }
+
+    /// 主面板小卡片的副标题：认出来就显示「学院 · 年级」，认不出再显示说明。
+    var gpaSubtitle: String {
+        guard let college = gpaCollege else { return Copy.t("GPA02") }
+        if let year = gpaYear { return Copy.f("GPA18", college.name, year) }
+        return college.name
+    }
+
+    /// 当前学院 + 年级下可选的专业（只保留该年级及更早还有方案的）。
+    var gpaMajors: [GPAMajor] {
+        guard let college = gpaCollege else { return [] }
+        return GPAProgramDirectory.majors(collegeCode: college.code, year: gpaYear)
+    }
+
+    /// 选好专业后直接进入对应年级的计算器（不再经过网页首页选专业）。
+    func gpaPlanURL(major: String) -> URL? {
+        guard let college = gpaCollege,
+              let plan = GPAProgramDirectory.plan(collegeCode: college.code,
+                                                  major: major,
+                                                  year: gpaYear) else { return nil }
+        return GPAProgramDirectory.url(for: plan)
+    }
+
+    /// 在 GPA 面板里手动指定学院（只影响 GPA，不改「我的学院」）。
+    func setGPACollege(_ college: GPACollege) {
+        config.gpaCollegeCode = college.code
+        ConfigStore.save(config)
+        FileLogger.shared.log("GPA 学院：设为 \(college.name)（\(college.code)）")
+    }
+
+    func clearGPACollege() {
+        config.gpaCollegeCode = ""
+        ConfigStore.save(config)
+        FileLogger.shared.log("GPA 学院：恢复自动识别")
     }
 
     // MARK: 我的学院（学号识别）
@@ -246,8 +333,10 @@ final class AppModel {
     var observingExistingSession = false
     var networkSnapshot: NetworkSnapshot?
     var pingResults: [PingSummary] = []
-    var speedResults: [SpeedResult] = []
     var diagnosticsBusy = false
+    var portalPageCaptureRunning = false
+    var portalPageCaptureStatus: String?
+    @ObservationIgnored private var portalPageCaptureReport: String?
     /// 上次启动闪退后进入的安全模式（不自动连、不读密码）
     var isSafeMode = false
     struct Inspection: Equatable {
@@ -669,7 +758,6 @@ final class AppModel {
 
     var detailLine: String {
         if case .failed(let error) = state { return error.userMessage }
-        if let clientIP { return Copy.f("B507", clientIP) }
         if observingExistingSession { return Copy.t("B508") }
         return "\(config.server):\(config.serverPort)"
     }
@@ -772,6 +860,7 @@ final class AppModel {
             ("detail", AnyView(NetworkDetailView().environment(self))),
             ("status", AnyView(ConnectionStatusView().environment(self))),
             ("sites", AnyView(SitesPanel().environment(self))),
+            ("gpa", AnyView(GPAPanel().environment(self))),
             ("portal", AnyView(PortalViewerView(url: portalViewerURL).environment(self))),
             ("portalLogin", AnyView(PortalLoginPanel(url: URL(string: "https://login.jlu.edu.cn")!)
                 .environment(self))),
@@ -813,9 +902,13 @@ final class AppModel {
     func connect() {
         stopPassiveWatch()
         watchPrompted = true
+        // 网页认证自检：固定用模拟门户的测试账号，**绝不**把用户真实密码发给自检服务器。
+        // 只影响本次连接，不写回 config / 钥匙串。
+        let devPortalCredentials: (account: String, password: String)? =
+            DevOverrides.portalBase == nil ? nil : ("20230001", "test-pass-2024")
         if DevOverrides.isEnabled {
             if config.account.isEmpty { config.account = "20230001" }
-            if password.isEmpty { password = "test-pass-2024" }
+            if password.isEmpty, devPortalCredentials == nil { password = "test-pass-2024" }
             if DevOverrides.portalBase != nil {
                 config.link = "jluWiFi"
             } else if DevOverrides.server != nil {
@@ -825,7 +918,9 @@ final class AppModel {
         // 密码框为空但本机存过 → 只有"曾经成功登录过"的那份才允许自动复用。
         // 未验证的（从没成功过、或上次被拒）一律不静默使用：否则会拿着同一串错密码
         // 反复撞服务器，用户看到的就是"怎么点都失败"。
-        if password.isEmpty, let stored = CredentialStore.password(for: config.account),
+        if devPortalCredentials != nil {
+            FileLogger.shared.log("dev portal：使用固定自测凭据（\(devPortalCredentials!.account)）")
+        } else if password.isEmpty, let stored = CredentialStore.password(for: config.account),
            !stored.isEmpty {
             if CredentialStore.verifiedAt(account: config.account) != nil {
                 password = stored
@@ -845,7 +940,9 @@ final class AppModel {
             passwordSource = .typed
             FileLogger.shared.log("使用本次输入的密码（\(PasswordFingerprint.describe(password))）")
         }
-        guard !config.account.trimmingCharacters(in: .whitespaces).isEmpty, !password.isEmpty else {
+        let authAccount = devPortalCredentials?.account ?? config.account
+        let authPassword = devPortalCredentials?.password ?? password
+        guard !authAccount.trimmingCharacters(in: .whitespaces).isEmpty, !authPassword.isEmpty else {
             recentLog.insert("还没有账号或密码：请先在设置里填一次（之后会自动记住）", at: 0)
             presentWizard()
             return
@@ -915,8 +1012,8 @@ final class AppModel {
             }
         }
         let engineConfiguration = EngineConfiguration(
-            account: config.account,
-            password: password,
+            account: authAccount,
+            password: authPassword,
             hostname: SystemHostname.value,
             registeredMAC: profile?.registeredMAC.flatMap(MACAddress.init),
             interfaceLock: devServer != nil ? "lo0" : config.interfaceLock,
@@ -948,15 +1045,15 @@ final class AppModel {
         let portalEntry = devPortal.map { $0.appendingPathComponent("portal?autologin=1") }
             ?? config.portal.entryURL.flatMap(URL.init(string:))
         let browser: any PortalBrowser = DevOverrides.portalUsesScriptedBrowser
-            ? DevScriptedBrowser(account: config.account, password: password)
+            ? DevScriptedBrowser(account: authAccount, password: authPassword)
             : portalBrowser
         // 自检时把 204 探针指向本地模拟门户；生产仍用真实 ConnectivityProbe
         let portalProbe: any ConnectivityProbing = devPortal.map { DevPortalProbe(base: $0) }
             ?? ConnectivityProbe()
 
         // 闭包里不能碰 main-actor 属性：先把静默登录要用的凭据取出来
-        let silentCredentials = PortalCredentials(account: config.account,
-                                                  password: password,
+        let silentCredentials = PortalCredentials(account: authAccount,
+                                                  password: authPassword,
                                                   clientMAC: profile?.registeredMAC)
         let factory: @Sendable (AccessLink, InterfaceSnapshot) -> any AuthProvider = { link, _ in
             if link.usesDrcomUDP {
@@ -970,10 +1067,9 @@ final class AppModel {
             }
             let engine = PortalEngine(probe: portalProbe,
                                       browser: browser,
+                                      credentials: silentCredentials,
                                       detector: PortalDetector(configuredURL: portalEntry),
                                       configuration: portalConfiguration)
-            // 静默网页认证：直接把账号密码交给引擎（只在内存里，不落盘）
-            Task { await engine.setCredentials(silentCredentials) }
             return engine
         }
 
@@ -1057,13 +1153,22 @@ final class AppModel {
                                               timeout: .seconds(2))
                 let outcome = await probe.run(interface: interface, dnsServers: servers)
                 if Task.isCancelled || !self.state.isOnline { return }
-                // 保活停了？超过 120 秒没收到网关应答就认为通道哑了（睡眠/定时器被挂起等）
-                if let last = self.lastTrafficAt, Date().timeIntervalSince(last) > 120 {
+                // 只有有线 / JLU.PC 是 Dr.Com 会话：不发包服务器就会断（服务端机制）。
+                // JLU.WIFI 是门户会话，不靠保活包续命；没有 traffic 不代表掉线，
+                // 下面只用 204 探针判断会话是否真的被门户拦了。
+                let usesDrcomKeepAlive = self.link?.usesDrcomUDP == true
+                if usesDrcomKeepAlive,
+                   let last = self.lastTrafficAt,
+                   Date().timeIntervalSince(last) > 120 {
                     FileLogger.shared.log("在线巡检：保活已 \(Int(Date().timeIntervalSince(last))) 秒没有应答，主动重连")
                     self.recentLog.insert("保活停了，正在重新认证", at: 0)
                     self.lastTrafficAt = nil
                     self.retry()
                     return
+                }
+                if !usesDrcomKeepAlive {
+                    // 无线没有保活包，别把上一次有线残留的时间戳当成"断了"。
+                    self.lastTrafficAt = nil
                 }
 
                 switch SessionLiveness.verdict(outcome) {
@@ -1309,6 +1414,8 @@ final class AppModel {
         Task { @MainActor in
             let service = InspectionService()
             self.inspectionTimings = [:]
+            // 带宽和别的体检一起自动测；不阻塞后面的项目。
+            if !self.speedRunning { self.runSpeedAll() }
 
             var started = ContinuousClock.now
             let ips = await service.publicIPs()
@@ -1341,9 +1448,6 @@ final class AppModel {
             self.inspectionRunning = false
             FileLogger.shared.log("体检：完成，出口 \(ips.first?.ip ?? "-")")
             // 体检顺带把带宽也测了（只测一次；重试按钮会重新跑）
-            if self.speedResults.isEmpty, !self.speedRunning {
-                self.runSpeedAll()
-            }
         }
     }
 
@@ -1363,6 +1467,15 @@ final class AppModel {
         if panel == .portalLogin { panel = .main }
         FileLogger.shared.log("网页认证面板：用户选择 \(result)")
         continuation?.resume(returning: result)
+    }
+
+    /// 网页认证面板上的「关掉系统登录弹窗」。
+    var systemPortalPopupMessage: String?
+
+    func dismissSystemPortalPopup() {
+        let closed = SystemPortalPopup.dismiss()
+        systemPortalPopupMessage = closed ? Copy.t("A31") : Copy.t("A32")
+        FileLogger.shared.log("网页认证面板：关闭系统弹窗 -> \(closed ? "成功" : "没找到")")
     }
 
     // MARK: 校园网门户（App 内查看，不自动弹）
@@ -1659,18 +1772,6 @@ final class AppModel {
         }
     }
 
-    func runSpeedTest() {
-        guard !diagnosticsBusy else { return }
-        diagnosticsBusy = true
-        let interface = interfaces.first(where: \.isUsableForAuthentication) ?? interfaces.first
-        Task { @MainActor in
-            let results = await SpeedTestService().compare(interface: interface)
-            speedResults = results
-            diagnosticsBusy = false
-            FileLogger.shared.log("网络详情：测速完成 \(results.count) 项")
-        }
-    }
-
     func copyNetworkDetail() {
         guard let snapshot = networkSnapshot else { return }
         var lines: [String] = ["JLU Gate 网络详情", ""]
@@ -1684,13 +1785,139 @@ final class AppModel {
         lines.append("认证出口：\(snapshot.campusRoute?.interface ?? "-")")
         lines.append("系统 DNS：\(snapshot.dnsServers.joined(separator: ", "))")
         for summary in pingResults { lines.append(summary.description) }
-        for result in speedResults { lines.append(result.description) }
+        for (label, result) in [("直连", speedDirect),
+                                ("默认出口", speedViaDefault),
+                                ("本地代理", speedViaProxy)] {
+            if let result { lines.append("\(label)：\(result.description)") }
+        }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(lines.joined(separator: "\n"), forType: .string)
         recentLog.insert("已复制网络详情", at: 0)
     }
 
     // MARK: 诊断
+
+    func capturePortalPage() {
+        guard !portalPageCaptureRunning else { return }
+        portalPageCaptureRunning = true
+        portalPageCaptureStatus = "正在只读抓取门户页面……"
+        Task { @MainActor in
+            await performPortalPageCapture()
+            portalPageCaptureRunning = false
+        }
+    }
+
+    private func performPortalPageCapture() async {
+        let wifi = interfaces.first {
+            $0.name == activeInterfaceName && $0.isWireless
+        } ?? interfaces.first {
+            $0.isWireless && $0.isUp && $0.ipv4 != nil
+        } ?? interfaces.first ?? InterfaceSnapshot(
+            name: "en0", index: 0, ipv4: nil, mac: nil, isWireless: false, isUp: false)
+
+        var lines = [
+            "== 认证网页抓取（只读 GET，不提交账号密码） ==",
+            "接口：\(wifi.name)  IP：\(wifi.ipv4 ?? "-")  无线：\(wifi.isWireless ? "是" : "否")",
+        ]
+
+        let dns = (config.currentProfile?.dns ?? []).compactMap(IPv4Address.init)
+        let probe = await ConnectivityProbe(targets: [.cn204], timeout: .seconds(2))
+            .run(interface: wifi, dnsServers: dns)
+        var candidates: [(String, URL)] = []
+        func add(_ label: String, _ url: URL?) {
+            guard let url, !candidates.contains(where: { $0.1 == url }) else { return }
+            candidates.append((label, url))
+        }
+
+        add("当前待登录入口", pendingPortalLoginURL)
+        if case .captivePortal(let statusCode, let location) = probe {
+            let safeLocation = location.flatMap(URL.init(string:)).map(DiagnosticsReport.safeURL) ?? "-"
+            lines.append("连通性探测：HTTP \(statusCode)  Location：\(safeLocation)")
+            add("探测重定向", location.flatMap(URL.init(string:)))
+        } else {
+            lines.append("连通性探测：\(String(describing: probe))")
+        }
+        add("设置的入口", config.portal.entryURL.flatMap(URL.init(string:)))
+        add("上次记录的入口", config.portal.lastKnownURL.flatMap(URL.init(string:)))
+        for (index, url) in PortalDetector.knownJLUEntries.enumerated() {
+            add("吉大候选入口 \(index + 1)", url)
+        }
+
+        var capturedSources = 0
+        var capturedScriptURLs = Set<URL>()
+        let fetcher = URLSessionPortalFetcher(timeout: .seconds(3))
+        for (label, url) in candidates.prefix(6) {
+            do {
+                let page = try await fetcher.fetch(url, interface: wifi)
+                lines.append("")
+                lines.append("-- \(label) --")
+                lines.append(DiagnosticsReport.portalPageSummary(requestedURL: url, page: page))
+                if !page.body.isEmpty,
+                   page.contentType?.localizedCaseInsensitiveContains("html") == true
+                    || page.body.localizedCaseInsensitiveContains("<html") {
+                    do {
+                        let sourceURL = try savePortalPageSource(page.body, kind: "html")
+                        lines.append("HTML 原文（仅本机保存）：\(privatePath(sourceURL))")
+                        capturedSources += 1
+                    } catch {
+                        lines.append("HTML 原文保存失败：\(error.localizedDescription)")
+                    }
+                }
+
+                let baseURL = page.responseURL ?? url
+                for scriptURL in DiagnosticsReport.scriptURLs(in: page, requestedURL: url)
+                    .filter({ $0.host?.caseInsensitiveCompare(baseURL.host ?? "") == .orderedSame })
+                    .filter({ !capturedScriptURLs.contains($0) })
+                    .prefix(3) {
+                    capturedScriptURLs.insert(scriptURL)
+                    do {
+                        let scriptPage = try await fetcher.fetch(scriptURL, interface: wifi)
+                        lines.append("同源脚本：\(DiagnosticsReport.safeURL(scriptURL))"
+                                     + " · HTTP \(scriptPage.statusCode)"
+                                     + " · \(scriptPage.body.count) 字符")
+                        if !scriptPage.body.isEmpty {
+                            let sourceURL = try savePortalPageSource(scriptPage.body, kind: "js")
+                            lines.append("  脚本原文（仅本机保存）：\(privatePath(sourceURL))")
+                            capturedSources += 1
+                        }
+                    } catch {
+                        let nsError = error as NSError
+                        lines.append("同源脚本抓取失败：\(DiagnosticsReport.safeURL(scriptURL))"
+                                     + " · \(nsError.domain) (\(nsError.code))")
+                    }
+                }
+            } catch {
+                let nsError = error as NSError
+                lines.append("")
+                lines.append("-- \(label) --")
+                lines.append("请求：\(DiagnosticsReport.safeURL(url))")
+                lines.append("抓取失败：\(nsError.domain) (\(nsError.code))")
+            }
+        }
+
+        portalPageCaptureReport = lines.joined(separator: "\n")
+        portalPageCaptureStatus = capturedSources > 0
+            ? "抓取完成：保存了 \(capturedSources) 份网页/脚本原文。请复制或导出诊断报告。"
+            : "未获取到 HTML 页面。抓取结果已加入诊断报告。"
+        FileLogger.shared.log("门户网页诊断：完成，页面/脚本原文 \(capturedSources) 份")
+    }
+
+    private func savePortalPageSource(_ source: String, kind: String) throws -> URL {
+        let fileManager = FileManager.default
+        let directory = ConfigStore.directory.appendingPathComponent("PortalCaptures", isDirectory: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+        try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: directory.path)
+        let file = directory.appendingPathComponent("portal-\(UUID().uuidString).\(kind).txt")
+        try Data(source.utf8).write(to: file, options: .atomic)
+        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        return file
+    }
+
+    private func privatePath(_ url: URL) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return url.path.replacingOccurrences(of: home, with: "~")
+    }
 
     func copyDiagnostics() {
         NSPasteboard.general.clearContents()
@@ -1713,13 +1940,18 @@ final class AppModel {
 
     private func diagnosticsText() -> String {
         var text = DiagnosticsReport.make(config: config, engineState: state,
-                                          interfaces: interfaces)
+                                          interfaces: interfaces,
+                                          portalPageCapture: portalPageCaptureReport)
         if let routeGuarantee {
             text += "\n\n== 路由保障 ==\n\(routeGuarantee)"
         }
         if !recentLog.isEmpty {
-            text += "\n\n== 最近事件 ==\n" + recentLog.prefix(20).joined(separator: "\n")
+            text += "\n\n== 最近事件 ==\n" + recentLog.prefix(50).joined(separator: "\n")
         }
+        text += "\n\n== 在线巡检 ==\n"
+        text += "当前链路：\(link?.displayName ?? "-")  Dr.Com 保活=\(link?.usesDrcomUDP == true)\n"
+        text += "最后一次保活遥测：\(lastTrafficAt.map { ISO8601DateFormatter().string(from: $0) } ?? "-")\n"
+        text += "上次强制重登：\(lastForcedReauthAt.map { ISO8601DateFormatter().string(from: $0) } ?? "-")"
         // 闪退时用户往往只发诊断文件：把崩溃栈尾部一起带上
         let crashLog = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs/JLUGate/crash-stack.log")
@@ -1822,6 +2054,11 @@ final class AppModel {
             switch next {
             case .online:
                 lastOnlineAt = Date()
+                // 系统弹的「捕获门户助手」在认证成功后经常赖着不走：网络已经通了，
+                // 它却还停在登录页上，用户点「完成」也关不掉。这里顺手收掉。
+                if SystemPortalPopup.dismiss() {
+                    FileLogger.shared.log("已关闭系统的网页认证弹窗（Captive Network Assistant）")
+                }
                 // 连上了就把"自动重连"计数清零，下次掉线重新从 3s 开始等
                 autoReconnectAttempt = 0
                 autoReconnectTask?.cancel()
@@ -1918,6 +2155,15 @@ final class AppModel {
                 }
             case .note(let message):
                 recentLog.insert(message, at: 0)
+            case .portalAuthenticated(let account):
+                // 门户明确接受了这组账号密码：标成"已验证"，下次启动才敢静默复用。
+                // 以前网页认证链路从不发会话遥测，保存的密码永远停在"未验证"，
+                // 于是每次重启都要重新走一遍向导——这也是"自动登录不生效"的一部分。
+                CredentialStore.markVerified(account: account)
+                requirePasswordReentry = false
+                if account == config.account { passwordSource = .savedVerified }
+                recentLog.insert("网页认证成功：\(account)（凭据已验证）", at: 0)
+                FileLogger.shared.log("网页认证成功，凭据标记为已验证：\(account)")
             }
         }
     }

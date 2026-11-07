@@ -16,11 +16,11 @@ struct CopyTests {
         #expect(Copy.resolveLanguage(preferred: ["zh-Hans-CN", "en-US"]) == .zhHans)
     }
 
-    @Test("三种语言都收齐了全部 761 条")
+    @Test("三种语言都收齐了全部 781 条")
     func fullTables() {
-        #expect(Copy.entryCount(.zhHans) == 761)
-        #expect(Copy.entryCount(.zhHant) == 761)
-        #expect(Copy.entryCount(.en) == 761)
+        #expect(Copy.entryCount(.zhHans) == 781)
+        #expect(Copy.entryCount(.zhHant) == 781)
+        #expect(Copy.entryCount(.en) == 781)
     }
 
     @Test("设置里选的界面语言能覆盖环境变量和系统语言")
@@ -35,7 +35,7 @@ struct CopyTests {
 
     @Test("取文案：非空、不含未替换的占位符残留（静态条目）")
     func lookups() {
-        for key in ["M01", "S02", "E42"] {
+        for key in ["M01", "S02", "E42", "GPA01", "GPA12"] {
             #expect(!Copy.t(key).isEmpty)
             #expect(Copy.t(key) != key)
         }

@@ -47,6 +47,19 @@ final class FakePortalBrowser: PortalBrowser, @unchecked Sendable {
     }
 }
 
+struct RecordingEportalClient: EportalAuthenticating {
+    let outcome: EportalOutcome
+    let calls = Atomic<[String]>([])
+
+    func login(entry: URL, account: String, password: String,
+               clientIP: String?, clientMAC: String?) async -> EportalOutcome {
+        calls.withLock {
+            $0.append("\(entry.absoluteString)|\(account)|\(password)|\(clientIP ?? "")|\(clientMAC ?? "")")
+        }
+        return outcome
+    }
+}
+
 struct StubFetcher: PortalPageFetching {
     var page: PortalPage
 
@@ -80,6 +93,16 @@ struct PortalDetectorTests {
             probe: .captivePortal(statusCode: 302, location: "http://10.100.61.3/login?x=1"),
             interface: interface)
         #expect(entry?.url.absoluteString == "http://10.100.61.3/login?x=1")
+        #expect(entry?.source == .redirect)
+    }
+
+    @Test("保留 Wi-Fi 探测到的实际重定向地址")
+    func wifiRedirectIsPreserved() async {
+        let detector = PortalDetector(fetcher: StubFetcher(page: PortalPage(statusCode: 200, body: "")))
+        let entry = await detector.detect(
+            probe: .captivePortal(statusCode: 302, location: "http://10.66.51.154/"),
+            interface: interface)
+        #expect(entry?.url.absoluteString == "http://10.66.51.154/")
         #expect(entry?.source == .redirect)
     }
 
@@ -128,6 +151,26 @@ struct PortalDetectorTests {
 // MARK: - 引擎
 
 /// 记录状态流，避免"用轮询抓瞬时状态"带来的 flaky。
+/// 记录 `telemetry`：验证引擎内部说明真的能到协调器 / UI，凭据也会被标记为已验证。
+final class TelemetryRecorder: @unchecked Sendable {
+    private let events = Atomic<[AuthTelemetry]>([])
+    private var task: Task<Void, Never>?
+
+    init(_ stream: AsyncStream<AuthTelemetry>) {
+        task = Task { [events] in
+            for await event in stream {
+                events.withLock { $0.append(event) }
+            }
+        }
+    }
+
+    var all: [AuthTelemetry] { events.withLock { $0 } }
+    var notes: [String] {
+        all.compactMap { if case .note(let message) = $0 { message } else { nil } }
+    }
+    func cancel() { task?.cancel() }
+}
+
 final class StateRecorder: @unchecked Sendable {
     private let states = Atomic<[AuthState]>([])
     private var task: Task<Void, Never>?
@@ -163,6 +206,8 @@ struct PortalEngineTests {
 
     private func makeEngine(probe: some ConnectivityProbing,
                             browser: FakePortalBrowser,
+                            credentials: PortalCredentials? = nil,
+                            eportalClient: any EportalAuthenticating = EportalClient(),
                             failTolerance: Int = 999) -> PortalEngine {
         let configuration = PortalConfiguration(
             silentRetryOnce: true,
@@ -172,6 +217,8 @@ struct PortalEngineTests {
             failTolerance: failTolerance,
             successChecks: 3)
         return PortalEngine(probe: probe, browser: browser,
+                            credentials: credentials,
+                            eportalClient: eportalClient,
                             detector: PortalDetector(fetcher: StubFetcher(
                                 page: PortalPage(statusCode: 200, body: "<form action='/login'>"))),
                             configuration: configuration,
@@ -223,6 +270,59 @@ struct PortalEngineTests {
         #expect(presented.count == 1)
         #expect(presented.first == "http://10.100.61.3/login")
         #expect(presented.first?.contains("password") == false, "URL 里不该出现任何凭据")
+        recorder.cancel()
+        await engine.stop()
+    }
+
+    @Test("凭据在启动前同步注入，静默认证成功时不打开浏览器")
+    func silentAuthenticationUsesStartupCredentials() async throws {
+        let browser = FakePortalBrowser(result: .succeeded)
+        let client = RecordingEportalClient(outcome: .success)
+        let probe = ScriptedProbing([
+            .captivePortal(statusCode: 302, location: "http://10.100.61.3/login"),
+            .captivePortal(statusCode: 302, location: "http://10.100.61.3/login"),
+            .healthy
+        ])
+        let credentials = PortalCredentials(account: "test-user", password: "test-pass",
+                                            clientMAC: "02:00:00:00:00:02")
+        let engine = makeEngine(probe: probe, browser: browser,
+                                credentials: credentials, eportalClient: client)
+        let recorder = StateRecorder(engine.state)
+        await engine.start(using: interface)
+
+        try await portalExpect("静默登录成功并进入 online") { recorder.saw(.online) }
+        #expect(client.calls.withLock { $0 } == [
+            "http://10.100.61.3/login|test-user|test-pass|192.0.2.20|02:00:00:00:00:02"
+        ])
+        #expect(browser.presented.isEmpty, "静默认证成功后不应回退到浏览器")
+        recorder.cancel()
+        await engine.stop()
+    }
+
+    @Test("静默登录的说明会转发到 telemetry（否则 UI / 日志里看不到）")
+    func telemetryForwardsNotes() async throws {
+        let browser = FakePortalBrowser(result: .succeeded)
+        let client = RecordingEportalClient(outcome: .success)
+        let probe = ScriptedProbing([
+            .captivePortal(statusCode: 302, location: "http://10.100.61.3/login"),
+            .captivePortal(statusCode: 302, location: "http://10.100.61.3/login"),
+            .healthy
+        ])
+        let credentials = PortalCredentials(account: "test-user", password: "test-pass")
+        let engine = makeEngine(probe: probe, browser: browser,
+                                credentials: credentials, eportalClient: client)
+        let telemetry = TelemetryRecorder(engine.telemetry)
+        let recorder = StateRecorder(engine.state)
+        await engine.start(using: interface)
+
+        try await portalExpect("进入 online") { recorder.saw(.online) }
+        try await portalExpect("转发静默登录说明") {
+            telemetry.notes.contains { $0.contains("静默登录") }
+        }
+        try await portalExpect("凭据标记为已验证") {
+            telemetry.all.contains(.portalAuthenticated(account: "test-user"))
+        }
+        telemetry.cancel()
         recorder.cancel()
         await engine.stop()
     }

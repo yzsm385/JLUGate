@@ -12,13 +12,11 @@ struct NetworkDetailView: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
+                    localIPSection
                     proxyModeSection
                     vpnSection
                     interfaceSection
                     routeSection
-                    authLivenessSection
-                    pingSection
-                    speedSection
                 }
                 .padding(18)
             }
@@ -54,6 +52,49 @@ struct NetworkDetailView: View {
         let vpn = snapshot.vpnIsActive ? Copy.t("D04") : Copy.t("D05")
         let dns = snapshot.dnsLooksHijacked ? Copy.t("D06") : ""
         return "\(vpn)\(dns)"
+    }
+
+    // MARK: 本机 IP
+
+    /// 主面板不再显示本机 IP；完整信息（IP / 掩码 / MAC / 网口）统一放在这里。
+    private var localIPSection: some View {
+        card(Copy.t("M05")) {
+            let active = activeInterface
+            let ip = model.clientIP ?? active?.ipv4
+            if let ip {
+                Text(ip)
+                    .font(.title3.monospaced())
+                    .textSelection(.enabled)
+            } else {
+                Text(Copy.t("D03"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            if let active {
+                Text("IPv4 \(active.ipv4 ?? "—") / \(active.mask ?? "—")　MAC \(active.mac ?? "—")")
+                    .font(.caption2.monospaced()).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                HStack(spacing: 6) {
+                    Text(active.name).font(.caption2.monospaced())
+                    if active.isWireless {
+                        tag(Copy.t("D16"), .blue)
+                    } else {
+                        tag(Copy.t("D15"), .orange)
+                    }
+                    if active.isDefaultRoute { tag("默认出口", .green) }
+                }
+            }
+            Text(Copy.t("M06"))
+                .font(.caption2).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var activeInterface: NetworkSnapshot.InterfaceRow? {
+        let rows = snapshot?.interfaces ?? []
+        if let ip = model.clientIP,
+           let match = rows.first(where: { $0.ipv4 == ip }) { return match }
+        return rows.first(where: { $0.isDefaultRoute && $0.ipv4 != nil })
+            ?? rows.first(where: { $0.ipv4 != nil })
     }
 
     // MARK: 代理模式
@@ -201,63 +242,6 @@ struct NetworkDetailView: View {
                       systemImage: "exclamationmark.triangle")
                     .font(.caption2).foregroundStyle(.orange)
             }
-        }
-    }
-
-    // MARK: 认证通道（不是模式，是实际延迟）
-
-    private var authLivenessSection: some View {
-        card(Copy.t("D29")) {
-            Text(Copy.t("D30"))
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let sample = model.authLiveness {
-                Text(sample.direct.description).font(.caption.monospaced())
-                Text(sample.viaDefault.description).font(.caption.monospaced())
-                Label(sample.verdict, systemImage: "info.circle")
-                    .font(.caption2).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            // 测量入口统一挪到「体检」页，这里只显示结果
-        }
-    }
-
-    // MARK: Ping
-
-    private var pingSection: some View {
-        card(Copy.t("D33")) {
-            if model.pingResults.isEmpty {
-                Text(Copy.t("D34"))
-                    .font(.caption).foregroundStyle(.secondary)
-            } else {
-                ForEach(model.pingResults, id: \.host) { summary in
-                    Text(summary.description).font(.caption.monospaced())
-                }
-            }
-            // 测量入口统一挪到「体检」页，这里只显示结果
-        }
-    }
-
-    // MARK: 测速
-
-    private var speedSection: some View {
-        card(Copy.t("D36")) {
-            if model.speedResults.isEmpty {
-                Text(Copy.t("D37"))
-                    .font(.caption).foregroundStyle(.secondary)
-            } else {
-                ForEach(model.speedResults, id: \.self) { result in
-                    Text(result.description).font(.caption.monospaced())
-                }
-                if !model.speedResults.contains(where: { $0.boundInterface != nil }) {
-                    Label(Copy.t("D38"),
-                          systemImage: "info.circle")
-                        .font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-            // 测速按钮挪到「体检」页，这里只显示最近一次结果
         }
     }
 

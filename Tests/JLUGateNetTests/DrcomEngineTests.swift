@@ -50,6 +50,25 @@ struct DrcomEngineTests {
         }
     }
 
+    /// 吉林大学真网关的 B 应答是 272 字节（前 40 字节同请求，mirror 在 0x10）。
+    /// 用这个模拟，专门守住「272 字节应答也必须更新 mirror」。
+    private func longBReplyResponder() -> @Sendable (Data) -> [Data] {
+        let success = RecordedGateway.loginSuccess()
+        return { datagram in
+            if Self.isLoginFrame(datagram) { return [success] }
+            switch datagram.count {
+            case 20: return [RecordedGateway.challengeReply()]
+            case 38: return [RecordedGateway.keepAliveAReply()]
+            case 40:
+                var reply = [UInt8](datagram)
+                reply.append(contentsOf: [UInt8](repeating: 0, count: 272 - 40))
+                reply.replaceSubrange(0x10..<0x14, with: [0x11, 0x22, 0x33, 0x44])
+                return [Data(reply)]
+            default: return []
+            }
+        }
+    }
+
     @Test("主路径：idle → discovering → challenging → authenticating → online")
     func happyPath() async throws {
         let (engine, channel, _, _) = makeEngine(configuration: makeConfiguration(),
@@ -405,6 +424,31 @@ struct DrcomEngineTests {
         #expect(channel.isClosed)
     }
 
+    @Test("272 字节 B 应答也要更新 mirror（否则后续保活 B 网关不认）")
+    func keepAliveBMirrorFromLongReply() async throws {
+        let (engine, channel, _, _) = makeEngine(
+            configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
+            responder: longBReplyResponder())
+        await engine.start()
+        try await expectEventually("进入 online") { await engine.currentState() == .online }
+        try await expectEventually("收到至少 3 个 B 包", timeout: .seconds(4)) {
+            channel.sentFrames.filter { $0.count == 40 }.count >= 3
+        }
+        await engine.stop()
+
+        let bFrames = channel.sentFrames.filter { $0.count == 40 }
+        let mirrors = bFrames.prefix(3).map { Array($0[0x10...0x13]) }
+        #expect(mirrors[0] == [0x00, 0x00, 0x00, 0x00])
+        #expect(mirrors[2] == [0x11, 0x22, 0x33, 0x44],
+                "收到 272 字节应答后，第二对 B 的 mirror 应为服务器镜像，实际 \(mirrors)")
+
+        // 272 字节应答同样占用序号：请求 01 → 应答 02 → 请求 03 → 应答 04。
+        // 之前只对 40 字节应答加序号，真网关这条路径下第二个请求还是 02，会被丢。
+        let sequences = bFrames.prefix(3).map { $0[0x05] }
+        #expect(sequences == [0x01, 0x03, 0x05],
+                "272 字节应答也要占用序号，实际 \(sequences)")
+    }
+
     @Test("保活按 A/B 交替，B 型两包共用自增序号（请求 1 → 应答 2 → 请求 3 …）")
     func keepAliveSequencing() async throws {
         let (engine, channel, _, _) = makeEngine(configuration: makeConfiguration(keepAliveInterval: .seconds(1)),
@@ -427,6 +471,12 @@ struct DrcomEngineTests {
         let sequences = bFrames.map { $0[0x05] }
         #expect(sequences.prefix(2).elementsEqual([0x01, 0x03]),
                 "第一对 B 的序号应为 01、03（02/04 被应答占用），实际 \(sequences.prefix(4))")
+
+        // 抓包：第一对 B 的子类型是 05/06（不是 06/07）。子类型错位时网关不应答，
+        // 会话会在十几分钟后被门户拦下——这是"老是断连"的直接原因之一。
+        let rounds = bFrames.map { $0[0x01] }
+        #expect(rounds.prefix(4).elementsEqual([0x05, 0x06, 0x07, 0x08]),
+                "B 子类型应从 05/06 起，实际 \(rounds.prefix(6))")
     }
 }
 

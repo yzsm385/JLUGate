@@ -112,6 +112,14 @@ public enum Copy {
     /// 测试与诊断用：某种语言下有多少条文案
     static func entryCount(_ lang: CopyLanguage) -> Int { table[lang]?.count ?? 0 }
 
+    /// 测试用：某种语言下这条文案是否存在且非空。
+    /// 用来守住「源码里 Copy.t 用了某个 key、但文案表漏了它」这种会把编号直接
+    /// 显示给用户的回归（GPA01/GPA02 就这么漏过一次）。
+    static func hasEntry(_ key: String, in language: CopyLanguage) -> Bool {
+        guard let value = table[language]?[key] else { return false }
+        return !value.isEmpty
+    }
+
     private static let table: [CopyLanguage: [String: String]] = {
         var result: [CopyLanguage: [String: String]] = [:]
         let sources: [(CopyLanguage, String)] = [
