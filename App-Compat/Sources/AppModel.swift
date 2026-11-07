@@ -333,7 +333,8 @@ final class AppModel {
     var observingExistingSession = false
     var networkSnapshot: NetworkSnapshot?
     var pingResults: [PingSummary] = []
-    var diagnosticsBusy = false
+    var authLivenessRunning = false
+    var pingRunning = false
     var portalPageCaptureRunning = false
     var portalPageCaptureStatus: String?
     @ObservationIgnored private var portalPageCaptureReport: String?
@@ -498,13 +499,13 @@ final class AppModel {
 
     /// 测认证通道：直连 vs 经默认出口（含代理/VPN）。
     func measureAuthLiveness() {
-        guard !diagnosticsBusy else { return }
-        diagnosticsBusy = true
+        guard !authLivenessRunning else { return }
+        authLivenessRunning = true
         let interface = interfaces.first(where: \.isUsableForAuthentication) ?? interfaces.first
         Task { @MainActor in
             let sample = await AuthLivenessProbe().measure(interface: interface)
             authLiveness = sample
-            diagnosticsBusy = false
+            authLivenessRunning = false
             recentLog.insert(sample.verdict, at: 0)
             FileLogger.shared.log("认证通道：\(sample.verdict)")
         }
@@ -1414,8 +1415,10 @@ final class AppModel {
         Task { @MainActor in
             let service = InspectionService()
             self.inspectionTimings = [:]
-            // 带宽和别的体检一起自动测；不阻塞后面的项目。
+            // 带宽 / 认证通道 / Ping 都和别的体检一起自动测，不阻塞后面的项目。
             if !self.speedRunning { self.runSpeedAll() }
+            self.measureAuthLiveness()
+            self.runPing()
 
             var started = ContinuousClock.now
             let ips = await service.publicIPs()
@@ -1752,8 +1755,8 @@ final class AppModel {
     }
 
     func runPing() {
-        guard !diagnosticsBusy else { return }
-        diagnosticsBusy = true
+        guard !pingRunning else { return }
+        pingRunning = true
         let snapshot = networkSnapshot ?? NetworkInspector().snapshot()
         let interface = interfaces.first(where: \.isUsableForAuthentication) ?? interfaces.first
         Task { @MainActor in
@@ -1767,7 +1770,7 @@ final class AppModel {
                                            attempted: pair.viaDefault.attempted))
             }
             pingResults = results
-            diagnosticsBusy = false
+            pingRunning = false
             FileLogger.shared.log("网络详情：Ping 完成 \(results.count) 项")
         }
     }

@@ -55,56 +55,11 @@ struct InspectPanel: View {
             .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
                         in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-            module(Copy.t("P07"), timingKey: "ip", value: ipValueWithFlag, hint: ipHint)
-            module("Cloudflare", timingKey: "cloudflare", value: cloudflareValue, hint: cloudflareHint)
+            egressIPModule
             module("WebRTC（STUN）", timingKey: "webrtc", value: webRTCValue, hint: webRTCHint)
             module("DNS", timingKey: "dns", value: dnsValue, hint: dnsHint)
-            module(Copy.t("P08"), timingKey: "captcha", value: captchaValue, hint: captchaHint,
-                   alignValueRight: true)
-
-            // 网络诊断：认证通道 / Ping（测量入口从「详情」页挪到这里）
-            diagnosticsTools
-
-            // IP 纯净度：住宅 or 机房
-            purityModule
-            if let consensus = model.geoConsensus {
-                ForEach(consensus.samples) { sample in
-                    HStack(spacing: 6) {
-                        Text(sample.source).font(.system(size: 10)).frame(width: 66, alignment: .leading)
-                        Text((CountryFlag.emoji(for: sample.country).map { $0 + " " } ?? "") + sample.short)
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                if let bilibili = model.bilibiliObservation {
-                    HStack(spacing: 6) {
-                        Text("BiliBili").font(.system(size: 10)).frame(width: 66, alignment: .leading)
-                        Text("\(model.bilibiliAddr ?? "-") · " + bilibili.short
-                             + (model.bilibiliAddr == consensus.ip ? "" : Copy.t("P09")))
-                            .font(.system(size: 10)).foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                if consensus.countryDisagreement {
-                    Text(Copy.f("P10", consensus.countries.joined(separator: " / ")))
-                        .font(.system(size: 10)).foregroundStyle(.orange)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            if let alignment = model.dnsAlignment {
-                Text(Copy.t("P11") + alignment.explanation
-                     + "  " + CountryFlag.label(alignment.ipCountry)
-                     + " / " + CountryFlag.label(alignment.dnsCountry))
-                    .font(.system(size: 10))
-                    .foregroundStyle(alignment.verdict == .differentCountry ? Color.orange : Color.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            if let notes = model.ipReputation?.notes, !notes.isEmpty {
-                ForEach(notes, id: \.self) { note in
-                    Text("· " + note).font(.system(size: 10)).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            captchaModule
+            latencyModule
 
             // 带宽三档：随体检自动测，不再单独放「测速」按钮。
             VStack(alignment: .leading, spacing: 6) {
@@ -196,69 +151,8 @@ struct InspectPanel: View {
         return Copy.t("P26")
     }
 
-    // MARK: 网络诊断（认证通道 / Ping）
-
-    private var diagnosticsTools: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(Copy.t("R08")).font(.caption).bold()
-
-            // 认证通道延迟
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Copy.t("D29")).font(.caption2).bold()
-                Text(Copy.t("D30"))
-                    .font(.system(size: 9)).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let sample = model.authLiveness {
-                    Text(sample.direct.description).font(.caption.monospaced())
-                    Text(sample.viaDefault.description).font(.caption.monospaced())
-                    Label(sample.verdict, systemImage: "info.circle")
-                        .font(.caption2).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Button {
-                    model.measureAuthLiveness()
-                } label: {
-                    Label(model.diagnosticsBusy ? Copy.t("D31") : Copy.t("D32"),
-                          systemImage: "waveform.path.ecg.rectangle")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(model.diagnosticsBusy)
-            }
-
-            Divider().opacity(0.4)
-
-            // Ping
-            VStack(alignment: .leading, spacing: 4) {
-                Text(Copy.t("D33")).font(.caption2).bold()
-                if model.pingResults.isEmpty {
-                    Text(Copy.t("D34")).font(.system(size: 9)).foregroundStyle(.secondary)
-                } else {
-                    ForEach(model.pingResults, id: \.host) { summary in
-                        Text(summary.description).font(.caption.monospaced())
-                    }
-                }
-                Button {
-                    model.runPing()
-                } label: {
-                    Label(model.diagnosticsBusy ? Copy.t("P17") : Copy.t("D35"),
-                          systemImage: "waveform.path.ecg")
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(model.diagnosticsBusy)
-            }
-
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
     private func module(_ title: String, timingKey: String? = nil,
-                        value: String, hint: String,
-                        alignValueRight: Bool = false) -> some View {
+                        value: String, hint: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 6) {
                 Text(title).font(.caption).bold()
@@ -267,11 +161,7 @@ struct InspectPanel: View {
                 }
             }
             if !value.isEmpty {
-                // 人机验证这类短结论靠右放，别紧贴标题左边。
                 Text(value).font(.caption.monospaced()).foregroundStyle(.primary)
-                    .multilineTextAlignment(alignValueRight ? .trailing : .leading)
-                    .frame(maxWidth: .infinity,
-                           alignment: alignValueRight ? .trailing : .leading)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(hint).font(.system(size: 10)).foregroundStyle(.secondary)
@@ -310,13 +200,21 @@ struct InspectPanel: View {
                                         sameAsLocal: same)
     }
 
-    /// 纯净度：分行展示，不要全挤成一行
-    @ViewBuilder
-    private var purityModule: some View {
+    /// 出口 IP：把「IP 结果」和「纯净度/归属」合并成一张卡，
+    /// 不再让 Cloudflare、纯净度、多源归属各写一遍同样的结论。
+    private var egressIPModule: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 6) {
-                Text(Copy.t("P29")).font(.caption).bold()
+                Text(Copy.t("P07")).font(.caption).bold()
+                if let ms = model.inspectionTimings["ip"] {
+                    Text("\(ms) ms").font(.system(size: 9)).foregroundStyle(.tertiary)
+                }
                 Spacer(minLength: 0)
+            }
+            if !ipValueWithFlag.isEmpty {
+                Text(ipValueWithFlag)
+                    .font(.caption.monospaced())
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let reputation = model.ipReputation {
                 HStack(spacing: 6) {
@@ -335,19 +233,67 @@ struct InspectPanel: View {
                     purityLine(Copy.t("P32"), who)
                 }
                 if let asn = reputation.asn { purityLine("ASN", asn) }
-                purityLine(Copy.t("P33"), reputation.kindTitle + (reputation.hosting == true ? Copy.t("P34") : ""))
+                purityLine(Copy.t("P33"),
+                           reputation.kindTitle + (reputation.hosting == true ? Copy.t("P34") : ""))
                 ForEach(Array(reputation.notes.enumerated()), id: \.offset) { _, note in
                     purityLine(Copy.t("P35"), note)
                 }
-            } else {
-                Text(model.inspectionRunning ? "检测中…" : Copy.t("P36")).font(.caption2)
-                    .foregroundStyle(.secondary)
+            } else if model.inspectionRunning {
+                Text("检测中…").font(.caption2).foregroundStyle(.secondary)
             }
-            Text(purityHint).font(.system(size: 9)).foregroundStyle(.tertiary)
+            Text(egressHint)
+                .font(.system(size: 10)).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var egressHint: String {
+        var parts = [ipHint]
+        if model.ipReputation != nil {
+            parts.append(purityHint)
+        }
+        if let consensus = model.geoConsensus, consensus.countryDisagreement {
+            parts.append(Copy.f("P10", consensus.countries.joined(separator: " / ")))
+        }
+        return parts.joined(separator: "\n")
+    }
+
+    /// 网络诊断：认证通道 + Ping 合并成一张延迟卡，只留一段说明；随体检自动测。
+    private var latencyModule: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(Copy.t("R08")).font(.caption).bold()
+                if model.authLivenessRunning || model.pingRunning {
+                    Text(Copy.t("P05")).font(.system(size: 9)).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            if let sample = model.authLiveness {
+                Text(Copy.t("D29")).font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+                Text(sample.direct.description).font(.caption.monospaced())
+                Text(sample.viaDefault.description).font(.caption.monospaced())
+                Text(sample.verdict).font(.system(size: 9)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !model.pingResults.isEmpty {
+                Text(Copy.t("D33"))
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+                ForEach(model.pingResults, id: \.host) { summary in
+                    Text(summary.description).font(.caption.monospaced())
+                }
+            }
+            Text(Copy.t("D30"))
+                .font(.system(size: 9)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
         .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
@@ -363,22 +309,6 @@ struct InspectPanel: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
         }
-    }
-
-    private var cloudflareValue: String {
-        guard let trace = model.inspection.cloudflare else { return "" }
-        var parts: [String] = []
-        if let ip = trace.ip {
-            parts.append((CountryFlag.emoji(for: trace.location).map { $0 + " " } ?? "") + ip)
-        }
-        if let location = trace.location { parts.append(Copy.f("P37", location)) }
-        if let colo = trace.colo { parts.append(Copy.f("P38", colo)) }
-        return parts.joined(separator: " · ")
-    }
-
-    private var cloudflareHint: String {
-        guard model.inspection.cloudflare != nil else { return Copy.t("P39") }
-        return Copy.t("P40")
     }
 
     private var webRTCValue: String {
@@ -409,11 +339,54 @@ struct InspectPanel: View {
         guard let dns = model.inspection.dns else {
             return Copy.t("P43")
         }
-        return dns.summary + (dns.hijackSuspected ? Copy.t("P44") : "")
+        var text: String
+        if let alignment = model.dnsAlignment {
+            // 与 IP 出口的国家对照；和 dns.summary 二选一，避免同一件事讲两遍。
+            text = alignment.explanation
+                + "  " + CountryFlag.label(alignment.ipCountry)
+                + " / " + CountryFlag.label(alignment.dnsCountry)
+        } else {
+            text = dns.summary
+        }
+        if dns.hijackSuspected { text += Copy.t("P44") }
+        return text
     }
 
-    private var captchaValue: String {
-        model.inspection.captcha.map { "\($0.name)：\($0.human)" }.joined(separator: "\n")
+    /// 人机验证：左边是站点名，右边是结论；中间留空，不要挤在一起。
+    private var captchaModule: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Text(Copy.t("P08")).font(.caption).bold()
+                if let ms = model.inspectionTimings["captcha"] {
+                    Text("\(ms) ms").font(.system(size: 9)).foregroundStyle(.tertiary)
+                }
+                Spacer(minLength: 0)
+            }
+            if model.inspection.captcha.isEmpty {
+                Text(model.inspectionRunning ? Copy.t("P05") : Copy.t("P60"))
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else {
+                ForEach(model.inspection.captcha) { check in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(check.name)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.primary)
+                        Spacer(minLength: 8)
+                        Text(check.human)
+                            .font(.caption.monospaced())
+                            .foregroundStyle(check.state == .ok ? Color.primary : Color.orange)
+                            .multilineTextAlignment(.trailing)
+                    }
+                }
+            }
+            Text(captchaHint)
+                .font(.system(size: 10)).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(Color(nsColor: .textBackgroundColor).opacity(0.4),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
     private var captchaHint: String {

@@ -552,7 +552,7 @@ struct MenuContent: View {
         case .checking:
             return ("arrow.triangle.2.circlepath", Copy.t("M39"), .secondary)
         case .upToDate:
-            return ("checkmark.circle", Copy.f("M40", BuildInfo.version), .green)
+            return ("checkmark.circle", Copy.t("M40"), .green)
         case .available(let tag, _, _, _):
             return ("arrow.down.circle.fill", Copy.f("M41", tag), .orange)
         case .failed(let message):
@@ -576,8 +576,8 @@ struct MenuContent: View {
             Image(systemName: updateSummary.icon).font(.system(size: 10))
             Text(updateSummary.text)
                 .font(.system(size: 10))
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
             Spacer(minLength: 4)
             Button(updateButtonTitle) { model.updateNow() }
                 .controlSize(.mini)
