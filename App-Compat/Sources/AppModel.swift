@@ -1205,10 +1205,22 @@ final class AppModel {
             var silent = 0
             /// 探针从什么时候开始一直不通（成功一次就清空）：保活 A 还活着也不能无限等下去
             var silentSince: Date?
+            var round = 0
+            var lastRoundAt = Date()
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(25))
                 guard let self, !Task.isCancelled else { return }
                 guard self.state.isOnline else { return }
+                // 每轮都记一条：真机上出现过 13:04 之后 58 分钟零日志，
+                // 没有这行就分不清「巡检在跑但没异常」和「巡检被系统挂起了」。
+                round += 1
+                let gap = Int(Date().timeIntervalSince(lastRoundAt))
+                lastRoundAt = Date()
+                if gap > 60 {
+                    FileLogger.shared.log("在线巡检：第 \(round) 轮，距上轮 \(gap)s ⚠️ 明显被推迟（系统挂起/App Nap）")
+                } else {
+                    FileLogger.shared.log("在线巡检：第 \(round) 轮，距上轮 \(gap)s")
+                }
                 let interface = self.interfaces.first { $0.name == self.config.interfaceLock }
                     ?? self.interfaces.first(where: \.isUsableForAuthentication)
                 guard let interface else { continue }
