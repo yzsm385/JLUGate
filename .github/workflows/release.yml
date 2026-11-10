@@ -42,6 +42,8 @@ jobs:
           compat=$(ls -t dist/"JLU Gate "*Compat*.zip | head -n 1)
           test -n "$compat"
           cp "$compat" "out/JLU-Gate-${{ github.ref_name }}-Compat.zip"
+          # 校验清单：App 下载完会拿它核对，防止把截断/被替换的包装进去
+          ( cd out && shasum -a 256 JLU-Gate-* > SHA256SUMS.txt )
           ls -lh out
 
       # 注：原来这里还有一步用 gh 清理 0.1.x 的旧 Release，实测会在 runner 上挂住，
@@ -57,6 +59,7 @@ jobs:
           files: |
             out/JLU-Gate-${{ github.ref_name }}.*
             out/JLU-Gate-${{ github.ref_name }}-Compat.zip
+            out/SHA256SUMS.txt
           fail_on_unmatched_files: false
           body_path: docs/releases/${{ github.ref_name }}.md
           draft: false

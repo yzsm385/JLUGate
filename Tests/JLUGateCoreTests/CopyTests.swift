@@ -16,11 +16,11 @@ struct CopyTests {
         #expect(Copy.resolveLanguage(preferred: ["zh-Hans-CN", "en-US"]) == .zhHans)
     }
 
-    @Test("三种语言都收齐了全部 784 条")
+    @Test("三种语言都收齐了全部 786 条")
     func fullTables() {
-        #expect(Copy.entryCount(.zhHans) == 784)
-        #expect(Copy.entryCount(.zhHant) == 784)
-        #expect(Copy.entryCount(.en) == 784)
+        #expect(Copy.entryCount(.zhHans) == 786)
+        #expect(Copy.entryCount(.zhHant) == 786)
+        #expect(Copy.entryCount(.en) == 786)
     }
 
     @Test("设置里选的界面语言能覆盖环境变量和系统语言")

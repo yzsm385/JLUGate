@@ -12,6 +12,8 @@ actor UpdateChecker {
         let pageURL: URL?
         let assetURL: URL?
         let body: String
+        /// 官方 SHA256SUMS.txt 里这个包的摘要（没有清单时为 nil）
+        var assetSHA256: String? = nil
     }
 
     private let endpoint = URL(string: "https://api.github.com/repos/yzsm385/JLUGate/releases/latest")!
@@ -44,18 +46,35 @@ actor UpdateChecker {
                 return ReleaseAssetPicker.Asset(name: name, url: url)
             }
             let zip = ReleaseAssetPicker.pick(from: assets, wantsCompat: wantsCompatAsset)
-            let release = Release(
+            var release = Release(
                 tag: tag,
                 name: json["name"] as? String ?? tag,
                 pageURL: (json["html_url"] as? String).flatMap(URL.init(string:)),
                 assetURL: zip?.url,
                 body: json["body"] as? String ?? "")
+            // 顺手取官方清单里这个包的摘要：拿不到就不校验（不阻塞更新）
+            if let zip, let checksumAsset = assets.first(where: {
+                $0.name.caseInsensitiveCompare("SHA256SUMS.txt") == .orderedSame
+            }) {
+                release.assetSHA256 = await fetchChecksum(from: checksumAsset.url, for: zip.name)
+            }
             cached = (Date(), release)
             return release
         } catch {
             cached = (Date(), nil)
             return nil
         }
+    }
+
+    /// 取 SHA256SUMS.txt 并挑出指定包名的摘要。取不到就返回 nil（不阻塞更新）。
+    private func fetchChecksum(from url: URL, for assetName: String) async -> String? {
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 8
+        request.setValue("JLU-Gate/1.0", forHTTPHeaderField: "User-Agent")
+        guard let (data, response) = try? await URLSession.shared.data(for: request),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        return ChecksumManifest.checksum(for: assetName, in: text)
     }
 
     static func isNewer(_ candidate: String, than current: String) -> Bool {

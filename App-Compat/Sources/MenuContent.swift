@@ -563,7 +563,7 @@ struct MenuContent: View {
             return ("arrow.triangle.2.circlepath", Copy.t("M39"), .secondary)
         case .upToDate:
             return ("checkmark.circle", Copy.t("M40"), .green)
-        case .available(let tag, _, _, _):
+        case .available(let tag, _, _, _, _):
             return ("arrow.down.circle.fill", Copy.f("M41", tag), .orange)
         case .failed(let message):
             return ("exclamationmark.triangle", message, .orange)

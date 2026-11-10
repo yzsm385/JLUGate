@@ -53,7 +53,7 @@ final class AppModel {
         case idle
         case checking
         case upToDate
-        case available(tag: String, name: String, page: URL?, asset: URL?)
+        case available(tag: String, name: String, page: URL?, asset: URL?, sha256: String? = nil)
         case failed(String)
     }
     var updateStatus: UpdateStatus = .idle
@@ -64,7 +64,7 @@ final class AppModel {
     /// 正在下载/解压/准备替换（这时别再点「更新」）
     var updateInstalling = false
 
-    func installAvailableUpdate(page: URL?, asset: URL?) {
+    func installAvailableUpdate(page: URL?, asset: URL?, sha256: String? = nil) {
         guard let asset else {
             if let page { NSWorkspace.shared.open(page) }
             updateInstallMessage = "这个版本没有可用的安装包，已打开下载页"
@@ -72,7 +72,7 @@ final class AppModel {
         }
         updateInstalling = true
         updateInstallMessage = "开始下载…"
-        UpdateInstaller.install(from: asset) { message in
+        UpdateInstaller.install(from: asset, expectedSHA256: sha256) { message in
             Task { @MainActor in self.updateInstallMessage = message }
         } onFailure: { message in
             Task { @MainActor in
@@ -89,8 +89,8 @@ final class AppModel {
 
     /// 面板上那个「更新」：一步到位——查最新 → 有新版就下载替换，没新版就直说。
     func updateNow() {
-        if case .available(_, _, let page, let asset) = updateStatus {
-            installAvailableUpdate(page: page, asset: asset)
+        if case .available(_, _, let page, let asset, let sha) = updateStatus {
+            installAvailableUpdate(page: page, asset: asset, sha256: sha)
             return
         }
         guard updateStatus != .checking else { return }
@@ -104,8 +104,10 @@ final class AppModel {
             }
             if UpdateVersion.isNewer(release.tag, than: BuildInfo.version) {
                 updateStatus = .available(tag: release.tag, name: release.name,
-                                          page: release.pageURL, asset: release.assetURL)
-                installAvailableUpdate(page: release.pageURL, asset: release.assetURL)
+                                          page: release.pageURL, asset: release.assetURL,
+                                          sha256: release.assetSHA256)
+                installAvailableUpdate(page: release.pageURL, asset: release.assetURL,
+                                       sha256: release.assetSHA256)
             } else {
                 updateStatus = .upToDate
                 updateInstallMessage = "已经是最新版本（v\(BuildInfo.version)）"

@@ -372,13 +372,13 @@ struct SettingsView: View {
                 .font(.caption).foregroundStyle(.secondary)
         case .upToDate:
             Label(Copy.t("S65"), systemImage: "checkmark.circle").font(.caption).foregroundStyle(.green)
-        case .available(let tag, let name, let page, let asset):
+        case .available(let tag, let name, let page, let asset, let sha):
             VStack(alignment: .leading, spacing: 3) {
                 Label(Copy.f("S66", tag), systemImage: "arrow.down.circle")
                     .font(.caption).foregroundStyle(.orange)
                 HStack(spacing: 8) {
                     Button(Copy.t("S67")) {
-                        model.installAvailableUpdate(page: page, asset: asset)
+                        model.installAvailableUpdate(page: page, asset: asset, sha256: sha)
                     }
                     .buttonStyle(.borderedProminent).controlSize(.small)
                     Button(Copy.t("S68")) {
