@@ -404,12 +404,23 @@ public actor AuthCoordinator {
             return .provider(.jluWiFi, chosen)
         case .unreachable(let reason):
             // 两个探测都没回执：可能是代理把包截了（全局模式的 TUN / 透明代理），
-            // 也可能真不在校园网。有线 + 手动配置 + 有 IPv4 时先按 Dr.Com 试一次——
+            // 也可能真不在校园网。有线 + 有 IPv4 时先按 Dr.Com 试一次——
             // 引擎的 socket 是钉在物理口上的，往往还能通；不试的话就是
             // 「全局代理下断线后怎么都连不回来」。
-            if !chosen.isWireless, chosen.ipv4Address != nil,
-               (interfaces.configMethod(of: chosen.name)?.lowercased() == "manual") {
-                emit(.note("两个探测都没回执（\(reason)）：仍按有线 Dr.Com 试一次"))
+            //
+            // 1.4.10 真机上这块兜底没生效过一次（en7 当时是 Manual、也有地址，
+            // 条件看着全满足），事后从日志里推不出原因。所以现在把每个条件
+            // 的取值都写进 note——下次再发生，答案就在面板的「最近事件」里。
+            //
+            // 不再要求 configMethod == manual：外网探针失败只证明出口不通，
+            // 不证明不在校园网。代价是一次 challenge 超时；DHCP 网口走到
+            // 引擎后会有自己的明确报错（E08），总好过含糊的「不在校园网」。
+            let usable = !chosen.isWireless && chosen.ipv4Address != nil
+            emit(.note("两个探测都没回执（\(reason)）：\(chosen.name) "
+                       + "有线=\(!chosen.isWireless) 有地址=\(chosen.ipv4Address != nil) "
+                       + "配置方式=\(interfaces.configMethod(of: chosen.name) ?? "未知") "
+                       + "→ \(usable ? "仍按有线 Dr.Com 试一次" : "判定不在校园网")"))
+            if usable {
                 return .provider(.wired, chosen)
             }
             throw DrcomError.notCampusNetwork(detail: reason)

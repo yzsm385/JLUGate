@@ -89,12 +89,13 @@ struct AuthCoordinatorTests {
                                  interfaces: [InterfaceSnapshot]? = nil,
                                  registeredMAC: String? = nil,
                                  strictMACCheck: Bool = false,
+                                 providerConfigMethod: String? = "Manual",
                                  detector: FakeLinkDetector,
                                  spy: ProviderSpy) -> AuthCoordinator {
         let provider = FakeInterfaceProvider(
             interfaces: interfaces ?? [wired],
             route: RouteInfo(destination: "10.100.61.3", gateway: "192.0.2.1", interface: "en7"),
-            configMethod: "Manual",
+            configMethod: providerConfigMethod,
             gateway: "192.0.2.1")
         let configuration = AuthCoordinator.Configuration(
             preference: preference,
@@ -188,6 +189,21 @@ struct AuthCoordinatorTests {
 
         // 以前这里直接 failed(.notCampusNetwork)：全局代理把探针包吞掉时，
         // 用户就表现为「断线后在全局模式下怎么都连不回来」。
+        #expect(await coordinator.currentLink() == .wired)
+        #expect(spy.count == 1)
+        await coordinator.stop()
+    }
+
+    @Test("两个探针都不通 + 有线 DHCP → 也按有线 Dr.Com 试一次（1.4.10 没生效的兜底）")
+    func bothProbesDownButWiredDHCPStillTries() async throws {
+        let spy = ProviderSpy()
+        var detector = FakeLinkDetector(drcomReachable: false)
+        detector.outcome = .unreachable(reason: "全部超时")
+        // 真机上这块兜底曾在 en7（Manual、有地址）上没生效且查不出原因；
+        // 1.4.11 起不再看 configMethod。这里故意用 DHCP 验证放宽。
+        let coordinator = makeCoordinator(providerConfigMethod: "DHCP",
+                                          detector: detector, spy: spy)
+        await coordinator.start()
         #expect(await coordinator.currentLink() == .wired)
         #expect(spy.count == 1)
         await coordinator.stop()
