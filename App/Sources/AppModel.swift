@@ -1266,7 +1266,11 @@ final class AppModel {
                             self.retry()
                             return
                         }
-                        silent = 0
+                        // 注意：这里不再 silent = 0。
+                        // 以前每过 4 轮清一次，导致「silent >= 4」的检查从
+                        // 每 25 秒一次退化成每 100 秒才进一次；silentSince 是
+                        // 跨轮保留的（只在恢复 online 时清），10 分钟强制
+                        // 重连的计时不受影响。
                     }
                 }
             }

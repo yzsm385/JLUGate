@@ -13,12 +13,15 @@ final class ActivityKeeper {
 
     var isHolding: Bool { token != nil }
 
-    /// 在线期间：既不 App Nap，也不让系统"待机"睡过去。
+    /// 在线期间：既不 App Nap，也不让系统"待时"睡过去。
     /// 网关一断保活就判离线，睡眠期间发不出包，所以宁愿占着这条断言。
+    /// `.latencyCritical`：诊断里见过「13:04 之后 58 分钟几乎零日志」——
+    /// 巡检的 25 秒定时器被系统挂起/合并了，保活和探针一起变稀。
+    /// `.userInitiated` 不挡这种合并，`latencyCritical` 才是干这个的。
     func begin(reason: String = Copy.t("N11")) {
         guard token == nil else { return }
         token = ProcessInfo.processInfo.beginActivity(
-            options: [.userInitiated, .idleSystemSleepDisabled],
+            options: [.userInitiated, .idleSystemSleepDisabled, .latencyCritical],
             reason: reason)
     }
 
