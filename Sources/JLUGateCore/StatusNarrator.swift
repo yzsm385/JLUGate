@@ -11,6 +11,8 @@ public enum StatusPhase: Sendable, Equatable {
     case working
     /// 本程序维持的在线
     case online
+    /// 会话还在，但外网探针连续不通：大概率是被代理的全局模式截住了
+    case sessionOnly
     /// 官方 Dr.Com 客户端维持的在线（端口被它占着）
     case onlineViaOfficialClient
     /// 端口被官方客户端占着，但网没通
@@ -46,6 +48,11 @@ public enum StatusNarrator {
             StatusStory(title: Copy.t("B106"),
                         oneLiner: Copy.t("B107"),
                         action: nil)
+
+        case .sessionOnly:
+            StatusStory(title: Copy.t("B162"),
+                        oneLiner: Copy.t("B163"),
+                        action: Copy.t("B164"))
 
         case .onlineViaOfficialClient:
             StatusStory(title: Copy.t("B108"),

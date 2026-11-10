@@ -30,6 +30,16 @@ struct StatusNarratorTests {
         #expect(!story.oneLiner.contains("UDP"))
     }
 
+    @Test("会话还在但外网不通：黄色预警，先引导 App 内重试")
+    func sessionOnly() {
+        let story = StatusNarrator.story(.sessionOnly)
+        #expect(story.title == Copy.t("B162"))
+        #expect(story.oneLiner == Copy.t("B163"))
+        #expect(story.action == Copy.t("B164"))
+        // 用户不该被要求去改代理设置才能看到真实状态
+        #expect(!story.oneLiner.contains("UDP"))
+    }
+
     @Test("等待网络：说清是插线/地址问题")
     func waiting() {
         let story = StatusNarrator.story(.waitingForNetwork)
@@ -39,7 +49,7 @@ struct StatusNarratorTests {
     @Test("每条文案都不出现内部术语")
     func noJargon() {
         let jargon = ["UDP", "socket", "bind", "端口 61440", "channel"]
-        for phase: StatusPhase in [.idle, .working, .online, .onlineViaOfficialClient,
+        for phase: StatusPhase in [.idle, .working, .online, .sessionOnly, .onlineViaOfficialClient,
                                    .officialClientHoldingPort, .waitingForNetwork, .failed] {
             let story = StatusNarrator.story(phase)
             for word in jargon {

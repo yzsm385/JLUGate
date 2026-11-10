@@ -511,6 +511,13 @@ final class AppModel {
     /// 最近一次真实探测成功 / 失败的时间（用于状态粘性）
     var lastHealthyProbeAt: Date?
     var lastFailedProbeAt: Date?
+    /// 出口层断了多久（外网探针连续不通，但会话层还在线）。
+    /// 1.4.10 的「显示已连接、其实上不了网」就是这一层没人观测。
+    @ObservationIgnored var egressDownSince: Date?
+    /// 出口层当前是否不通（statusPhase 据此显示 sessionOnly）
+    var egressDown = false
+    /// 连续几轮探针不通（单次抖动不亮黄标）
+    @ObservationIgnored private var egressDownStreak = 0
     /// 最近一次进入在线的时间（判断"重复登录被拒"用）
     var lastOnlineAt: Date?
     var proxyAnalysis: ProxyModeAnalysis?
@@ -728,12 +735,16 @@ final class AppModel {
         case .discovering, .challenging, .authenticating, .reconnecting:
             return .working
         case .online:
-            return onlineViaOfficialClient ? .onlineViaOfficialClient : .online
+            // 会话层在线但外网探针连续不通：如实说「认证还在、外网不通」，
+            // 而不是继续亮绿灯——1.4.10 就是这么把用户骗了的。
+            return egressDown ? .sessionOnly
+                : (onlineViaOfficialClient ? .onlineViaOfficialClient : .online)
         case .failed(let error):
             // 刚探测通过/刚在线过 → 不把图标打回红色（真机上出现过 灰→绿→红 乱跳）
             if StatusStickiness(lastHealthyProbeAt: lastHealthyProbeAt,
                                 lastFailedProbeAt: lastFailedProbeAt).shouldStayOnline() {
-                return onlineViaOfficialClient ? .onlineViaOfficialClient : .online
+                return egressDown ? .sessionOnly
+                    : (onlineViaOfficialClient ? .onlineViaOfficialClient : .online)
             }
             switch error {
             case .adapterUnplugged, .interfaceHasNoIPv4:
@@ -754,6 +765,7 @@ final class AppModel {
     var statusColor: Color {
         switch statusPhase {
         case .online, .onlineViaOfficialClient: .green
+        case .sessionOnly: .yellow
         case .working: .orange
         case .waitingForNetwork, .failed: .red
         case .officialClientHoldingPort: .orange
@@ -764,6 +776,7 @@ final class AppModel {
     var statusSymbol: String {
         switch statusPhase {
         case .online, .onlineViaOfficialClient: "checkmark.circle.fill"
+        case .sessionOnly: "exclamationmark.triangle.fill"
         case .working: "arrow.triangle.2.circlepath"
         case .waitingForNetwork: "cable.connector.slash"
         case .officialClientHoldingPort: "exclamationmark.circle"
@@ -1164,6 +1177,27 @@ final class AppModel {
         }
     }
 
+    /// 出口层探针恢复：清掉黄标，回到正常在线显示
+    private func noteEgressHealthy() {
+        egressDownStreak = 0
+        guard egressDown else { return }
+        egressDown = false
+        egressDownSince = nil
+        FileLogger.shared.log("出口层：外网探针恢复，黄标解除")
+    }
+
+    /// 出口层探针失败：连续 2 轮才亮黄标，单次抖动不算。
+    /// 用轮次而不是时间差：巡检间隔 25 秒，靠 Date() 相减会卡在浮点边界上。
+    private func noteEgressDown() {
+        if egressDownSince == nil { egressDownSince = Date() }
+        egressDownStreak += 1
+        if !egressDown, egressDownStreak >= 2 {
+            egressDown = true
+            let seconds = Int(Date().timeIntervalSince(egressDownSince ?? Date()))
+            FileLogger.shared.log("出口层：外网探针连续 \(egressDownStreak) 轮不通（约 \(seconds)s），亮黄标")
+        }
+    }
+
     private func startOnlineWatch() {
         onlineWatchTask?.cancel()
         onlineWatchTask = Task { @MainActor [weak self] in
@@ -1214,9 +1248,11 @@ final class AppModel {
                     intercepted = 0
                     silent = 0
                     silentSince = nil
+                    noteEgressHealthy()
                 case .offline:
                     intercepted += 1
                     silent = 0
+                    noteEgressDown()
                     FileLogger.shared.log("在线巡检：外网被门户拦下（第 \(intercepted) 次）—— \(probeReason(outcome))")
                     if intercepted >= 2 {
                         self.recentLog.insert("外网断了（会话已失效），正在自动重连", at: 0)
@@ -1228,6 +1264,7 @@ final class AppModel {
                     intercepted = 0
                     if silent == 0 { silentSince = Date() }
                     silent += 1
+                    noteEgressDown()
                     if silent == 1 {
                         FileLogger.shared.log("在线巡检：探针开始不通 —— \(probeReason(outcome))")
                     } else if silent % 4 == 0 {
@@ -2032,6 +2069,7 @@ final class AppModel {
         }
         text += "\n\n== 在线巡检 ==\n"
         text += "当前链路：\(link?.displayName ?? "-")  Dr.Com 保活=\(link?.usesDrcomUDP == true)\n"
+        text += "出口层：\(egressDown ? "不通（黄标中，已持续 \(egressDownSince.map { Int(Date().timeIntervalSince($0)) } ?? 0)s）" : "正常")\n"
         text += "最后一次保活遥测：\(lastTrafficAt.map { ISO8601DateFormatter().string(from: $0) } ?? "-")\n"
         text += "上次强制重登：\(lastForcedReauthAt.map { ISO8601DateFormatter().string(from: $0) } ?? "-")\n"
         // 实测网关给的是 600 秒租约（docs/analysis/wired-disconnect.md §2.5）：
@@ -2168,6 +2206,10 @@ final class AppModel {
             switch next {
             case .online:
                 lastOnlineAt = Date()
+                // 新会话：出口层观测重新开始（别把上一次会话的黄标带过来）
+                egressDown = false
+                egressDownSince = nil
+                egressDownStreak = 0
                 // 系统弹的「捕获门户助手」在认证成功后经常赖着不走：网络已经通了，
                 // 它却还停在登录页上，用户点「完成」也关不掉。这里顺手收掉。
                 if SystemPortalPopup.dismiss() {
@@ -2187,6 +2229,10 @@ final class AppModel {
                 activityKeeper.end()
                 onlineWatchTask?.cancel()
                 onlineWatchTask = nil
+                // 会话都没了，出口层黄标没有继续显示的意义
+                egressDown = false
+                egressDownSince = nil
+                egressDownStreak = 0
             default:
                 break
             }

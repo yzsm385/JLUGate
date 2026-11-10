@@ -245,8 +245,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateIcon(model: AppModel) {
         guard let button = statusItem?.button else { return }
         // 图标按用户要求保持原样：在线 = 圆圈+闪电，其余用状态盾牌/圆圈。
+        // 例外：会话在但外网不通时显示黄三角——「看着在线其实断网」必须一眼可辨。
         let name: String
-        if model.state.isOnline {
+        if model.state.isOnline && model.statusPhase == .sessionOnly {
+            name = "exclamationmark.triangle.fill"
+        } else if model.state.isOnline {
             name = "bolt.horizontal.circle.fill"
         } else if model.state.isBusy {
             name = "circle.dotted"

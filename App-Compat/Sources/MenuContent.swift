@@ -302,6 +302,16 @@ struct MenuContent: View {
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                } else if model.egressDown, model.state.isOnline {
+                    // 会话在、外网不通（黄标）：文案让用户点「再试一次」，
+                    // 状态又是 online（主按钮是「下线」），必须给出重连入口
+                    Button {
+                        model.retry()
+                    } label: {
+                        Label(Copy.t("M19"), systemImage: "arrow.clockwise")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
 
