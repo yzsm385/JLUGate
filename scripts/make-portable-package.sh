@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="1.4.10"
+VERSION="1.4.11"
 APP="dist/JLU Gate.app"
 DMG="dist/JLU Gate ${VERSION}.dmg"
 
