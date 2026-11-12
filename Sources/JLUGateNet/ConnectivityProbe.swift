@@ -165,9 +165,16 @@ public struct ConnectivityProbe: Sendable {
                     fallbackIPs: [IPv4Address("36.144.42.93")!]),
     ]
 
-    /// 学校 DNS 不可用时按顺序回退的公共 DNS（仍然由我们自己发 UDP 查询，不用系统解析器）。
+    /// 没有配置 DNS 时按顺序尝试的服务器。
+    ///
+    /// 顺序很重要：**校内 DNS 排最前面**。
+    /// 2026-11-12 实测：校园网直连下 8.8.8.8 完全不通，1.1.1.1 虽然能应答，
+    /// 但会把 gstatic 解析到境外 IP（那个 IP 在校园网里不可达）；而学校 DNS
+    /// 解析到的是国内 CDN 节点，HTTP 204 正常。
+    /// 把公共 DNS 排在前面，探针会先拿到一个不可达的地址，白白多等十几秒。
     public static let fallbackDNSServers: [IPv4Address] = [
-        IPv4Address("1.1.1.1")!, IPv4Address("8.8.8.8")!,
+        IPv4Address("10.10.10.10")!, IPv4Address("10.10.10.11")!,
+        IPv4Address("223.5.5.5")!, IPv4Address("1.1.1.1")!,
     ]
 
     public func run(interface: InterfaceSnapshot, dnsServers: [IPv4Address]) async -> ProbeOutcome {
