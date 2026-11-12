@@ -402,6 +402,12 @@ public actor AuthCoordinator {
         case .captivePortal(let statusCode, let location):
             emit(.note("204 探针被拦截（HTTP \(statusCode)\(location.map { " → \($0)" } ?? "")），走网页认证"))
             return .provider(.jluWiFi, chosen)
+        case .tlsBlocked(let detail):
+            // 80 端口通、能到网关，只是加密通道被切断：**确实在校园网里**。
+            // 这种情况下认证包本身不受影响（Dr.Com 走 UDP 61440，网页认证走 80），
+            // 所以照常进认证流程，别误判成"不在校园网"。
+            emit(.note("80 端口通但 TLS 被切断（\(detail)），仍在校园网内，继续认证"))
+            return .provider(chosen.isWireless ? .jluWiFi : .wired, chosen)
         case .unreachable(let reason):
             // 两个探测都没回执：可能是代理把包截了（全局模式的 TUN / 透明代理），
             // 也可能真不在校园网。有线 + 有 IPv4 时先按 Dr.Com 试一次——

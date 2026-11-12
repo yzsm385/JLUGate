@@ -268,6 +268,9 @@ func runDetect(_ options: Options) -> Int32 {
         case .captivePortal(let code, let location):
             print("  204 探针：被拦截（HTTP \(code) \(location ?? "")）→ 应走 JLU.WIFI 网页认证")
             verdict.link = .jluWiFi
+        case .tlsBlocked(let detail):
+            print("  204 探针：80 通，但 443 的 TLS 被切断（\(detail)）")
+            print("            → 仍在校园网内，继续认证；换代理节点无效")
         case .unreachable(let reason):
             print("  204 探针：不通（\(reason)）")
         }

@@ -18,6 +18,14 @@ struct FakeProbeTransport: ProbeTransport {
         return answers.compactMap(IPv4Address.init)
     }
 
+    /// TLS 探测结果；键是 "ip:port"。没配就当 .unreachable。
+    var tlsResults: [String: TLSProbeResult] = [:]
+
+    func tlsProbe(ip: IPv4Address, host: String, port: UInt16,
+                  interface: InterfaceSnapshot, timeout: Duration) async -> TLSProbeResult {
+        tlsResults["\(ip.description):\(port)"] ?? .unreachable
+    }
+
     func httpGet(ip: IPv4Address, host: String, path: String, port: UInt16,
                  interface: InterfaceSnapshot, timeout: Duration) async throws -> HTTPHead {
         guard let response = httpResponses[ip.description] else {
@@ -43,6 +51,8 @@ struct ConnectivityProbeTests {
         var transport = FakeProbeTransport()
         transport.dnsAnswers["connectivitycheck.gstatic.com"] = ["192.0.2.10"]
         transport.httpResponses["192.0.2.10"] = (204, nil)
+        // 1.5.0 起：80 端口 204 还要过 443 的 TLS 才算真健康
+        transport.tlsResults["1.1.1.1:443"] = .responded
         let probe = ConnectivityProbe(transport: transport)
         #expect(await probe.run(interface: loopback, dnsServers: schoolDNS) == .healthy)
     }
@@ -110,5 +120,129 @@ struct ConnectivityProbeTests {
 
         let noHeader = HTTPHead.parse("")
         #expect(noHeader.statusCode == nil)
+    }
+}
+
+// MARK: - 1.5.0 分层判定（80 + 443）
+
+@Suite("1.5.0 分层探针：80 通不等于网就好")
+struct LayeredProbeTests {
+    private func probe(_ transport: FakeProbeTransport) -> ConnectivityProbe {
+        ConnectivityProbe(targets: [.gstatic], transport: transport, timeout: .seconds(1))
+    }
+
+    /// 构造假传输：80 端口通，TLS 结果同时套用到所有 TLS 探测目标。
+    private func makeTransport(tls: TLSProbeResult) -> FakeProbeTransport {
+        var transport = FakeProbeTransport()
+        transport.dnsAnswers["connectivitycheck.gstatic.com"] = ["192.0.2.10"]
+        transport.httpResponses["192.0.2.10"] = (204, nil)
+        for target in ConnectivityProbe.tlsTargets {
+            for ip in target.fallbackIPs {
+                transport.tlsResults["\(ip.description):443"] = tls
+            }
+        }
+        return transport
+    }
+
+    @Test("80 返回 204 且 443 的 TLS 正常 → healthy")
+    func bothLayersHealthy() async {
+        let outcome = await probe(makeTransport(tls: .responded))
+            .run(interface: loopback, dnsServers: [IPv4Address("10.10.10.10")!])
+        #expect(outcome == .healthy)
+    }
+
+    @Test("80 返回 204 但 443 的 TLS 被切断 → tlsBlocked（核心回归）")
+    func tlsCutAfterHello() async {
+        // 这就是 2026-11-11 实测到的状态：80 全通、出境 443 全部 unexpected eof。
+        // 旧实现会返回 .healthy，让界面显示"在线"却什么都打不开。
+        let outcome = await probe(makeTransport(tls: .closedAfterHello))
+            .run(interface: loopback, dnsServers: [IPv4Address("10.10.10.10")!])
+        guard case .tlsBlocked = outcome else {
+            Issue.record("80 通但 TLS 被切断时不该判定 healthy，实际：\(outcome)")
+            return
+        }
+    }
+
+    @Test("tlsBlocked 不能被当成在线")
+    func tlsBlockedIsNotOnline() async {
+        let outcome = await probe(makeTransport(tls: .closedAfterHello))
+            .run(interface: loopback, dnsServers: [IPv4Address("10.10.10.10")!])
+        #expect(outcome.isOnline == false)
+    }
+
+    @Test("80 端口就不通 → unreachable，不能误报成 tlsBlocked")
+    func noEgressAtAll() async {
+        var transport = FakeProbeTransport()
+        transport.dnsAnswers["connectivitycheck.gstatic.com"] = ["192.0.2.10"]
+        transport.httpResponses["192.0.2.10"] = nil      // 连接失败
+        transport.tlsResults["1.1.1.1:443"] = .closedAfterHello
+
+        let outcome = await probe(transport)
+            .run(interface: loopback, dnsServers: [IPv4Address("10.10.10.10")!])
+        guard case .unreachable = outcome else {
+            Issue.record("80 都不通时应该是 unreachable，实际：\(outcome)")
+            return
+        }
+    }
+
+    @Test("443 只是连不上（不是被切断）→ 保持 healthy，不误报")
+    func tlsUnreachableKeepsHealthy() async {
+        // .unreachable 可能是探针目标本身抽风，不足以断定被拦。
+        // 只有明确的 closedAfterHello（TCP 通、发完 Hello 就 EOF）才判 tlsBlocked。
+        let outcome = await probe(makeTransport(tls: .unreachable))
+            .run(interface: loopback, dnsServers: [IPv4Address("10.10.10.10")!])
+        #expect(outcome == .healthy)
+    }
+}
+
+// MARK: - TLS ClientHello 构造
+
+@Suite("TLS ClientHello 构造")
+struct TLSClientHelloTests {
+    @Test("带 SNI 时结构合法")
+    func withSNI() {
+        let hello = TLSClientHello.make(host: "example.com")
+        #expect(hello.count > 40)
+        #expect(hello[0] == 0x16)                      // handshake record
+        // record 层版本用 0x0301（TLS 1.0 兼容写法），真正的版本在
+        // ClientHello body 里（0x0303 = TLS 1.2）。这是 OpenSSL 的惯例。
+        #expect(hello[1] == 0x03 && hello[2] == 0x01)
+        #expect(hello[5] == 0x01)                      // ClientHello
+        // record 长度字段要和实际长度对上
+        let declared = Int(hello[3]) << 8 | Int(hello[4])
+        #expect(declared == hello.count - 5)
+    }
+
+    @Test("空主机名时不发 SNI，但仍然结构合法")
+    func withoutSNI() {
+        let hello = TLSClientHello.make(host: "")
+        #expect(hello[0] == 0x16)
+        let declared = Int(hello[3]) << 8 | Int(hello[4])
+        #expect(declared == hello.count - 5)
+    }
+
+    @Test("SNI 里能看到域名原文")
+    func sniContainsHost() {
+        let hello = TLSClientHello.make(host: "jlu.edu.cn")
+        let text = String(decoding: hello, as: UTF8.self)
+        #expect(text.contains("jlu.edu.cn"))
+    }
+}
+
+// MARK: - BSD 实现的最小烟测
+
+@Suite("BSD TLS 探测不崩")
+struct BSDTLSProbeSmokeTests {
+    @Test("对本机不可达地址探测，应返回 unreachable 而不是崩溃")
+    func unreachableDoesNotCrash() async {
+        let transport = BSDProbeTransport()
+        // 用 TEST-NET-1（192.0.2.0/24，RFC 5737 保留，保证不可达）
+        let result = await transport.tlsProbe(
+            ip: IPv4Address("192.0.2.1")!,
+            host: "example.com",
+            port: 443,
+            interface: loopback,
+            timeout: .milliseconds(200))
+        #expect(result == .unreachable)
     }
 }

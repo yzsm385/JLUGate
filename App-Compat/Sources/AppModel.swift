@@ -834,6 +834,10 @@ final class AppModel {
                 case .healthy: .online
                 case .captivePortal(let code, let location):
                     .needsAuthentication(statusCode: code, location: location)
+                case .tlsBlocked(let detail):
+                    // 加密通道被切断：对用户而言就是"上不了网"，所以归到不可达，
+                    // 但原因写清楚，诊断里能一眼看出不是普通断网。
+                    .unreachable(reason: "TLS 加密通道被切断：\(detail)")
                 case .unreachable(let reason): .unreachable(reason: reason)
                 }
 
@@ -1174,6 +1178,9 @@ final class AppModel {
             return "204 正常"
         case .captivePortal(let code, let location):
             return "被门户拦下 HTTP \(code)\(location.map { " → \($0)" } ?? "")"
+        case .tlsBlocked(let detail):
+            // 明确区分「TLS 被拦」和「彻底没网」：两者的处置方式完全不同。
+            return "TLS 加密通道被切断（\(detail)）——换代理节点无效，拦截是按端口的"
         case .unreachable(let reason):
             return String(reason.prefix(300))
         }

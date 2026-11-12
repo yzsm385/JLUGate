@@ -8,10 +8,16 @@ import Darwin
 
 /// 三态探针结论（PLAN §8.2）。
 public enum ProbeOutcome: Sendable, Equatable {
-    /// `generate_204` 真的回了 204：链路通、也没被门户拦。
+    /// `generate_204` 真的回了 204，且 443 的 TLS 通道也通：链路真的健康。
     case healthy
     /// 被 captive portal 拦下（200 页面或 302/307 跳转）。
     case captivePortal(statusCode: Int, location: String?)
+    /// 能上网关、80 端口也通，但 443 的 TLS 握手过不去。
+    ///
+    /// 典型成因：校园网 / 运营商在阻断**出境** TLS（2026-11-11 实测：
+    /// 80 端口全通、境外 443 全部 `unexpected eof`、国内 443 正常）。
+    /// 这种情况换代理节点无效——拦截按端口，不按节点。
+    case tlsBlocked(detail: String)
     /// 连不上（链路问题，或 DNS 与兜底 IP 全废）。
     case unreachable(reason: String)
 
@@ -53,12 +59,43 @@ public struct ProbeTarget: Sendable, Equatable {
         fallbackIPs: [])
 }
 
+/// TLS 探测结论。
+///
+/// 只关心「加密通道通不通」，**不做完整握手、不校验证书**——目的是把
+/// 「TCP 通但 TLS 被切断」和「TCP 根本连不上」区分开。这两种情况给用户的
+/// 结论完全不同，见 `docs/plans/v1.5.0-probe.md` §1。
+public enum TLSProbeResult: Sendable, Equatable {
+    /// 收到了 TLS 记录层响应（`0x16` handshake / `0x15` alert）：加密通道可用。
+    case responded
+    /// TCP 连上了，但发完 ClientHello 对端直接断开（读到 EOF）。
+    ///
+    /// 这是「TLS 被中间设备切断」的特征：不是端口关闭（会 refused），
+    /// 也不是主动拒绝（会 reset），而是收下连接后静默丢弃。
+    case closedAfterHello
+    /// TCP 就没连上（超时 / refused / 路由不可达）。
+    case unreachable
+}
+
 /// 探针依赖的最小传输面（真实实现走 BSD，单测用假的）。
 public protocol ProbeTransport: Sendable {
     func resolve(host: String, server: IPv4Address,
                  interface: InterfaceSnapshot, timeout: Duration) async throws -> [IPv4Address]
     func httpGet(ip: IPv4Address, host: String, path: String, port: UInt16,
                  interface: InterfaceSnapshot, timeout: Duration) async throws -> HTTPHead
+    /// 连到 `ip:port`，发一个最小 TLS ClientHello，看对端有没有回握手记录。
+    ///
+    /// 不抛错：三种结论都通过返回值表达，调用方不需要区分异常类型。
+    func tlsProbe(ip: IPv4Address, host: String, port: UInt16,
+                  interface: InterfaceSnapshot, timeout: Duration) async -> TLSProbeResult
+}
+
+extension ProbeTransport {
+    /// 默认实现：不支持 TLS 探测的传输层报告 `.unreachable`，
+    /// 这样老的单测假传输不用改也能编译。
+    public func tlsProbe(ip: IPv4Address, host: String, port: UInt16,
+                         interface: InterfaceSnapshot, timeout: Duration) async -> TLSProbeResult {
+        .unreachable
+    }
 }
 
 public struct HTTPHead: Sendable, Equatable {
@@ -102,13 +139,31 @@ public struct ConnectivityProbe: Sendable {
     public var transport: any ProbeTransport
     public var timeout: Duration
 
-    public init(targets: [ProbeTarget] = [.gstatic, .cloudflare],
+    public init(targets: [ProbeTarget] = [.gstatic, .cloudflare, .cn204],
                 transport: any ProbeTransport = BSDProbeTransport(),
                 timeout: Duration = .seconds(3)) {
         self.targets = targets
         self.transport = transport
         self.timeout = timeout
     }
+
+    /// TLS 层探测目标（**多个**，必须全部被切断才判 `tlsBlocked`）。
+    ///
+    /// 为什么不能只用一个：2026-11-11 实测证明，这个网络是按**目标 IP**
+    /// 选择性封锁的，不是按端口。同一时刻：
+    ///   github.com / fastly 段 → 80 和 443 全通
+    ///   google / twitter / 8.8.8.8 / 1.1.1.1 → 80 和 443 全超时
+    /// 所以单个目标失败只能说明「这个 IP 被墙」，不能说明「TLS 被拦」。
+    /// 只有**所有**目标都表现为「TCP 通、发完 ClientHello 就 EOF」，
+    /// 才是真正的 TLS 层拦截。
+    ///
+    /// 全部用字面 IP：不依赖 DNS（系统 DNS 可能被 fake-ip 劫持，PLAN §F17）。
+    public static let tlsTargets: [ProbeTarget] = [
+        ProbeTarget(host: "github.com", path: "/",
+                    fallbackIPs: [IPv4Address("140.82.121.4")!]),
+        ProbeTarget(host: "www.baidu.com", path: "/",
+                    fallbackIPs: [IPv4Address("36.144.42.93")!]),
+    ]
 
     /// 学校 DNS 不可用时按顺序回退的公共 DNS（仍然由我们自己发 UDP 查询，不用系统解析器）。
     public static let fallbackDNSServers: [IPv4Address] = [
@@ -147,6 +202,11 @@ public struct ConnectivityProbe: Sendable {
                 }
                 switch head.statusCode {
                 case 204:
+                    // 80 端口通了**不等于**网就好了：2026-11-11 实测到「80 全通、
+                    // 出境 443 的 TLS 全被切断」这种状态。所以还要验一层 443。
+                    if let verdict = await verifyTLS(interface: interface, dnsServers: serverChain) {
+                        return verdict
+                    }
                     return .healthy
                 case let code? where code == 200 || (300..<400).contains(code):
                     return .captivePortal(statusCode: code, location: head.location)
@@ -157,6 +217,58 @@ public struct ConnectivityProbe: Sendable {
         }
         return .unreachable(reason: failures.isEmpty ? "没有可用的探针目标" : failures.joined(separator: "；"))
     }
+
+    /// 80 端口判定通过后，再验一层 443 的 TLS 通道。
+    ///
+    /// 返回 `nil` 表示「443 没问题，可以判定 healthy」；返回非 nil 表示
+    /// 应当直接采用这个结论（目前只有 `.tlsBlocked`）。
+    ///
+    /// 为什么必须做这一步：`PLAN.md:107` 早就写明 `generate_204` 只能证明
+    /// 「有网」，不能证明加密通道可用。2026-11-11 的真实环境里，80 端口
+    /// 返回 204 而境外 443 全部被切断，探针却报「在线」——用户看到的是
+    /// 「显示已连接但什么都打不开」。
+    private func verifyTLS(interface: InterfaceSnapshot,
+                           dnsServers: [IPv4Address]) async -> ProbeOutcome? {
+        var serverChain = dnsServers
+        if serverChain.isEmpty { serverChain = Self.fallbackDNSServers }
+
+        // 判定规则：**所有**目标都「TCP 通、发完 Hello 就 EOF」才判 tlsBlocked。
+        // 只要有任何一个目标正常回应，就说明 TLS 层没被整体拦截（可能只是
+        // 个别 IP 被墙），此时不该误报。
+        var sawClosedHost: String?
+        var sawAnyResponded = false
+
+        for target in Self.tlsTargets {
+            var addresses: [IPv4Address] = []
+            for server in serverChain {
+                if let resolved = try? await transport.resolve(host: target.host, server: server,
+                                                               interface: interface, timeout: timeout),
+                   !resolved.isEmpty {
+                    addresses = resolved
+                    break
+                }
+            }
+            if addresses.isEmpty { addresses = target.fallbackIPs }
+
+            for address in addresses {
+                switch await transport.tlsProbe(ip: address, host: target.host, port: 443,
+                                                interface: interface, timeout: timeout) {
+                case .responded:
+                    sawAnyResponded = true
+                case .closedAfterHello:
+                    if sawClosedHost == nil { sawClosedHost = target.host }
+                case .unreachable:
+                    // 这个 IP 本身不可达（可能被墙）：不能证明 TLS 层被拦。
+                    sawAnyResponded = true
+                }
+            }
+        }
+
+        // 有目标能正常回应，或没有任何目标呈现「握手被切断」→ 不报 TLS 拦截
+        guard !sawAnyResponded, let host = sawClosedHost else { return nil }
+        return .tlsBlocked(detail: "\(host) 等目标的 443 能建立 TCP，但 TLS 握手被切断")
+    }
+
 }
 
 // MARK: - BSD 传输实现
@@ -253,6 +365,56 @@ public struct BSDProbeTransport: ProbeTransport {
 
     // MARK: POSIX 小工具
 
+    /// 建一条绑到指定网卡的 TCP 连接。失败抛错。
+    ///
+    /// 抽出来是为了让 HTTP 和 TLS 探测共用同一套「非阻塞 connect + poll」逻辑，
+    /// 避免两处各写一遍超时处理（写两遍迟早会走样）。
+    private static func openTCP(ip: IPv4Address, port: UInt16,
+                                interface: InterfaceSnapshot, timeout: Duration) throws -> Int32 {
+        let fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)
+        guard fd >= 0 else { throw DrcomError.channelFailure("TCP socket() 失败") }
+        do {
+            try bindToInterface(fd, index: interface.index)
+        } catch {
+            Darwin.close(fd)
+            throw error
+        }
+
+        var target = sockaddr_in()
+        target.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        target.sin_family = sa_family_t(AF_INET)
+        target.sin_port = port.bigEndian
+        target.sin_addr = in_addr(s_addr: ip.uint32BE.bigEndian)
+
+        _ = fcntl(fd, F_SETFL, O_NONBLOCK)
+        let connected = withUnsafePointer(to: &target) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+        if connected != 0 {
+            guard errno == EINPROGRESS else {
+                Darwin.close(fd)
+                throw DrcomError.channelFailure("connect 失败：\(BSDChannel.errnoText())")
+            }
+            // 阻塞等待可写：这里用同步 poll，调用方是 async 但底层 fd 就绪很快
+            var descriptor = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
+            let ready = poll(&descriptor, 1, milliseconds(timeout))
+            guard ready > 0 else {
+                Darwin.close(fd)
+                throw DrcomError.timeout(stage: "connect")
+            }
+            var soError: Int32 = 0
+            var length = socklen_t(MemoryLayout<Int32>.size)
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, &soError, &length)
+            guard soError == 0 else {
+                Darwin.close(fd)
+                throw DrcomError.channelFailure("connect 失败：\(BSDChannel.errnoText(soError))")
+            }
+        }
+        return fd
+    }
+
     private static func bindToInterface(_ fd: Int32, index: UInt32) throws {
         var value = index
         guard setsockopt(fd, IPPROTO_IP, IP_BOUND_IF, &value,
@@ -276,6 +438,49 @@ public struct BSDProbeTransport: ProbeTransport {
         if ready == 0 { throw DrcomError.timeout(stage: stage) }
         if ready < 0 { throw DrcomError.channelFailure("poll 失败：\(BSDChannel.errnoText())") }
         return read(fd)
+    }
+
+    // MARK: TLS 探测
+
+    public func tlsProbe(ip: IPv4Address, host: String, port: UInt16,
+                         interface: InterfaceSnapshot, timeout: Duration) async -> TLSProbeResult {
+        let fd: Int32
+        do {
+            fd = try Self.openTCP(ip: ip, port: port, interface: interface, timeout: timeout)
+        } catch {
+            return .unreachable
+        }
+        defer { Darwin.close(fd) }
+
+        // 发一个最小但合法的 TLS 1.2 ClientHello（带 SNI）。
+        // 不完成握手：只要能收到 TLS 记录层的第一个字节，就说明加密通道没被切断。
+        let hello = TLSClientHello.make(host: host)
+        let sent = hello.withUnsafeBytes { buffer in
+            Darwin.send(fd, buffer.baseAddress, buffer.count, 0)
+        }
+        guard sent == hello.count else { return .closedAfterHello }
+
+        // 关键判据（2026-11-11 实测）：
+        //   recv > 0 且首字节 0x16/0x15 → 加密通道可用
+        //   recv == 0（EOF）            → 连接被静默切断，就是 unexpected eof
+        //   poll 超时                   → 对端没理我们，按不可达处理
+        var buffer = [UInt8](repeating: 0, count: 256)
+        var descriptor = pollfd(fd: fd, events: Int16(POLLIN), revents: 0)
+        let ready = poll(&descriptor, 1, Self.milliseconds(timeout))
+        guard ready > 0 else { return .unreachable }
+
+        let received = recv(fd, &buffer, buffer.count, 0)
+        if received > 0 {
+            // 0x16 = handshake，0x15 = alert（例如协议版本不对）。
+            // 两者都证明「对端愿意在 TLS 层对话」，拦截不成立。
+            let first = buffer[0]
+            if first == 0x16 || first == 0x15 { return .responded }
+            // 回了别的东西（比如明文 HTTP 错误页）：说明 443 上跑的不是 TLS，
+            // 但通道本身没被切断，按 responded 处理更接近事实。
+            return .responded
+        }
+        if received == 0 { return .closedAfterHello }
+        return .unreachable
     }
 
     private static func milliseconds(_ duration: Duration) -> Int32 {

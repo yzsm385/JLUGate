@@ -24,6 +24,10 @@ public enum SessionLiveness {
         switch outcome {
         case .healthy: .online
         case .captivePortal: .offline
+        case .tlsBlocked:
+            // 能连上网关、80 也通，只是加密通道被切断：这**不能**证明会话没了。
+            // 归到 inconclusive 才不会误触发重新认证（WiFi 上重登会踢掉别的设备）。
+            .inconclusive
         case .unreachable: .inconclusive
         }
     }

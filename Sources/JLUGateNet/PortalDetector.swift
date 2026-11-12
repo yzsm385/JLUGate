@@ -83,6 +83,9 @@ public struct PortalDetector: Sendable {
             return nil
         case .unreachable:
             return nil
+        case .tlsBlocked:
+            // 加密通道被切断不是门户拦截，别拿它去解析入口。
+            return nil
         case .captivePortal(let statusCode, let location):
             if let location, let url = URL(string: location), url.scheme != nil {
                 return PortalEntry(url: url, source: .redirect)

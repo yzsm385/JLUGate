@@ -204,6 +204,16 @@ public actor PortalEngine: AuthProvider {
                 } catch {
                     // 掉线（或 stop），回到循环重新探测
                 }
+            case .tlsBlocked(let detail):
+                // 能连上网关、80 也通，只是加密通道被切断。
+                // 这**不是**会话失效，重登只会在 WiFi 上踢掉别的设备，
+                // 所以保持在线状态、只把原因记进日志，等下一轮再探。
+                attempt = 0
+                markOnline()
+                emit(.note("TLS 加密通道被切断：\(detail)"))
+                do {
+                    try await monitor(epoch: epoch, interface: interface)
+                } catch {}
             case .captivePortal:
                 attempt = 0
                 guard let entry = await detector.detect(probe: outcome, interface: interface) else {
