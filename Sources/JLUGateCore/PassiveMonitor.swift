@@ -9,6 +9,9 @@ public enum PassiveMonitor {
     public enum Observation: Sendable, Equatable {
         case online
         case needsAuthentication(statusCode: Int?, location: String?)
+        /// 80 端口通（能到网关、认证活着），但 443 的 TLS 被切断。
+        /// 必须和 `unreachable` 分开：断网要重连，这个重连也没用。
+        case tlsBlocked(reason: String)
         case unreachable(reason: String)
     }
 
@@ -19,12 +22,15 @@ public enum PassiveMonitor {
         case requestCredentials
         /// 链路问题：显示失败原因，不弹向导。
         case reportOffline(String)
+        /// 链路本身是好的，只是加密通道被切断：保持在线态，但标注出来。
+        case reportTLSBlocked(String)
     }
 
     public static func decide(_ observation: Observation) -> Decision {
         switch observation {
         case .online: .reportOnline
         case .needsAuthentication: .requestCredentials
+        case .tlsBlocked(let reason): .reportTLSBlocked(reason)
         case .unreachable(let reason): .reportOffline(reason)
         }
     }

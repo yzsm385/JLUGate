@@ -59,3 +59,22 @@ struct StatusNarratorTests {
         }
     }
 }
+
+@Suite("TLS 被切断的文案")
+struct StatusNarratorTLSBlockedTests {
+    @Test("有独立标题，且建议里明确「换节点没用」")
+    func story() {
+        let story = StatusNarrator.story(.tlsBlocked)
+        #expect(!story.title.isEmpty)
+        #expect(!story.oneLiner.isEmpty)
+        guard let action = story.action else {
+            Issue.record("必须给建议：用户会以为换节点能解决")
+            return
+        }
+        // 多语言下都用各自的措辞表达「换节点没用」，这里只断言非空且与 sessionOnly 不同
+        let sessionOnly = StatusNarrator.story(.sessionOnly)
+        #expect(story.title != sessionOnly.title)
+        #expect(action != sessionOnly.action)
+    }
+}
+

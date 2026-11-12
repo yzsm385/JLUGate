@@ -350,6 +350,9 @@ final class AppModel {
     @ObservationIgnored private let connectivityProbe = ConnectivityProbe()
     /// 只观测不认证的在线状态（用户已有会话、但我们还没配账号）
     var observingExistingSession = false
+    /// 非 nil 表示「链路通、但 443 的 TLS 被切断」，值是探针给的原因。
+    /// 用它把状态从「已连接」改成「加密通道被切断」，让用户知道换节点没用。
+    var tlsBlockedDetail: String?
     var networkSnapshot: NetworkSnapshot?
     var pingResults: [PingSummary] = []
     var authLivenessRunning = false
@@ -737,6 +740,11 @@ final class AppModel {
         case .discovering, .challenging, .authenticating, .reconnecting:
             return .working
         case .online:
+            // 加密通道被切断：链路和认证都正常，但 443 的 TLS 被拦。
+            // 单独的状态 + 单独的建议（换节点没用）。
+            if let tlsBlockedDetail {
+                return .tlsBlocked
+            }
             // 会话层在线但外网探针连续不通：如实说「认证还在、外网不通」，
             // 而不是继续亮绿灯——1.4.10 就是这么把用户骗了的。
             return egressDown ? .sessionOnly
@@ -767,7 +775,7 @@ final class AppModel {
     var statusColor: Color {
         switch statusPhase {
         case .online, .onlineViaOfficialClient: .green
-        case .sessionOnly: .yellow
+        case .sessionOnly, .tlsBlocked: .yellow
         case .working: .orange
         case .waitingForNetwork, .failed: .red
         case .officialClientHoldingPort: .orange
@@ -779,6 +787,7 @@ final class AppModel {
         switch statusPhase {
         case .online, .onlineViaOfficialClient: "checkmark.circle.fill"
         case .sessionOnly: "exclamationmark.triangle.fill"
+        case .tlsBlocked: "lock.slash.fill"
         case .working: "arrow.triangle.2.circlepath"
         case .waitingForNetwork: "cable.connector.slash"
         case .officialClientHoldingPort: "exclamationmark.circle"
@@ -835,9 +844,9 @@ final class AppModel {
                 case .captivePortal(let code, let location):
                     .needsAuthentication(statusCode: code, location: location)
                 case .tlsBlocked(let detail):
-                    // 加密通道被切断：对用户而言就是"上不了网"，所以归到不可达，
-                    // 但原因写清楚，诊断里能一眼看出不是普通断网。
-                    .unreachable(reason: "TLS 加密通道被切断：\(detail)")
+                    // 链路是好的（80 能到网关），只是加密通道被切断。
+                    // 必须和「彻底没网」分开：那种要重连，这种重连没用。
+                    .tlsBlocked(reason: detail)
                 case .unreachable(let reason): .unreachable(reason: reason)
                 }
 
@@ -855,6 +864,7 @@ final class AppModel {
                 switch PassiveMonitor.decide(observation) {
                 case .reportOnline:
                     self.observingExistingSession = true
+                    self.tlsBlockedDetail = nil
                     if !wasOnline {
                         self.recentLog.insert("当前已在线上（无需登录），状态已更新为已连接", at: 0)
                         FileLogger.shared.log("passive watch: 已在线上，状态置为已连接")
@@ -873,8 +883,20 @@ final class AppModel {
                         self.presentWizard()
                     }
                     wasOnline = false
+                case .reportTLSBlocked(let reason):
+                    // 保持在线：认证和 80 都通，重连解决不了问题。
+                    self.observingExistingSession = true
+                    self.state = .online
+                    self.tlsBlockedDetail = reason
+                    if !wasOnline {
+                        self.recentLog.insert("加密通道被切断：能连上网关，但 443 的 TLS 被拦截（换代理节点无效）", at: 0)
+                        FileLogger.shared.log("passive watch: TLS 通道被切断 \(reason)")
+                    }
+                    wasOnline = true
+                    self.refreshDiagnostics()
                 case .reportOffline(let reason):
                     self.observingExistingSession = false
+                    self.tlsBlockedDetail = nil
                     self.state = .failed(.notCampusNetwork(detail: reason))
                     wasOnline = false
                 }
@@ -1180,7 +1202,7 @@ final class AppModel {
             return "被门户拦下 HTTP \(code)\(location.map { " → \($0)" } ?? "")"
         case .tlsBlocked(let detail):
             // 明确区分「TLS 被拦」和「彻底没网」：两者的处置方式完全不同。
-            return "TLS 加密通道被切断（\(detail)）——换代理节点无效，拦截是按端口的"
+            return "TLS 加密通道被切断（\(detail)）——换代理节点无效，拦截是按目标地址的"
         case .unreachable(let reason):
             return String(reason.prefix(300))
         }

@@ -13,6 +13,10 @@ public enum StatusPhase: Sendable, Equatable {
     case online
     /// 会话还在，但外网探针连续不通：大概率是被代理的全局模式截住了
     case sessionOnly
+    /// 80 端口通（能到网关、能认证），但 443 的 TLS 被切断。
+    /// 与 `sessionOnly` 的区别：这不是「代理截住了」，而是「按目标地址拦截」，
+    /// 换代理节点没用——所以文案必须给出不同的建议。
+    case tlsBlocked
     /// 官方 Dr.Com 客户端维持的在线（端口被它占着）
     case onlineViaOfficialClient
     /// 端口被官方客户端占着，但网没通
@@ -53,6 +57,11 @@ public enum StatusNarrator {
             StatusStory(title: Copy.t("B162"),
                         oneLiner: Copy.t("B163"),
                         action: Copy.t("B164"))
+
+        case .tlsBlocked:
+            StatusStory(title: Copy.t("B165"),
+                        oneLiner: Copy.t("B166"),
+                        action: Copy.t("B167"))
 
         case .onlineViaOfficialClient:
             StatusStory(title: Copy.t("B108"),

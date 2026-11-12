@@ -30,3 +30,28 @@ struct PassiveMonitorTests {
         #expect(PassiveMonitor.shouldPromptOnNeedsAuth(wasOnline: true, alreadyPrompted: true) == false)
     }
 }
+
+// MARK: - TLS 通道被切断（2026-11-12）
+
+@Suite("TLS 被切断必须和「没网」分开")
+struct PassiveMonitorTLSBlockedTests {
+    @Test("tlsBlocked 不判离线，而是标注出来")
+    func tlsBlockedIsNotOffline() {
+        let decision = PassiveMonitor.decide(.tlsBlocked(reason: "github.com EOF"))
+        guard case .reportTLSBlocked(let reason) = decision else {
+            Issue.record("期望 reportTLSBlocked，实际 \(decision)")
+            return
+        }
+        #expect(reason == "github.com EOF")
+    }
+
+    @Test("unreachable 仍然是 reportOffline，两者不能混")
+    func unreachableStaysOffline() {
+        let decision = PassiveMonitor.decide(.unreachable(reason: "全超时"))
+        guard case .reportOffline = decision else {
+            Issue.record("期望 reportOffline，实际 \(decision)")
+            return
+        }
+    }
+}
+
