@@ -179,13 +179,19 @@ UDP 侧只有两条 443：`49.7.200.6:443`（校园网出口，直连可达）�
 - 加 L3 TLS 层探测，多目标、必须全部被切断才报 `tlsBlocked`
 - 结论类型区分 `healthy` / `captivePortal` / `tlsBlocked` / `unreachable`
 
+**已修（`832dcb7` + `812c6c9`）**：
+- DNS 多结果降级：原来只取第一个成功的解析结果，一旦那个 IP 不可达就误判断网
+- 默认 DNS 改成校内优先：原来 `[1.1.1.1, 8.8.8.8]`，实测 `8.8.8.8` 完全不通、
+  `1.1.1.1` 会解析到境外不可达 IP
+
 **待做**：
-1. **L1 探测目标要换**：当前 `gstatic` / `cloudflare` / `cn204` 在该校园网
-   **直连下全部不可达**（它们的兜底 IP 在被封段）。这会让探针把「能上网」
-   误判成「没网」。
-2. **必须做内容比对，不能只看状态码**：参照 Apple CNA / Microsoft NCSI。
+1. **必须做内容比对，不能只看状态码**：参照 Apple CNA / Microsoft NCSI。
    `generate_204` 要校验「204 且响应体为空」。
-3. **探测必须走 `IP_BOUND_IF`**：`ReachabilityService` 用 `URLSession`，
+   实测证据：同一个 IP（国内 CDN 节点）请求 `generate_204` 返回 204，
+   但请求 `google.com` 返回 404——**204 只能证明「能连到一个 HTTP 服务」，
+   不能证明「能访问境外真实服务」**。这正是 `PLAN.md:107` 写明、但代码
+   还没落实的那条。
+2. **探测必须走 `IP_BOUND_IF`**：`ReachabilityService` 用 `URLSession`，
    测的是代理路径（见 §4）。
 
 ### 3.2 诊断文案要区分「两种不通」
