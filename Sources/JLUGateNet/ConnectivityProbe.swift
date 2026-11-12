@@ -178,13 +178,21 @@ public struct ConnectivityProbe: Sendable {
             serverChain = Self.fallbackDNSServers
         }
         for target in targets {
+            // 收集**所有** DNS 服务器的解析结果，而不是只用第一个成功的。
+            //
+            // 2026-11-12 实测：同一个域名，不同 DNS 给出的 IP 可达性完全不同——
+            //   1.1.1.1   → 142.251.150.120（境外，不可达）
+            //   学校 DNS  → 120.253.253.34 （国内 CDN，204 可达）
+            // 只取第一个成功的解析结果，就会因为「恰好解析到被封的 IP」
+            // 而误判整条链路不通。这正是探针误报「没网」的真实原因。
             var addresses: [IPv4Address] = []
             for server in serverChain {
                 if let resolved = try? await transport.resolve(host: target.host, server: server,
                                                                interface: interface, timeout: timeout),
                    !resolved.isEmpty {
-                    addresses = resolved
-                    break
+                    for address in resolved where !addresses.contains(address) {
+                        addresses.append(address)
+                    }
                 }
             }
             if addresses.isEmpty {
@@ -192,8 +200,17 @@ public struct ConnectivityProbe: Sendable {
                 if !target.fallbackIPs.isEmpty {
                     failures.append("\(target.host) DNS 不通，改用内置 IP")
                 }
+            } else {
+                // DNS 解析成功也要把内置 IP 排在后面作为最后手段：
+                // 解析出来的地址可能恰好落在不可达的段（2026-11-12 实测：
+                // 1.1.1.1 把 gstatic 解析到境外 IP，那个 IP 不通）。
+                for address in target.fallbackIPs where !addresses.contains(address) {
+                    addresses.append(address)
+                }
             }
-            for address in addresses {
+            // 每个目标最多试 3 个地址：DNS 可能给出十几个结果，逐个试会把
+            // 探针拖到几十秒（真机实测 46 秒），而探针每 30 秒就要跑一轮。
+            for address in addresses.prefix(3) {
                 guard let head = try? await transport.httpGet(
                     ip: address, host: target.host, path: target.path, port: 80,
                     interface: interface, timeout: timeout) else {

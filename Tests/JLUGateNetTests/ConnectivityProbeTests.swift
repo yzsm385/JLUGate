@@ -12,7 +12,10 @@ struct FakeProbeTransport: ProbeTransport {
 
     func resolve(host: String, server: IPv4Address,
                  interface: InterfaceSnapshot, timeout: Duration) async throws -> [IPv4Address] {
-        guard let answers = dnsAnswers[host], !answers.isEmpty else {
+        // 优先查 "dns|host" 形式的键（可以模拟不同 DNS 给出不同结果），
+        // 退回只按 host 查（老测试用的形式）。
+        let answers = dnsAnswers["\(server.description)|\(host)"] ?? dnsAnswers[host]
+        guard let answers, !answers.isEmpty else {
             throw DrcomError.timeout(stage: "dns")
         }
         return answers.compactMap(IPv4Address.init)
@@ -244,5 +247,45 @@ struct BSDTLSProbeSmokeTests {
             interface: loopback,
             timeout: .milliseconds(200))
         #expect(result == .unreachable)
+    }
+}
+
+// MARK: - DNS 多结果降级（2026-11-12 真机 bug 回归）
+
+@Suite("DNS 解析到不可达 IP 时不能误判断网")
+struct ProbeDNSDegradationTests {
+    /// 模拟 2026-11-12 的真实场景：同一个域名，两个 DNS 给出不同 IP，
+    /// 其中一个不可达。探针必须继续尝试其它 IP，而不是直接判失败。
+    @Test("第一个 DNS 解析到不可达 IP，仍能用第二个 DNS 的结果探通")
+    func fallsThroughToSecondDNS() async {
+        var transport = FakeProbeTransport()
+        // 1.1.1.1 把域名解析到 192.0.2.99（不可达）
+        transport.dnsAnswers["10.0.0.1|connectivitycheck.gstatic.com"] = ["192.0.2.99"]
+        // 学校 DNS 解析到 192.0.2.10（可达）
+        transport.dnsAnswers["10.0.0.2|connectivitycheck.gstatic.com"] = ["192.0.2.10"]
+        transport.httpResponses["192.0.2.10"] = (204, nil)
+        for target in ConnectivityProbe.tlsTargets {
+            for ip in target.fallbackIPs { transport.tlsResults["\(ip.description):443"] = .responded }
+        }
+
+        let probe = ConnectivityProbe(targets: [.gstatic], transport: transport, timeout: .seconds(1))
+        let outcome = await probe.run(interface: loopback,
+                                      dnsServers: [IPv4Address("10.0.0.1")!, IPv4Address("10.0.0.2")!])
+        #expect(outcome == .healthy)
+    }
+
+    @Test("DNS 只给出不可达 IP 时，回落到内置兜底 IP")
+    func fallsBackToBuiltInIPs() async {
+        var transport = FakeProbeTransport()
+        transport.dnsAnswers["10.0.0.1|connectivitycheck.gstatic.com"] = ["192.0.2.99"]
+        // 兜底 IP 之一可达
+        transport.httpResponses["142.250.185.99"] = (204, nil)
+        for target in ConnectivityProbe.tlsTargets {
+            for ip in target.fallbackIPs { transport.tlsResults["\(ip.description):443"] = .responded }
+        }
+
+        let probe = ConnectivityProbe(targets: [.gstatic], transport: transport, timeout: .seconds(1))
+        let outcome = await probe.run(interface: loopback, dnsServers: [IPv4Address("10.0.0.1")!])
+        #expect(outcome == .healthy)
     }
 }
