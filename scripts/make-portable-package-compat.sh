@@ -10,7 +10,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="1.5.0"
+VERSION="2.0.0"
 APP="dist/JLU Gate (Compat).app"
 
 echo "==> 构建 .app [compat: macOS 14, no Liquid Glass]"
@@ -160,8 +160,8 @@ echo "也可以现在手动移除。"
 UNINSTALL
 chmod +x "$STAGE/Uninstall JLU Gate.command"
 
-cat > "$STAGE/README.txt" <<'README'
-JLU Gate 1.0.0（旧版适配，macOS 14+）
+cat > "$STAGE/README.txt" <<README
+JLU Gate ${VERSION}（旧版适配，macOS 14+）
 
 这是给老版本 macOS 的适配包：不用 Liquid Glass，普通材质界面。
 如果你的系统是 macOS 26 及以上，建议改用新版包（界面有 Liquid Glass）。
@@ -180,8 +180,8 @@ JLU Gate 1.0.0（旧版适配，macOS 14+）
 
 三、第一次使用
   1. 菜单栏出现盾牌图标 → 点开 → 「设置」或「重新设置…」；
-  2. 账号 = 学校邮箱 @mails.jlu.edu.cn 前面那一段（学生如 zhangcyy2122，教师如 zhangshanwu），
-     密码 = 邮箱密码；
+  2. 账号 = 统一身份认证账号（学号 / 邮箱 @mails.jlu.edu.cn 前缀），
+     密码 = 统一身份认证密码（教务 / VPN 同款；注意不是吉大邮箱独立密码，也不是 6 位校园卡密码）；
   3. 接入方式：有线 / JLU.PC / JLU.WIFI / 自动；
   4. 若有线或 JLU.PC：点「用系统当前读数填入」——只有系统这块网卡是手动配置时才会填，
      这样不会把 DHCP 分到的错地址抄进去。
@@ -192,7 +192,7 @@ JLU Gate 1.0.0（旧版适配，macOS 14+）
   钥匙串 service = dev.jlugate.app         正式签名版的密码（本便携版为 ad-hoc 签名，密码存本地文件）
 
 五、卸载
-  双击同目录下的「卸载 JLU Gate.command」。它会删 App、配置、日志与钥匙串条目。
+  双击同目录下的「Uninstall JLU Gate.command」。它会删 App、配置、日志与钥匙串条目。
 
 六、常见问题
   · 连 JLU.PC 弹的 login.jlu.edu.cn 欢迎页是系统弹的捕获门户页，不是本程序；

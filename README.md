@@ -1,4 +1,12 @@
 <a id="top"></a>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/branding/app-icon-dark-256.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/branding/app-icon-256.png">
+    <img alt="JLU Gate App Icon" src="docs/branding/app-icon-256.png" width="112" height="112">
+  </picture>
+</p>
+
 # JLU Gate 🛡️
 
 <p>

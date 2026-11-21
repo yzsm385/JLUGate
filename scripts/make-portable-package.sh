@@ -11,7 +11,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="1.5.0"
+VERSION="2.0.0"
 APP="dist/JLU Gate.app"
 DMG="dist/JLU Gate ${VERSION}.dmg"
 
@@ -61,8 +61,8 @@ echo "也可以现在手动移除。"
 UNINSTALL
 chmod +x "$STAGE/Uninstall JLU Gate.command"
 
-cat > "$STAGE/README.txt" <<'README'
-JLU Gate 0.1.0（便携版）
+cat > "$STAGE/README.txt" <<README
+JLU Gate ${VERSION}（macOS 26+，Liquid Glass）
 
 一、安装
   把「JLU Gate.app」拖进 /Applications 即可。首次打开若提示"无法验证开发者"，
@@ -70,10 +70,10 @@ JLU Gate 0.1.0（便携版）
 
 二、第一次使用
   1. 菜单栏出现盾牌图标 → 点开 → 「设置」或「重新设置…」；
-  2. 账号 = 学校邮箱 @mails.jlu.edu.cn 前面那一段（学生如 zhangcyy2122，教师如 zhangshanwu），
-     密码 = 邮箱密码；
+  2. 账号 = 统一身份认证账号（学号 / 邮箱 @mails.jlu.edu.cn 前缀），
+     密码 = 统一身份认证密码（教务 / VPN 同款；注意不是吉大邮箱独立密码，也不是 6 位校园卡密码）；
   3. 接入方式：有线 / JLU.PC / JLU.WIFI / 自动；
-  4. 若有线或 JLU.PC：点「用系统当前读数填入」——**只有系统这块网卡是手动配置时**才会填，
+  4. 若有线或 JLU.PC：点「用系统当前读数填入」——只有系统这块网卡是手动配置时才会填，
      这样不会把 DHCP 分到的错地址抄进去。
 
 三、它只在这几处留东西（卸载脚本会全部删掉）
@@ -82,10 +82,10 @@ JLU Gate 0.1.0（便携版）
   钥匙串 service = dev.jlugate.app         正式签名版的密码（本便携版为 ad-hoc 签名，密码存本地文件）
 
 四、卸载
-  双击同目录下的「卸载 JLU Gate.command」。它会删 App、配置、日志与钥匙串条目。
+  双击同目录下的「Uninstall JLU Gate.command」。它会删 App、配置、日志与钥匙串条目。
 
 五、常见问题
-  · 连 JLU.PC 弹的 login.jlu.edu.cn 欢迎页是**系统**弹的捕获门户页，不是本程序；
+  · 连 JLU.PC 弹的 login.jlu.edu.cn 欢迎页是系统弹的捕获门户页，不是本程序；
     App 内有「校园网门户」可以随时查看那一页，不会自动弹窗。
   · 提示 MAC 与登记不符：学校按 MAC 认设备，去 https://ip.jlu.edu.cn/pay 改登记。
   · 端口 61440 被占用：先退出官方 DrClientNS；仍有占用说明它的后台组件在跑。

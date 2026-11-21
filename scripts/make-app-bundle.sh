@@ -40,6 +40,12 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 echo "==> assemble .app"
 cp "$BIN/AppCompileCheck" "$APP/Contents/MacOS/JLUGate"
+if [ -f "App/Resources/AppIcon.icns" ]; then
+    cp "App/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+fi
+if [ -f "App/Resources/Assets.car" ]; then
+    cp "App/Resources/Assets.car" "$APP/Contents/Resources/Assets.car"
+fi
 
 # Liquid Glass 的系统外观按「链接的 SDK 版本」开关，不只按 minos。包部署目标为了
 # Compat 包压到了 14，SwiftPM 会把 LC_BUILD_VERSION.sdk 一起写成 14，AppKit 于是
@@ -60,8 +66,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key>     <string>JLU Gate</string>
     <key>CFBundleIdentifier</key>      <string>dev.jlugate.app</string>
     <key>CFBundleExecutable</key>      <string>JLUGate</string>
+    <key>CFBundleIconFile</key>        <string>AppIcon</string>
+    <key>CFBundleIconName</key>        <string>AppIcon</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.5.0</string>
+    <key>CFBundleShortVersionString</key><string>2.0.0</string>
     <key>CFBundleVersion</key>         <string>BUILD_STAMP</string>
     <key>LSMinimumSystemVersion</key>  <string>26.0</string>
     <key>LSUIElement</key>             <true/>

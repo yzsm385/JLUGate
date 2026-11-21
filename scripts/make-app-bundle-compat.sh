@@ -58,6 +58,12 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 echo "==> assemble .app"
 cp "$BIN/AppCompatCompileCheck" "$APP/Contents/MacOS/JLUGate"
+if [ -f "App/Resources/AppIcon.icns" ]; then
+    cp "App/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+fi
+if [ -f "App/Resources/Assets.car" ]; then
+    cp "App/Resources/Assets.car" "$APP/Contents/Resources/Assets.car"
+fi
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
@@ -68,8 +74,10 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleDisplayName</key>     <string>JLU Gate</string>
     <key>CFBundleIdentifier</key>      <string>dev.jlugate.app</string>
     <key>CFBundleExecutable</key>      <string>JLUGate</string>
+    <key>CFBundleIconFile</key>        <string>AppIcon</string>
+    <key>CFBundleIconName</key>        <string>AppIcon</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.5.0</string>
+    <key>CFBundleShortVersionString</key><string>2.0.0</string>
     <key>CFBundleVersion</key>         <string>BUILD_STAMP</string>
     <key>LSMinimumSystemVersion</key>  <string>14.0</string>
     <key>LSUIElement</key>             <true/>
