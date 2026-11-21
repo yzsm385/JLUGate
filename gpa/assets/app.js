@@ -356,12 +356,12 @@
         "2022": "当前按 <b>2022 级参考科目表：40 门 / 95.5 学分</b>（劳动教育不计，企业实训计入）。点课程名旁的“计入/不计入”可切换；修改只保存在本机。",
         "2024": "当前按 <b>2023/24 推算：97.5 学分</b>（劳动教育计入；国家安全教育默认不计，可在课程表里勾选）。官方表未发布，不能当官方。",
         "2025": "当前按 <b>2025 推算：98.5 学分</b>（劳动教育 + 国家安全教育；国安暂按 1 学分/大一上）。官方表未发布，不能当官方。",
-        "2026": "当前按 <b>2026 级真实目录：124 门 / 160 学分</b>。默认不勾选；先在下方选英语级别，再逐门勾选你的思政/物理/专业课程。2026 推免细则未发布，分数仅供参考。"
+        "2026": "当前按 <b>2026 级真实目录：124 门 / 160 学分</b>。默认全部勾选；可在下方选英语级别自动收拢外语分流，或手动取消不计入的课程。2026 推免细则未发布，分数仅供参考。"
       };
       $("#correctIntro").innerHTML = intro[state.cohort] || intro["2022"];
     }
     if ($("#add2025")) $("#add2025").style.display = state.cohort === "2026" ? "none" : "";
-    if ($("#resetCourses")) $("#resetCourses").textContent = state.cohort === "2026" ? "清空 2026 勾选" : "恢复官方 40 门";
+    if ($("#resetCourses")) $("#resetCourses").textContent = state.cohort === "2026" ? "恢复 2026 默认全选" : "恢复官方 40 门";
     if ($("#heroSub")) {
       const kind = state.cohort === "2022" ? "参考口径" : (state.cohort === "2026" ? "临时目录（非官方）" : "推算口径（非官方）");
       $("#heroSub").innerHTML = META.major + "专业 · " + cohortLabel() + kind +
@@ -774,14 +774,13 @@
       state.custom = (window.GPA_2026_CATALOG.courses || []).map(function (c) {
         return { key: c.key, name: c.name, credit: c.credit, sem: c.sem, type: c.type, note: c.note || "" };
       });
-      state.custom.forEach(function (c) { state.overrides[c.key] = false; });
       rebuildCourses();
       buildSemesters();
       update();
       updateIssue();
       save();
       const st0 = $("#cohortStatus");
-      if (st0) st0.textContent = "已切换 2026 级临时目录：124 门课程全部列出、默认不勾选；请按你的英语级别和思政/物理实际课程勾选。2026 细则未发布，分数线不适用。";
+      if (st0) st0.textContent = "已切换 2026 级临时目录：124 门课程全部列出、默认全部勾选；可按学院口径取消不计入课程或在下方应用英语分流。2026 细则未发布，分数线不适用。";
       return;
     }
     if (code !== "2022") {
