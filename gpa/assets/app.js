@@ -37,6 +37,14 @@
   }
   const SEM_LABEL = { 1: "大一上", 2: "大一下", 3: "大二上", 4: "大二下", 5: "大三上", 6: "大三下", 7: "大四上", 8: "大四下" };
   const GPA_VALUES = [4.0, 3.7, 3.3, 3.0, 2.7, 2.3, 2.0, 1.7, 1.3, 1.0, 0];
+  const GPA_VALUES_2026 = (function () {
+    const out = [4.0];
+    for (let s = 89; s >= 60; s--) out.push(Math.round((s - 50) * 10) / 100);
+    out.push(0);
+    return out;
+  })();
+  function isContinuous() { return state.cohort === "2026"; }
+  function activeGpaValues() { return isContinuous() ? GPA_VALUES_2026 : GPA_VALUES; }
   const SCORE_RANGE = {
     4.0: "90–100", 3.7: "87–89.9", 3.3: "84–86.9", 3.0: "80–83.9",
     2.7: "77–79.9", 2.3: "74–76.9", 2.0: "70–73.9", 1.7: "67–69.9",
@@ -92,7 +100,8 @@
           const g = Number(e.gpa);
           const sc = e.score == null ? null : Number(e.score);
           if (!isFinite(g) || g < 0 || g > 4) return;
-          if (GPA_VALUES.indexOf(g) === -1) return;
+          if (!isContinuous() && GPA_VALUES.indexOf(g) === -1) return;
+          if (isContinuous() && g !== 0 && g < 1) return;
           state.entries[key] = { gpa: g, score: isFinite(sc) ? sc : null };
         });
       }
@@ -124,12 +133,19 @@
   }
 
   function scoreToGpa(s) {
+    if (isContinuous()) {
+      if (!isFinite(s) || s < 0 || s > 100) return null;
+      if (s < 60) return 0;
+      if (s >= 90) return 4.0;
+      return Math.round((s - 50) * 10) / 100;
+    }
     const b = bandOf(s);
     return b ? b.gpa : null;
   }
 
-  // 距上一档不足 1 分 → 卡绩；返回 {gap, next, up}
+  // 距上一档不足 1 分 → 卡绩；返回 {gap, next, up}（2026 级连续绩点无分段卡绩）
   function kaInfo(e) {
+    if (isContinuous()) return null;
     if (!e || e.score == null || e.score < 80) return null;
     const b = bandOf(e.score);
     if (!b || b.next == null) return null;
@@ -139,8 +155,26 @@
   }
 
   function gpaToScoreMid(g) {
+    if (isContinuous()) {
+      if (g === 0) return 55;
+      if (g >= 4.0) return 95;
+      if (g >= 1.0) return Math.round((g * 10 + 50) * 10) / 10;
+      return "";
+    }
     const map = { 0: 55, 1.0: 61.5, 1.3: 65, 1.7: 68, 2.0: 71.5, 2.3: 75, 2.7: 78, 3.0: 81.5, 3.3: 85, 3.7: 88, 4.0: 92.5 };
     return map[g] != null ? map[g] : "";
+  }
+
+  function fmtGpaVal(g) {
+    if (!isContinuous()) return g.toFixed(1);
+    return Math.abs(g * 10 - Math.round(g * 10)) < 1e-6 ? g.toFixed(1) : g.toFixed(2);
+  }
+
+  function scoreRangeOf(g) {
+    if (!isContinuous()) return SCORE_RANGE[g] + " 分";
+    if (g === 0) return "<60 分";
+    if (g >= 4.0) return "90–100 分";
+    return (Math.round((g * 10 + 50) * 10) / 10) + " 分";
   }
 
   const fmt = (x, d) => (x == null || !isFinite(x) ? "—" : x.toFixed(d == null ? 1 : d));
@@ -200,9 +234,13 @@
       return '<input class="score" type="number" min="0" max="100" step="0.1" inputmode="decimal" ' +
         'data-key="' + key + '" value="' + v + '" placeholder="' + ph + '" aria-label="' + c.name + ' 百分制成绩">';
     }
+    const vals = activeGpaValues();
     let opts = '<option value="">—</option>';
-    GPA_VALUES.forEach(function (g) {
-      const sel = e && e.gpa === g ? " selected" : "";
+    if (e && !vals.some(function (g) { return Math.abs(e.gpa - g) < 1e-6; })) {
+      opts += '<option value="' + fmtGpaVal(e.gpa) + '" selected>' + fmtGpaVal(e.gpa) + '</option>';
+    }
+    vals.forEach(function (g) {
+      const sel = e && Math.abs(e.gpa - g) < 1e-6 ? " selected" : "";
       opts += '<option value="' + g.toFixed(1) + '"' + sel + '>' + (g === 0 ? "0.0（挂科）" : g.toFixed(1)) + '</option>';
     });
     return '<select class="gpa' + (e ? "" : " empty") + '" data-key="' + key + '" aria-label="' + c.name + ' 绩点">' + opts + "</select>";
@@ -214,9 +252,9 @@
     if (state.mode === "score") {
       if (!e) return "自动换算";
       const k = kaInfo(e);
-      return "绩点 " + e.gpa.toFixed(1) + (k ? " · 卡绩 " + k.gap.toFixed(1) : "");
+      return "绩点 " + fmtGpaVal(e.gpa) + (k ? " · 卡绩 " + k.gap.toFixed(1) : "");
     }
-    return "<span class='col-score'>" + (e ? SCORE_RANGE[e.gpa] + " 分" : "—") + "</span>";
+    return "<span class='col-score'>" + (e ? scoreRangeOf(e.gpa) : "—") + "</span>";
   }
 
   function buildSemesters() {
@@ -387,6 +425,7 @@
 
     updateVerdict(r, T, need, maxFinal, minFinal, proj37);
     updateAdvice(r, T, need, maxFinal, minFinal, proj37);
+    renderConvTable();
   }
 
   /* ---------------- verdict ---------------- */
@@ -608,7 +647,7 @@
     COURSES.forEach(function (c) {
       const e = state.entries[c._key];
       rows.push([c.sem, c.code || "", c.name, c.type, crText(c.credit), isCounted(c) ? "是" : "否",
-        e ? e.gpa.toFixed(1) : "", e && e.score != null ? e.score : ""]);
+        e ? fmtGpaVal(e.gpa) : "", e && e.score != null ? e.score : ""]);
     });
     const csv = "\ufeff" + rows.map(function (r) {
       return r.map(function (x) { return '"' + String(x).replace(/"/g, '""') + '"'; }).join(",");
@@ -844,6 +883,44 @@
     }
   }
 
+  function renderConvTable() {
+    const tbody = $("#convTable tbody");
+    if (!tbody) return;
+    if (isContinuous()) {
+      const conv2026 = [
+        ["90–100", "4.00（A / A+ · 优秀）"],
+        ["80–89", "3.00–3.90（每分 +0.10 · 良好）"],
+        ["70–79", "2.00–2.90（每分 +0.10 · 中等）"],
+        ["60–69", "1.00–1.90（每分 +0.10 · 及格）"],
+        ["60 以下", "0.00（F · 不及格）"]
+      ];
+      tbody.innerHTML = conv2026.map(function (r) {
+        return "<tr><td>" + r[0] + " 分</td><td>" + r[1] + "</td></tr>";
+      }).join("");
+      if ($("#convNote")) {
+        $("#convNote").innerHTML = "按《本科课程成绩与绩点换算对照表（2026 版）》<b>连续绩点规则</b>：90–100 分为 4.00；60–89 分按 <code>(分数 − 50) / 10</code> 换算（60 分 1.00，每高 1 分 +0.10，89 分 3.90），无分段卡绩；60 分以下为挂科，按 0.00 计。";
+      }
+      if ($("#formulaNote")) {
+        $("#formulaNote").innerHTML = "GPA = Σ（课程绩点 × 学分）/ Σ学分；最终 GPA 保留 <b>6 位小数</b>。2026 级按连续绩点规则换算，60–89 分逐分递增，无分段卡绩。";
+      }
+      return;
+    }
+    const conv = [
+      ["90–100", "4.0"], ["87–89.9", "3.7"], ["84–86.9", "3.3"], ["80–83.9", "3.0"],
+      ["77–79.9", "2.7"], ["74–76.9", "2.3"], ["70–73.9", "2.0"], ["67–69.9", "1.7"],
+      ["64–66.9", "1.3"], ["60–63.9", "1.0"], ["60 以下", "0（挂科）"]
+    ];
+    tbody.innerHTML = conv.map(function (r) {
+      return "<tr><td>" + r[0] + " 分</td><td>" + r[1] + "</td></tr>";
+    }).join("");
+    if ($("#convNote")) {
+      $("#convNote").innerHTML = "按校教字〔2016〕110 号的 10 档换算：90 分及以上 4.0，87–89 3.7，84–86 3.3，80–83 3.0，77–79 2.7，74–76 2.3，70–73 2.0，67–69 1.7，64–66 1.3，60–63 1.0。<b>按 0.1 分精度判定</b>：89.9 仍是 3.7（被卡绩），90.0 才是 4.0；60 以下为挂科，按 0 计。";
+    }
+    if ($("#formulaNote")) {
+      $("#formulaNote").innerHTML = "GPA = Σ（课程绩点 × 学分）/ Σ学分；单门课程绩点保留 1 位小数，最终 GPA 保留 <b>6 位小数</b>。百分制成绩按 0.1 分精度落入档位，因此 89.9 会被卡在 3.7。";
+    }
+  }
+
   /* ---------------- static sections ---------------- */
   function buildStatic() {
     // reference table
@@ -861,14 +938,7 @@
     $("#ruleList").innerHTML = META.rules.map(function (r) { return "<li>" + r + "</li>"; }).join("");
 
     // conversion table
-    const conv = [
-      ["90–100", "4.0"], ["87–89.9", "3.7"], ["84–86.9", "3.3"], ["80–83.9", "3.0"],
-      ["77–79.9", "2.7"], ["74–76.9", "2.3"], ["70–73.9", "2.0"], ["67–69.9", "1.7"],
-      ["64–66.9", "1.3"], ["60–63.9", "1.0"], ["60 以下", "0（挂科）"]
-    ];
-    $("#convTable tbody").innerHTML = conv.map(function (r) {
-      return "<tr><td>" + r[0] + " 分</td><td>" + r[1] + "</td></tr>";
-    }).join("");
+    renderConvTable();
 
     $("#updated").textContent = "数据更新 " + META.generated;
   }
