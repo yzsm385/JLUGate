@@ -3,15 +3,16 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/branding/app-icon-dark-256.png">
     <source media="(prefers-color-scheme: light)" srcset="docs/branding/app-icon-256.png">
-    <img alt="JLU Gate App Icon" src="docs/branding/app-icon-256.png" width="112" height="112">
+    <img alt="JLU Gate App Icon" src="docs/branding/app-icon-256.png" width="128" height="128">
   </picture>
 </p>
 
-# JLU Gate 🛡️
+<h1 align="center">JLU Gate</h1>
 
-<p>
+<p align="center">
   <a href="#top">🌐 中文</a> ·
-  <a href="#english">🇬🇧 English</a>
+  <a href="#english">🇬🇧 English</a> ·
+  <a href="https://github.com/yzsm385/JLUGate/releases/latest">📦 最新下载</a>
 </p>
 
 > 📌 吉林大学校园网的 macOS 菜单栏小工具。界面支持 **简体中文 / 繁體中文 / English**，跟着系统语言走。
@@ -46,7 +47,8 @@ JLU Gate 想把这三个门并成一个闸口 🚪✨。账号密码填一次，
 | 0.1.x / 0.2.0 / 0.2.1 | ❌ 不能，连「检查更新」都没有 |
 | 0.2.2 – 0.3.17 | 🟡 只能「检查更新 + 打开下载链接」，替换还得手动拖 |
 | **1.0.0** | ✅ 第一个带一键更新的正式版 |
-| **1.0.1 及以后** | ✅ 一键更新，还会自动挑对包、装完清理安装包 |
+| **1.0.1 – 2.0.0** | ✅ 一键更新，自动挑对包、装完清理安装包 |
+| **2.1.0 及以后** | ✅ 25s 首字节宽限 + 12s 滑动窗口防误判、真正断点续传、失败原因清晰展示并提供重试 / 手动下载入口 |
 
 ⚠️ 两个坑先说清楚：
 
@@ -115,7 +117,7 @@ JLU Gate 想把这三个门并成一个闸口 🚪✨。账号密码填一次，
 |---|---|---|
 | 🌐 **三网接入** | 大楼那三个门，一把钥匙开三把锁；认得该走哪扇，掉了链子自己接上 | 自动认该走哪条路（发一个 challenge 判定，不是校园网就一个包都不发）；10 秒保活、掉线指数退避重连、休眠唤醒自动恢复、插拔网线自适应；按 MAC 自动认网卡或手动指定 |
 | 🔧 **参数与 MAC** | 学校凭网卡认人，系统偏又爱给网卡换"面具"——这块专门撕下面具、对上身份证 | 读出厂 MAC 去认证，界面上并排显示当前 / 出厂 / 登记三个值；静态参数能用系统读数一键填（**仅当网卡是手动配置时**，DHCP 一律不抄） |
-| 🔖 **吉大常用入口** | 校园里那些东一个西一个的牌子，收进同一个橱窗，伸手就能够到 | 14 个站点分五类摆好，每个标「仅校内 / 需 VPN / 公网」；能搜（标题 / 域名 / 用途）；点开用系统浏览器，支持登录的顺手复制账号；「复制密码」60 秒后自动清空剪贴板；「我的学院」填学号认学院，44 个学院可搜、一键开官网；「校园网门户 / 今日广告」给按钮直接开、不自动弹 |
+| 🔖 **吉大常用入口** | 校园里那些东一个西一个的牌子，收进同一个橱窗，伸手就能够到 | 教务 / OA / 邮箱 / WebVPN / 大英赛等常用入口分五类摆好，标明「仅校内 / 需 VPN / 公网」；支持搜索；点开用系统浏览器，支持登录的顺手复制账号；「复制密码」60 秒后自动清空剪贴板；「我的学院」**自动复用校园网账号（邮箱前缀）或 8 位学号直接锁定学院**，44 个学院可搜、一键开官网；「校园网门户 / 今日广告」给按钮直接开、不自动弹 |
 | 🩺 **网络体检** | 断网时不让你对着黑箱猜，一层层掀开看：是路断了、门关了，还是屋里没人在 | 能不能上网：google / brave / duckduckgo / bing / 百度 + 教务 / OA / 邮箱逐站归因；出口 IP 三源交叉（Cloudflare / ipify / ifconfig.me）带国旗；自实现 STUN 拿浏览器同款 WebRTC 公网地址；DNS 泄漏反查解析出口；人机验证可达性（reCAPTCHA / 国内镜像 / Turnstile / CF 挑战页）；IP 纯净度多源交叉判住宅 or 机房；带宽三档（直连 / 默认出口 / 本地代理，端口自动探测） |
 | 🛤️ **代理与路由** | 你开的代理像条岔路，认证包可能走着走着就被拐走了；这块帮你量清楚两条路差多远 | 实测"认证通道延迟：直连 vs 经代理"；路由出口是不是被 TUN 接管、ConfigMethod 是不是 Manual，都直接给结论 |
 | 🖥️ **界面与状态** | 不跟你拽术语，像旁边站了个懂行的人，指着那一行告诉你"现在这样、下一步该干嘛" | 菜单栏常驻不占 Dock；文案说人话少用术语；启动看门狗——崩过一次就进安全模式（不自动连、不读密码），保证能进来改配置 |
@@ -133,7 +135,7 @@ JLU Gate 想把这三个门并成一个闸口 🚪✨。账号密码填一次，
 学院目录在 [Sources/JLUGateCore/CollegeDirectory.swift](Sources/JLUGateCore/CollegeDirectory.swift)，目前收了官网「院系设置」页列出的 **44 个学院**。如果你发现：
 
 - 🏫 你的学院不在这份名单里（比如新成立的、或者独立学院/研究院/中心也想收进来）；
-- 🆔 填了学号却认不出学院——吉大**没有公开的"学号前缀 → 学院"对照表**，现在的做法是"你选一次、本机记住同前缀"，所以**只有你一个人用的时候它学得会，换个人就又得重选**。
+- 🆔 填了学号或校园网账号却认不出学院——目前内置了吉大常见 2 位学院代码表（**自动复用校园网邮箱前缀与 8 位学号**），遇到特殊学号或新院系会回退到"手动选一次、本机记住同前缀"。
 
 能怎么帮：
 - 💬 在 [Issues](https://github.com/yzsm385/JLUGate/issues) 开一条，写明「学院名 + 官网域名 +（如果知道的话）学号前缀」，我加进目录；
@@ -180,7 +182,15 @@ JLU Gate 想把这三个门并成一个闸口 🚪✨。账号密码填一次，
 <details>
 <summary><b>🌐 Click here for English</b></summary>
 
-# JLU Gate 🛡️
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/branding/app-icon-dark-256.png">
+    <source media="(prefers-color-scheme: light)" srcset="docs/branding/app-icon-256.png">
+    <img alt="JLU Gate App Icon" src="docs/branding/app-icon-256.png" width="112" height="112">
+  </picture>
+</p>
+
+<h1 align="center">JLU Gate</h1>
 
 > 📌 A macOS menu-bar tool for Jilin University's campus network. UI ships in **Simplified Chinese / Traditional Chinese / English**, following your system language.
 
@@ -214,7 +224,8 @@ Auto-update only exists from **1.0.0** onward:
 | 0.1.x / 0.2.0 / 0.2.1 | ❌ No—not even an update check |
 | 0.2.2 – 0.3.17 | 🟡 Check + open the download link only; replacing is still manual |
 | **1.0.0** | ✅ First release with one-click update |
-| **1.0.1+** | ✅ One-click, picks the right build, and removes the downloaded package |
+| **1.0.1 – 2.0.0** | ✅ One-click, picks the right build, and removes the downloaded package |
+| **2.1.0+** | ✅ 25s first-byte grace + 12s sliding-window stall detection, true Range resume, clear error UI with Retry / manual download fallback |
 
 ⚠️ Two caveats:
 
@@ -231,7 +242,7 @@ Once you're on 1.0.1, updating is one click: **Update** in the panel → check �
 |---|---|---|
 | 🌐 **Three-network access** | One key for all three doors; auto-picks the right one, reconnects on drops | Auto-detects the path (one challenge packet; sends nothing if off-campus); 10s keepalive, exponential-backoff reconnect, sleep/wake recovery, plug/unplug adapt; MAC-based NIC selection or manual |
 | 🔧 **Parameters & MAC** | School auths by NIC, but the system keeps changing its "face"—this strips the mask | Authenticates with the factory MAC; shows current / factory / registered MAC side by side; one-click fill from system readings (**only when NIC is manually configured**, never from DHCP) |
-| 🔖 **JLU quick links** | Scattered campus entrances gathered into one showcase | 14 sites in 5 categories, each tagged campus-only / VPN-needed / public; searchable (title / domain / use); opens in system browser; credential copy for logins; "copy password" auto-clears clipboard after 60s; "my college" recognizes college from student ID, 44 colleges searchable, one-click to official site |
+| 🔖 **JLU quick links** | Scattered campus entrances gathered into one showcase | Common JLU entrances in 5 categories, tagged campus-only / VPN-needed / public; searchable; opens in system browser; credential copy with 60s auto-clear for passwords; "my college" **automatically reuses your campus account (email prefix) or 8-digit student ID** to lock your college, with 44 colleges searchable and one-click to official site |
 | 🩺 **Network health check** | Don't guess at a black box—open it layer by layer: road broken, door closed, or no one home | Can-you-surf: google / brave / duckduckgo / bing / Baidu + academic / OA / mail per-site attribution; egress IP from 3 sources with flags; self-implemented STUN for WebRTC public IP; DNS-leak reverse lookup; captcha reachability; IP purity (residential vs datacenter); bandwidth tiers (direct / default / local proxy) |
 | 🛤️ **Proxy & routing** | Your proxy is a detour that may hijack auth packets; this measures both paths | "Auth-channel latency: direct vs via proxy"; whether the route is TUN-hijacked or ConfigMethod is Manual—clear verdicts |
 | 🖥️ **UI & status** | No jargon—like a savvy friend pointing at the line saying "here's where you are, here's what to do next" | Menu-bar resident, no Dock; plain-language copy; launch watchdog—crashes once → safe mode (no auto-connect, no password read) so you can still open settings |
