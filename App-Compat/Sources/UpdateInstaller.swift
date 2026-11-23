@@ -148,23 +148,34 @@ enum UpdateInstaller {
         private let lock = NSLock()
         private var _finished: Result<Void, Error>?
         private var _expected: Int64 = -1
-        private var _written: Int64
+        private var _baseOffset: Int64
+        private var _receivedBytes: Int64 = 0
 
-        init(written: Int64) { _written = written }
+        init(resumeFrom: Int64) { _baseOffset = resumeFrom }
 
-        var finished: Result<Void, Error>? {
-            lock.lock(); defer { lock.unlock() }; return _finished
-        }
         func finish(_ value: Result<Void, Error>) {
-            lock.lock(); _finished = value; lock.unlock()
+            lock.lock()
+            if _finished == nil { _finished = value }
+            lock.unlock()
         }
-        var expected: Int64 {
-            get { lock.lock(); defer { lock.unlock() }; return _expected }
-            set { lock.lock(); _expected = newValue; lock.unlock() }
+
+        func resetForResponse(baseOffset: Int64, expected: Int64) {
+            lock.lock()
+            _baseOffset = baseOffset
+            _receivedBytes = 0
+            _expected = expected
+            lock.unlock()
         }
-        var written: Int64 {
-            get { lock.lock(); defer { lock.unlock() }; return _written }
-            set { lock.lock(); _written = newValue; lock.unlock() }
+
+        func addReceived(_ count: Int64) {
+            lock.lock()
+            _receivedBytes += count
+            lock.unlock()
+        }
+
+        func snapshot() -> (written: Int64, received: Int64, expected: Int64, finished: Result<Void, Error>?) {
+            lock.lock(); defer { lock.unlock() }
+            return (_baseOffset + _receivedBytes, _receivedBytes, _expected, _finished)
         }
     }
 
@@ -172,7 +183,7 @@ enum UpdateInstaller {
                                      to destination: URL,
                                      resumeFrom: Int64,
                                      progress: @escaping @Sendable (String) -> Void) async throws {
-        let transfer = Transfer(written: resumeFrom)
+        let transfer = Transfer(resumeFrom: resumeFrom)
         var request = URLRequest(url: url)
         // 60 秒是连接/空闲超时，不是总时长；总时长由下面的吞吐判定兜
         request.timeoutInterval = 60
@@ -192,50 +203,83 @@ enum UpdateInstaller {
         let session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: nil)
         defer { session.finishTasksAndInvalidate() }
 
-        let task = session.downloadTask(with: request)
+        let task = session.dataTask(with: request)
         task.resume()
 
-        // 停滞判定：按「最近若干秒的平均速度」算，慢到 <8 KB/s 就当卡死。
-        // 以前是「20 秒零字节」，于是一个 0.5 KB/s 的连接能耗上一小时。
-        var lastBytes = resumeFrom
-        var lastSampleAt = ContinuousClock.now
+        // 停滞判定：
+        // 1. 建连 / 重定向 / 等待首字节期间给予 25s 宽限，不触发低速误杀；
+        // 2. 收到首字节后，按连续 12s 滑动窗口平均速度 < 8 KB/s 才判停滞，避免瞬时抖动误杀。
+        let startedAt = ContinuousClock.now
+        var detector = DownloadStallDetector(
+            startTime: 0,
+            firstByteTimeout: 25,
+            stallWindow: 12,
+            minBytesPerSecond: 8_000
+        )
+        var lastProgressAt = startedAt
         var lastReportedPercent = -1
-        while transfer.finished == nil {
+        var reportedWaiting = false
+
+        while true {
+            let snap = transfer.snapshot()
+            if let result = snap.finished {
+                try result.get()
+                return
+            }
             try await Task.sleep(for: .milliseconds(500))
             if Task.isCancelled {
                 task.cancel()
                 throw CancellationError()
             }
-            let written = transfer.written
-            let expected = transfer.expected
-            let now = ContinuousClock.now
-            let elapsed = Double((now - lastSampleAt).components.seconds)
-                + Double((now - lastSampleAt).components.attoseconds) / 1e18
-            guard elapsed >= 1 else { continue }
 
-            let speed = Double(written - lastBytes) / max(elapsed, 0.001)
-            lastBytes = written
-            lastSampleAt = now
-
-            // 进度：1% 一报并带速度；总量未知时只报已下载量
-            if expected > 0 {
-                let percent = Int(min(100, max(0, Double(written) * 100 / Double(expected))))
-                if percent != lastReportedPercent {
-                    lastReportedPercent = percent
-                    progress("\(Copy.t("N18")) \(percent)%（\(speedText(speed))）")
-                }
-            } else {
-                progress("\(Copy.t("N18")) \(bytesText(written))（\(speedText(speed))）")
+            let latest = transfer.snapshot()
+            if let result = latest.finished {
+                try result.get()
+                return
             }
 
-            // 平均速度低于 8 KB/s 且还没下完：判卡死，明确报错而不是无限等
-            if speed < 8_000, expected <= 0 || written < expected {
+            let now = ContinuousClock.now
+            let totalElapsed = elapsedSeconds(from: startedAt, to: now)
+            let completed = latest.expected > 0 && latest.written >= latest.expected
+            let status = detector.evaluate(
+                now: totalElapsed,
+                receivedBytes: latest.received,
+                isCompleted: completed
+            )
+
+            switch status {
+            case .waitingForFirstByte:
+                if !reportedWaiting, totalElapsed >= 2 {
+                    reportedWaiting = true
+                    progress("\(Copy.t("N18"))（正在连接…）")
+                }
+            case .active(let speed):
+                let sinceLastProgress = elapsedSeconds(from: lastProgressAt, to: now)
+                guard sinceLastProgress >= 1 else { continue }
+                lastProgressAt = now
+                if latest.expected > 0 {
+                    let percent = Int(min(100, max(0, Double(latest.written) * 100 / Double(latest.expected))))
+                    if percent != lastReportedPercent {
+                        lastReportedPercent = percent
+                        progress("\(Copy.t("N18")) \(percent)%（\(speedText(speed))）")
+                    }
+                } else {
+                    progress("\(Copy.t("N18")) \(bytesText(latest.written))（\(speedText(speed))）")
+                }
+            case .stalledFirstByte:
                 task.cancel()
-                throw Failure.downloadFailed("下载几乎停滞（约 \(speedText(speed))），检查代理/网络后重试")
+                throw Failure.downloadFailed("连接或等待响应超时，检查代理/网络后重试")
+            case .stalledLowSpeed(let avgSpeed):
+                task.cancel()
+                throw Failure.downloadFailed("下载几乎停滞（约 \(speedText(avgSpeed))），检查代理/网络后重试")
             }
         }
-        guard let result = transfer.finished else { throw Failure.downloadFailed("下载失败") }
-        try result.get()
+    }
+
+    private static func elapsedSeconds(from start: ContinuousClock.Instant,
+                                       to end: ContinuousClock.Instant) -> TimeInterval {
+        let d = end - start
+        return Double(d.components.seconds) + Double(d.components.attoseconds) / 1e18
     }
 
     private static func bytesText(_ bytes: Int64) -> String {
@@ -248,17 +292,17 @@ enum UpdateInstaller {
         return "\(text)/s"
     }
 
-    /// 用 delegate 拿「实时字节数 + 边下边写」，而不是轮询 `Progress`。
+    /// 用 `URLSessionDataDelegate` 边下边写到目标文件，而不是等整个包下完才落盘。
     ///
     /// 好处：
-    /// - 进度是**真实写入磁盘的字节**，不是 URLSession 估算的 fractionCompleted；
-    /// - 立刻能判断 HTTP 状态（206 续传 / 200 从头 / 416 已经下完），
-    ///   以前要等整个任务结束才知道状态码；
-    /// - 支持断点续传：Range 请求得到的 206 直接追加到半截文件后面。
-    private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    /// - 进度是**真实写入磁盘的字节**；
+    /// - 立刻能判断 HTTP 状态（206 续传 / 200 从头 / 416 已经下完）；
+    /// - 中途取消或断连后，已写入的字节保留在磁盘上，重试时 `Range` 续传真正生效。
+    private final class DownloadDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
         private let destination: URL
         private let resumeFrom: Int64
         private let transfer: Transfer
+        private var fileHandle: FileHandle?
 
         init(destination: URL, resumeFrom: Int64, transfer: Transfer) {
             self.destination = destination
@@ -266,61 +310,92 @@ enum UpdateInstaller {
             self.transfer = transfer
         }
 
-        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
-                        didWriteData bytesWritten: Int64, totalBytesWritten: Int64,
-                        totalBytesExpectedToWrite: Int64) {
-            transfer.written = resumeFrom + totalBytesWritten
-            if totalBytesExpectedToWrite > 0 {
-                transfer.expected = resumeFrom + totalBytesExpectedToWrite
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask,
+                        didReceive response: URLResponse,
+                        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
+            guard let http = response as? HTTPURLResponse else {
+                transfer.finish(.failure(Failure.downloadFailed("没有收到文件")))
+                completionHandler(.cancel)
+                return
+            }
+
+            let expectedContentLength = response.expectedContentLength
+            switch http.statusCode {
+            case 200:
+                // 服务器从头发送（忽略了 Range 或未发 Range）：覆盖写入
+                do {
+                    try FileManager.default.createDirectory(
+                        at: destination.deletingLastPathComponent(),
+                        withIntermediateDirectories: true)
+                    FileManager.default.createFile(atPath: destination.path, contents: nil)
+                    fileHandle = try FileHandle(forWritingTo: destination)
+                    transfer.resetForResponse(
+                        baseOffset: 0,
+                        expected: expectedContentLength > 0 ? expectedContentLength : -1)
+                    completionHandler(.allow)
+                } catch {
+                    transfer.finish(.failure(error))
+                    completionHandler(.cancel)
+                }
+            case 206:
+                // 断点续传：追加到半截文件末尾
+                do {
+                    let baseOffset: Int64
+                    if resumeFrom > 0, FileManager.default.fileExists(atPath: destination.path) {
+                        let handle = try FileHandle(forWritingTo: destination)
+                        try handle.seekToEnd()
+                        fileHandle = handle
+                        baseOffset = resumeFrom
+                    } else {
+                        try FileManager.default.createDirectory(
+                            at: destination.deletingLastPathComponent(),
+                            withIntermediateDirectories: true)
+                        FileManager.default.createFile(atPath: destination.path, contents: nil)
+                        fileHandle = try FileHandle(forWritingTo: destination)
+                        baseOffset = 0
+                    }
+                    transfer.resetForResponse(
+                        baseOffset: baseOffset,
+                        expected: expectedContentLength > 0 ? baseOffset + expectedContentLength : -1)
+                    completionHandler(.allow)
+                } catch {
+                    transfer.finish(.failure(error))
+                    completionHandler(.cancel)
+                }
+            case 416:
+                // 服务器说 Range 越界：半截文件其实已经完整了
+                transfer.finish(.success(()))
+                completionHandler(.cancel)
+            default:
+                transfer.finish(.failure(Failure.downloadFailed("HTTP \(http.statusCode)")))
+                completionHandler(.cancel)
             }
         }
 
-        func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
-                        didFinishDownloadingTo location: URL) {
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask,
+                        didReceive data: Data) {
+            guard !data.isEmpty else { return }
             do {
-                guard let http = downloadTask.response as? HTTPURLResponse else {
-                    throw Failure.downloadFailed("没有收到文件")
-                }
-                switch http.statusCode {
-                case 200, 206:
-                    break
-                case 416:
-                    // 服务器说 Range 越界：半截文件其实已经完整了
-                    transfer.finish(.success(()))
-                    return
-                default:
-                    throw Failure.downloadFailed("HTTP \(http.statusCode)")
-                }
-                // 200 = 服务器忽略了 Range：必须整体覆盖，不能追加（否则文件错位）
-                let appending = (http.statusCode == 206 && resumeFrom > 0)
-                try FileManager.default.createDirectory(
-                    at: destination.deletingLastPathComponent(),
-                    withIntermediateDirectories: true)
-                if appending {
-                    let handle = try FileHandle(forWritingTo: destination)
-                    defer { try? handle.close() }
-                    try handle.seekToEnd()
-                    try handle.write(contentsOf: try Data(contentsOf: location, options: .mappedIfSafe))
-                } else {
-                    try? FileManager.default.removeItem(at: destination)
-                    try FileManager.default.moveItem(at: location, to: destination)
-                }
-                transfer.written = Self.size(of: destination)
-                transfer.finish(.success(()))
+                try fileHandle?.write(contentsOf: data)
+                transfer.addReceived(Int64(data.count))
             } catch {
+                try? fileHandle?.close()
+                fileHandle = nil
                 transfer.finish(.failure(error))
+                dataTask.cancel()
             }
         }
 
         func urlSession(_ session: URLSession, task: URLSessionTask,
                         didCompleteWithError error: Error?) {
-            guard let error else { return }   // 成功路径已在 didFinishDownloadingTo 收尾
-            transfer.finish(.failure(Failure.downloadFailed(
-                (error as NSError).localizedDescription)))
-        }
-
-        private static func size(of url: URL) -> Int64 {
-            ((try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber)?.int64Value ?? 0
+            try? fileHandle?.close()
+            fileHandle = nil
+            if let error {
+                transfer.finish(.failure(Failure.downloadFailed(
+                    (error as NSError).localizedDescription)))
+            } else {
+                transfer.finish(.success(()))
+            }
         }
     }
 

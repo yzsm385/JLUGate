@@ -49,35 +49,58 @@ final class AppModel {
 
     // MARK: 检查更新
 
+    struct AvailableRelease: Equatable {
+        let tag: String
+        let name: String
+        let page: URL?
+        let asset: URL?
+        let sha256: String?
+    }
+
     enum UpdateStatus: Equatable {
         case idle
         case checking
         case upToDate
-        case available(tag: String, name: String, page: URL?, asset: URL?, sha256: String? = nil)
+        case available(AvailableRelease)
+        case installing(AvailableRelease, progress: String)
+        case installFailed(AvailableRelease, message: String)
         case failed(String)
     }
     var updateStatus: UpdateStatus = .idle
     private var updateChecker = UpdateChecker(wantsCompatAsset: BuildInfo.isCompatBuild)
 
-    /// 一键更新状态文案
-    var updateInstallMessage: String?
     /// 正在下载/解压/准备替换（这时别再点「更新」）
-    var updateInstalling = false
+    var updateInstalling: Bool {
+        if case .installing = updateStatus { return true }
+        return false
+    }
 
-    func installAvailableUpdate(page: URL?, asset: URL?, sha256: String? = nil) {
-        guard let asset else {
-            if let page { NSWorkspace.shared.open(page) }
-            updateInstallMessage = "这个版本没有可用的安装包，已打开下载页"
+    /// 一键更新状态/错误文案（单一状态机派生，避免状态不同步吞掉报错）
+    var updateInstallMessage: String? {
+        switch updateStatus {
+        case .installing(_, let progress): return progress
+        case .installFailed(_, let message): return message
+        default: return nil
+        }
+    }
+
+    func installAvailableUpdate(_ release: AvailableRelease) {
+        guard !updateInstalling else { return }
+        guard let asset = release.asset else {
+            if let page = release.page { NSWorkspace.shared.open(page) }
+            updateStatus = .installFailed(release, message: "这个版本没有可用的安装包，已打开下载页")
             return
         }
-        updateInstalling = true
-        updateInstallMessage = "开始下载…"
-        UpdateInstaller.install(from: asset, expectedSHA256: sha256) { message in
-            Task { @MainActor in self.updateInstallMessage = message }
+        updateStatus = .installing(release, progress: "开始下载…")
+        UpdateInstaller.install(from: asset, expectedSHA256: release.sha256) { message in
+            Task { @MainActor in
+                if case .installing = self.updateStatus {
+                    self.updateStatus = .installing(release, progress: message)
+                }
+            }
         } onFailure: { message in
             Task { @MainActor in
-                self.updateInstalling = false
-                self.updateInstallMessage = message
+                self.updateStatus = .installFailed(release, message: message)
             }
         } onReadyToQuit: {
             Task { @MainActor in
@@ -89,13 +112,16 @@ final class AppModel {
 
     /// 面板上那个「更新」：一步到位——查最新 → 有新版就下载替换，没新版就直说。
     func updateNow() {
-        if case .available(_, _, let page, let asset, let sha) = updateStatus {
-            installAvailableUpdate(page: page, asset: asset, sha256: sha)
+        switch updateStatus {
+        case .available(let release), .installFailed(let release, _):
+            installAvailableUpdate(release)
             return
+        case .checking, .installing:
+            return
+        case .idle, .upToDate, .failed:
+            break
         }
-        guard updateStatus != .checking else { return }
         updateStatus = .checking
-        updateInstallMessage = nil
         Task { @MainActor in
             let release = await updateChecker.latest(forceRefresh: true)
             guard let release else {
@@ -103,20 +129,19 @@ final class AppModel {
                 return
             }
             if UpdateVersion.isNewer(release.tag, than: BuildInfo.version) {
-                updateStatus = .available(tag: release.tag, name: release.name,
-                                          page: release.pageURL, asset: release.assetURL,
-                                          sha256: release.assetSHA256)
-                installAvailableUpdate(page: release.pageURL, asset: release.assetURL,
-                                       sha256: release.assetSHA256)
+                let available = AvailableRelease(tag: release.tag, name: release.name,
+                                                 page: release.pageURL, asset: release.assetURL,
+                                                 sha256: release.assetSHA256)
+                updateStatus = .available(available)
+                installAvailableUpdate(available)
             } else {
                 updateStatus = .upToDate
-                updateInstallMessage = "已经是最新版本（v\(BuildInfo.version)）"
             }
         }
     }
 
     func checkForUpdates(force: Bool = false) {
-        guard updateStatus != .checking else { return }
+        guard updateStatus != .checking, !updateInstalling else { return }
         updateStatus = .checking
         Task { @MainActor in
             let release = await updateChecker.latest(forceRefresh: force)
@@ -125,8 +150,10 @@ final class AppModel {
                 return
             }
             if UpdateVersion.isNewer(release.tag, than: BuildInfo.version) {
-                updateStatus = .available(tag: release.tag, name: release.name,
-                                          page: release.pageURL, asset: release.assetURL)
+                let available = AvailableRelease(tag: release.tag, name: release.name,
+                                                 page: release.pageURL, asset: release.assetURL,
+                                                 sha256: release.assetSHA256)
+                updateStatus = .available(available)
             } else {
                 updateStatus = .upToDate
             }
@@ -279,22 +306,30 @@ final class AppModel {
         FileLogger.shared.log("GPA 学院：恢复自动识别")
     }
 
-    // MARK: 我的学院（学号识别）
+    // MARK: 我的学院（学号 / 校园网账号统一识别）
 
     var studentID: String { config.studentID }
 
-    /// 当前认出来的学院：手动选的优先，其次按学号前缀学习结果
-    var myCollege: College? {
-        if !config.myCollegeHost.isEmpty,
-           let manual = CollegeDirectory.college(forHost: config.myCollegeHost) {
-            return manual
-        }
-        return CollegeResolver.resolve(studentID: config.studentID,
-                                       learned: config.collegePrefixMap)
+    /// 当前认出来的学院及来源：手动选的优先，其次学号，再次复用校园网登录账号
+    var myCollegeResolution: CollegeResolution? {
+        CollegeResolver.resolve(manualHost: config.myCollegeHost,
+                                studentID: config.studentID,
+                                account: config.account,
+                                learned: config.collegePrefixMap)
     }
 
+    var myCollege: College? { myCollegeResolution?.college }
+
     func updateStudentID(_ text: String) {
-        config.studentID = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != config.studentID else { return }
+        config.studentID = trimmed
+        // 新输入的学号若能直接识别出学院，清除旧的手动覆盖让学号立即生效
+        if !trimmed.isEmpty,
+           let matched = GPACollegeDirectory.match(trimmed)?.college,
+           CollegeDirectory.college(forGPACollege: matched) != nil {
+            config.myCollegeHost = ""
+        }
         ConfigStore.save(config)
     }
 

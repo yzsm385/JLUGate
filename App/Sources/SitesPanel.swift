@@ -10,6 +10,8 @@ struct SitesPanel: View {
     @State private var copiedHint: String?
     @State private var collegeQuery = ""
     @State private var showAllColleges = false
+    @State private var editingCollege = false
+    @State private var studentIDDraft = ""
 
     private var grouped: [(category: JLUSite.Category, sites: [JLUSite])] {
         JLUSite.Category.allCases.compactMap { category in
@@ -103,33 +105,72 @@ struct SitesPanel: View {
 
     @ViewBuilder
     private var myCollegeCard: some View {
+        let resolution = model.myCollegeResolution
         VStack(alignment: .leading, spacing: 6) {
-            Text(Copy.t("T08")).font(.caption).bold()
-            if let college = model.myCollege {
+            HStack(spacing: 6) {
+                Text(Copy.t("T08")).font(.caption).bold()
+                if let resolution {
+                    Text(collegeSourceTag(resolution.source))
+                        .font(.system(size: 9))
+                        .padding(.horizontal, 5).padding(.vertical, 1)
+                        .background(Color.accentColor.opacity(0.14), in: Capsule())
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if resolution != nil {
+                    Button(editingCollege ? Copy.t("GPA14") : Copy.t("T10")) {
+                        editingCollege.toggle()
+                        if editingCollege {
+                            studentIDDraft = model.studentID
+                        }
+                    }
+                    .buttonStyle(.link).font(.system(size: 10))
+                }
+            }
+            if let resolution {
                 HStack(spacing: 6) {
-                    Text(college.name).font(.system(size: 12, weight: .medium))
+                    Text(resolution.college.name).font(.system(size: 12, weight: .medium))
                     Spacer()
                     Button(Copy.t("T09")) {
-                        if let url = college.url { NSWorkspace.shared.open(url) }
+                        if let url = resolution.college.url { NSWorkspace.shared.open(url) }
                     }
                     .buttonStyle(.bordered).controlSize(.small)
-                    Button(Copy.t("T10")) { model.clearMyCollege() }
-                        .buttonStyle(.link).font(.system(size: 10))
                 }
-                Text(college.host).font(.system(size: 10)).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(resolution.college.host).font(.system(size: 10)).foregroundStyle(.secondary)
+                    if !model.studentID.isEmpty {
+                        Text("· \(model.studentID)").font(.system(size: 10)).foregroundStyle(.tertiary)
+                    }
+                }
             } else {
                 Text(Copy.t("T11"))
                     .font(.system(size: 10)).foregroundStyle(.secondary)
             }
-            if model.myCollege == nil {
+            if resolution == nil || editingCollege {
                 HStack(spacing: 6) {
-                    TextField(Copy.t("T12"), text: Binding(
-                        get: { model.studentID },
-                        set: { model.updateStudentID($0) }))
+                    TextField(Copy.t("T12"), text: $studentIDDraft)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 140)
+                        .onChange(of: studentIDDraft) { _, newValue in
+                            let before = model.myCollege
+                            model.updateStudentID(newValue)
+                            // 输入完整学号后若立即识别并锁定学院，自动收起编辑区并给提示
+                            if let after = model.myCollegeResolution,
+                               after.source == .studentID,
+                               after.college != before || editingCollege {
+                                editingCollege = false
+                                collegeQuery = ""
+                            }
+                        }
                     TextField(Copy.t("T13"), text: $collegeQuery)
                         .textFieldStyle(.roundedBorder)
+                }
+                if resolution?.source == .manual {
+                    Button(Copy.t("GPA06")) {
+                        model.clearMyCollege()
+                        editingCollege = false
+                    }
+                    .buttonStyle(.link).font(.system(size: 10))
                 }
                 let matches = CollegeDirectory.search(collegeQuery)
                 let shown = showAllColleges ? matches : Array(matches.prefix(6))
@@ -138,6 +179,8 @@ struct SitesPanel: View {
                 ForEach(shown) { college in
                     Button {
                         model.setMyCollege(college)
+                        editingCollege = false
+                        collegeQuery = ""
                     } label: {
                         HStack {
                             Text(college.name).font(.system(size: 11))
@@ -157,6 +200,18 @@ struct SitesPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(nsColor: .textBackgroundColor).opacity(0.35),
                     in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .onAppear {
+            studentIDDraft = model.studentID
+        }
+    }
+
+    private func collegeSourceTag(_ source: CollegeResolutionSource) -> String {
+        switch source {
+        case .manual: Copy.t("GPA07")
+        case .studentID: Copy.t("GPA08")
+        case .account: Copy.t("GPA09")
+        case .learned: Copy.t("GPA06")
+        }
     }
 
     /// 明确告诉用户"一共有多少个"，避免只看到 6 个以为就这些

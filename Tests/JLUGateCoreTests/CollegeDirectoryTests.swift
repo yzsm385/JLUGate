@@ -54,4 +54,33 @@ struct CollegeDirectoryTests {
         #expect(CollegeResolver.looksLikeStudentID("2023-0123-45"))
         #expect(!CollegeResolver.looksLikeStudentID("zhangcyy2122"))
     }
+
+    @Test("统一学院识别：8 位学号与校园网账号可直接识别并复用")
+    func unifiedResolution() {
+        // 仅凭校园网账号（邮箱前缀）即可自动识别专属学院
+        let byAccount = CollegeResolver.resolve(studentID: "", account: "zhangsan5525", learned: [:])
+        #expect(byAccount?.college.host == "csw.jlu.edu.cn")
+        #expect(byAccount?.source == .account)
+        #expect(byAccount?.year == 2025)
+
+        // 直接输入 8 位学号立即识别，无需先手动搜索学习
+        let byStudentID = CollegeResolver.resolve(studentID: "21240101", account: "zhangsan5525", learned: [:])
+        #expect(byStudentID?.college.host == "ccst.jlu.edu.cn")
+        #expect(byStudentID?.source == .studentID)
+        #expect(byStudentID?.year == 2024)
+
+        // 手动指定优先级最高
+        let byManual = CollegeResolver.resolve(manualHost: "math.jlu.edu.cn",
+                                               studentID: "21240101",
+                                               account: "zhangsan5525",
+                                               learned: [:])
+        #expect(byManual?.college.host == "math.jlu.edu.cn")
+        #expect(byManual?.source == .manual)
+
+        // 别名桥接（外国语学院 → 外国语言文化学院，口腔医学院 → 白求恩口腔医学院）
+        let fl = CollegeResolver.resolve(studentID: "03250101", learned: [:])
+        #expect(fl?.host == "sflc.jlu.edu.cn")
+        let dental = CollegeResolver.resolve(studentID: "33250101", learned: [:])
+        #expect(dental?.host == "jdkq.jlu.edu.cn")
+    }
 }

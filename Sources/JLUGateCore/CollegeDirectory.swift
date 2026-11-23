@@ -72,11 +72,49 @@ public enum CollegeDirectory {
         all.first { $0.host == host }
     }
 
+    /// 院系简称别名（用于把 `GPACollegeDirectory` 的学院名映射到官网目录）。
+    private static let nameAliases: [String: String] = [
+        "外国语": "外国语言文化",
+        "口腔医学": "白求恩口腔医学",
+    ]
+
+    /// 按学院名称匹配官网目录（忽略「学院/学部/系」与括号，兼容别名）。
+    public static func college(forName raw: String) -> College? {
+        let key = normalizeName(raw)
+        guard !key.isEmpty else { return nil }
+        let aliased = nameAliases[key] ?? key
+        if let exact = all.first(where: { normalizeName($0.name) == key || normalizeName($0.name) == aliased }) {
+            return exact
+        }
+        let candidates = all.filter {
+            let name = normalizeName($0.name)
+            return name.contains(aliased) || aliased.contains(name)
+        }
+        return candidates.max { normalizeName($0.name).count < normalizeName($1.name).count }
+    }
+
+    /// 从 GPA 学院目录条目映射到官网目录条目。
+    public static func college(forGPACollege gpaCollege: GPACollege) -> College? {
+        college(forName: gpaCollege.name)
+    }
+
     public static func search(_ keyword: String) -> [College] {
         guard !keyword.isEmpty else { return all }
         return all.filter {
             $0.name.localizedCaseInsensitiveContains(keyword)
                 || $0.host.localizedCaseInsensitiveContains(keyword)
         }
+    }
+
+    private static func normalizeName(_ raw: String) -> String {
+        var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        for suffix in ["学院", "学部", "系"] {
+            s = s.replacingOccurrences(of: suffix, with: "")
+        }
+        s = s.replacingOccurrences(of: "（", with: "")
+            .replacingOccurrences(of: "）", with: "")
+            .replacingOccurrences(of: "(", with: "")
+            .replacingOccurrences(of: ")", with: "")
+        return String(s.filter { !$0.isWhitespace })
     }
 }

@@ -39,13 +39,16 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
 echo "==> assemble .app"
+VERSION="$(tr -d '[:space:]' < VERSION)"
+test -n "$VERSION" || { echo "ERROR: 根目录 VERSION 文件为空" >&2; exit 1; }
 cp "$BIN/AppCompileCheck" "$APP/Contents/MacOS/JLUGate"
-if [ -f "App/Resources/AppIcon.icns" ]; then
-    cp "App/Resources/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
-fi
-if [ -f "App/Resources/Assets.car" ]; then
-    cp "App/Resources/Assets.car" "$APP/Contents/Resources/Assets.car"
-fi
+for asset in "App/Resources/AppIcon.icns" "App/Resources/Assets.car"; do
+    if [ ! -f "$asset" ]; then
+        echo "ERROR: 缺少图标资源 $asset，请先运行 scripts/build-app-icon.swift" >&2
+        exit 1
+    fi
+    cp "$asset" "$APP/Contents/Resources/$(basename "$asset")"
+done
 
 # Liquid Glass 的系统外观按「链接的 SDK 版本」开关，不只按 minos。包部署目标为了
 # Compat 包压到了 14，SwiftPM 会把 LC_BUILD_VERSION.sdk 一起写成 14，AppKit 于是
@@ -57,7 +60,7 @@ vtool -set-build-version macos 14.0 26.0 -replace \
     -output "$APP/Contents/MacOS/JLUGate.new" "$APP/Contents/MacOS/JLUGate"
 mv "$APP/Contents/MacOS/JLUGate.new" "$APP/Contents/MacOS/JLUGate"
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -69,7 +72,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIconFile</key>        <string>AppIcon</string>
     <key>CFBundleIconName</key>        <string>AppIcon</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>2.0.0</string>
+    <key>CFBundleShortVersionString</key><string>${VERSION}</string>
     <key>CFBundleVersion</key>         <string>BUILD_STAMP</string>
     <key>LSMinimumSystemVersion</key>  <string>26.0</string>
     <key>LSUIElement</key>             <true/>

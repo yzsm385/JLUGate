@@ -553,9 +553,6 @@ struct MenuContent: View {
     // MARK: 更新
 
     private var updateSummary: (icon: String, text: String, tint: Color) {
-        if model.updateInstalling, let message = model.updateInstallMessage {
-            return ("arrow.down.circle", message, .orange)
-        }
         switch model.updateStatus {
         case .idle:
             return ("arrow.triangle.2.circlepath", Copy.t("M38"), .secondary)
@@ -563,8 +560,12 @@ struct MenuContent: View {
             return ("arrow.triangle.2.circlepath", Copy.t("M39"), .secondary)
         case .upToDate:
             return ("checkmark.circle", Copy.t("M40"), .green)
-        case .available(let tag, _, _, _, _):
-            return ("arrow.down.circle.fill", Copy.f("M41", tag), .orange)
+        case .available(let release):
+            return ("arrow.down.circle.fill", Copy.f("M41", release.tag), .orange)
+        case .installing(_, let message):
+            return ("arrow.down.circle", message, .orange)
+        case .installFailed(_, let message):
+            return ("exclamationmark.triangle.fill", message, .red)
         case .failed(let message):
             return ("exclamationmark.triangle", message, .orange)
         }
@@ -573,8 +574,8 @@ struct MenuContent: View {
     private var updateButtonTitle: String {
         switch model.updateStatus {
         case .available: Copy.t("M42")
-        case .checking: Copy.t("M43")
-        case .failed: Copy.t("M19")
+        case .checking, .installing: Copy.t("M43")
+        case .failed, .installFailed: Copy.t("M19")
         case .upToDate: Copy.t("M44")
         case .idle: Copy.t("M42")
         }
@@ -582,20 +583,43 @@ struct MenuContent: View {
 
     /// 面板上的一行更新入口：查最新 → 下载 → 退出替换 → 重新打开（安装包会自己清掉）
     private var updateBar: some View {
-        HStack(spacing: 6) {
-            Image(systemName: updateSummary.icon).font(.system(size: 10))
-            Text(updateSummary.text)
-                .font(.system(size: 10))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
-            Spacer(minLength: 4)
-            Button(updateButtonTitle) { model.updateNow() }
-                .controlSize(.mini)
-                .buttonStyle(.bordered)
-                .disabled(model.updateInstalling || model.updateStatus == .checking)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .top, spacing: 6) {
+                Image(systemName: updateSummary.icon)
+                    .font(.system(size: 10))
+                    .padding(.top, 2)
+                Text(updateSummary.text)
+                    .font(.system(size: 10))
+                    .lineLimit(isUpdateError ? 3 : 1)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 4)
+                Button(updateButtonTitle) { model.updateNow() }
+                    .controlSize(.mini)
+                    .buttonStyle(.bordered)
+                    .disabled(model.updateInstalling || model.updateStatus == .checking)
+            }
+            if case .installFailed(let release, _) = model.updateStatus,
+               let fallbackURL = release.asset ?? release.page {
+                HStack {
+                    Spacer()
+                    Button(Copy.t("S68")) {
+                        NSWorkspace.shared.open(fallbackURL)
+                    }
+                    .buttonStyle(.link)
+                    .font(.system(size: 10))
+                }
+            }
         }
         .foregroundStyle(updateSummary.tint)
         .padding(.horizontal, 2)
+    }
+
+    private var isUpdateError: Bool {
+        switch model.updateStatus {
+        case .failed, .installFailed: return true
+        default: return false
+        }
     }
 }
 

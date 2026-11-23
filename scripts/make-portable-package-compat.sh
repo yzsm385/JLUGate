@@ -10,7 +10,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="2.0.0"
+VERSION="$(tr -d '[:space:]' < VERSION)"
+test -n "$VERSION" || { echo "ERROR: 根目录 VERSION 文件为空" >&2; exit 1; }
 APP="dist/JLU Gate (Compat).app"
 
 echo "==> 构建 .app [compat: macOS 14, no Liquid Glass]"
